@@ -16,6 +16,7 @@ import { PriceCache } from './lib/priceCache.js';
 import { PortfolioStore } from './lib/portfolio.js';
 import { MarketCache } from './lib/marketCache.js';
 import { BinanceProxy } from './lib/binanceProxy.js';
+import { getActiveSource } from './lib/binanceHosts.js';
 import { Store, publicUser } from './lib/store.js';
 import { ApxStore } from './lib/apxStore.js';
 
@@ -335,6 +336,33 @@ prices.start();
 const markets = new MarketCache({ refreshMs: REFRESH_MS });
 markets.start();
 
+// ---- Connection watchdog: auto-recover, and let the process manager restart
+// us if the data feed stays dead. "Stale" = no fresh price for a while -> we
+// force an immediate refresh to self-heal. "Dead" = still nothing after the
+// hard limit -> exit(1) so PM2/systemd restarts us from a clean state.
+const WATCH_STALE_MS = Number(process.env.WATCH_STALE_MS || 45000);
+const WATCH_DEAD_MS = Number(process.env.WATCH_DEAD_MS || 180000);
+function _lastPriceTs() { let m = 0; for (const e of prices.getAll()) if (e && e.updatedAt > m) m = e.updatedAt; return m; }
+let _deadSince = 0;
+setInterval(() => {
+  const now = Date.now();
+  const last = _lastPriceTs();
+  const age = last ? now - last : Infinity;
+  if (age > WATCH_STALE_MS) {
+    prices.refresh().catch(() => {});   // self-heal: force a refresh
+    markets.refresh().catch(() => {});
+    if (!_deadSince) _deadSince = now;
+    const deadFor = now - _deadSince;
+    console.warn(`[watchdog] data stale ${Math.round(age / 1000)}s (dead ${Math.round(deadFor / 1000)}s), active source: ${getActiveSource()}`);
+    if (deadFor > WATCH_DEAD_MS) {
+      console.error('[watchdog] data feed dead past hard limit -> exiting for auto-restart');
+      process.exit(1); // PM2 / systemd brings the process back up
+    }
+  } else {
+    _deadSince = 0; // healthy again
+  }
+}, 15000).unref();
+
 // ---- Portfolio (in-memory demo store) ----
 const portfolios = new PortfolioStore(prices);
 
@@ -509,7 +537,22 @@ app.get('/api/alerts', (req, res) => {
 });
 
 app.get('/api/health', (req, res) => {
-  res.json({ ok: true, symbols: SYMBOLS, cached: prices.getAll().length });
+  const now = Date.now();
+  let last = 0; for (const e of prices.getAll()) if (e && e.updatedAt > last) last = e.updatedAt;
+  const priceAgeMs = last ? now - last : null;
+  const marketAgeMs = markets.updatedAt ? now - markets.updatedAt : null;
+  const ok = priceAgeMs != null && priceAgeMs < 60000;
+  res.status(ok ? 200 : 503).json({
+    ok,
+    source: getActiveSource(),
+    symbols: SYMBOLS,
+    cachedPrices: prices.getAll().length,
+    cachedMarkets: markets.getAll().length,
+    priceAgeMs,
+    marketAgeMs,
+    uptimeSec: Math.round(process.uptime()),
+    at: now,
+  });
 });
 
 // ---- Wallet endpoints (DEMO ONLY) ----
