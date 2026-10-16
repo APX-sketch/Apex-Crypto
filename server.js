@@ -453,11 +453,12 @@ async function _apxSampleBtc() {
 }
 _apxSampleBtc();
 setInterval(_apxSampleBtc, 3000).unref();
-// خطوة كل 3 ثوانٍ: جزء صغير جداً من حركة BTC + ضجيج ضئيل → تحديث السعر كل 3 ثوانٍ بحركة هادئة مثل BTC
+// خطوة كل 3 ثوانٍ: نمرّر سعر BTC اللحظي → APX يتبع BTC تراكمياً بلا توقف (حركة هادئة مثل BTC)
 setInterval(() => {
-  let step = _apxBtcStep * 0.12 + (Math.random() - 0.5) * 0.0003;
-  if (step > 0.002) step = 0.002; if (step < -0.002) step = -0.002;
-  try { apx.tick(step); } catch (e) { /* ignore */ }
+  try {
+    if (_apxBtcLast != null && _apxBtcLast > 0) apx.tick({ price: _apxBtcLast });
+    else apx.tick((Math.random() - 0.5) * 0.0006);
+  } catch (e) { /* ignore */ }
 }, 3000).unref();
 // تدفئة شموع BTC للفواصل الشائعة → شارت APX يأخذ نفس شكل BTC ونفس التناسق الزمني
 const _APX_IVS = ['1m', '5m', '15m', '30m', '1h', '2h', '4h', '1d'];

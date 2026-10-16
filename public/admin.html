@@ -181,6 +181,16 @@ tr:last-child td{border-bottom:0}
           <div class="stat y"><div class="k"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>محادثات جديدة</div><div class="v" id="stChats">0</div></div>
         </div>
         <div class="card">
+          <div class="card-h"><b>حالة المصادر والاتصال</b><div class="sp"></div><span id="hzDot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#888;margin-inline-end:6px"></span><span id="hzState" style="color:var(--muted);font-size:13px">—</span></div>
+          <div id="hzBody" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;padding:4px 2px">
+            <div class="stat"><div class="k">مصدر البيانات</div><div class="v" id="hzSource" style="font-size:18px">—</div></div>
+            <div class="stat"><div class="k">نضارة السعر</div><div class="v" id="hzPriceAge" style="font-size:18px">—</div></div>
+            <div class="stat"><div class="k">نضارة السوق</div><div class="v" id="hzMarketAge" style="font-size:18px">—</div></div>
+            <div class="stat"><div class="k">أسعار مخزّنة</div><div class="v" id="hzCached" style="font-size:18px">—</div></div>
+            <div class="stat"><div class="k">مدة التشغيل</div><div class="v" id="hzUptime" style="font-size:18px">—</div></div>
+          </div>
+        </div>
+        <div class="card">
           <div class="card-h"><b>أحدث طلبات التسجيل</b><div class="sp"></div><button class="btn ghost sm" onclick="nav('requests')">عرض الكل ‹</button></div>
           <div id="recentReq"></div>
         </div>
@@ -721,7 +731,7 @@ $('verifyCode')&&$('verifyCode').addEventListener('keydown',e=>{if(e.key==='Ente
 function startApp(){
   $('loginWrap').style.display='none';$('app').style.display='block';
   refreshAll();
-  POLL=setInterval(()=>{refreshStats();if($('pg-requests').classList.contains('on'))loadRequests();if($('pg-liquidity').classList.contains('on'))loadLiquidity();if($('pg-orders').classList.contains('on'))loadOrders();if($('pg-commission').classList.contains('on'))loadCommission();if($('pg-security').classList.contains('on'))loadSecurity();if($('pg-support').classList.contains('on'))loadChats();},6000);
+  POLL=setInterval(()=>{refreshStats();if($('pg-overview').classList.contains('on'))refreshHealth();if($('pg-requests').classList.contains('on'))loadRequests();if($('pg-liquidity').classList.contains('on'))loadLiquidity();if($('pg-orders').classList.contains('on'))loadOrders();if($('pg-commission').classList.contains('on'))loadCommission();if($('pg-security').classList.contains('on'))loadSecurity();if($('pg-support').classList.contains('on'))loadChats();},6000);
 }
 function nav(pg){
   document.querySelectorAll('.navi').forEach(n=>n.classList.toggle('on',n.dataset.pg===pg));
@@ -739,7 +749,27 @@ function nav(pg){
   if(pg==='security')loadSecurity();
   if(pg==='support')loadChats();
 }
-async function refreshAll(){await refreshStats();loadRecent();}
+async function refreshAll(){await refreshStats();refreshHealth();loadRecent();}
+
+/* ---- لوحة حالة المصادر والاتصال (تقرأ /api/health) ---- */
+function fmtAge(ms){if(ms==null)return'—';if(ms<1000)return'الآن';var s=Math.round(ms/1000);if(s<60)return s+' ث';var m=Math.floor(s/60);return m+' د '+(s%60)+' ث';}
+function fmtUp(sec){if(sec==null)return'—';var d=Math.floor(sec/86400),h=Math.floor(sec%86400/3600),m=Math.floor(sec%3600/60);if(d>0)return d+' ي '+h+' س';if(h>0)return h+' س '+m+' د';return m+' د';}
+async function refreshHealth(){
+  var dot=$('hzDot'),st=$('hzState');if(!dot)return;
+  var h=null,online=false;
+  try{var r=await fetch('/api/health');h=await r.json().catch(function(){return null;});online=!!(h&&h.ok);}catch(e){online=false;}
+  if(!h){dot.style.background='#e5484d';st.textContent='السيرفر غير متصل';
+    ['hzSource','hzPriceAge','hzMarketAge','hzCached','hzUptime'].forEach(function(k){if($(k))$(k).textContent='—';});return;}
+  var stale=(h.priceAgeMs!=null&&h.priceAgeMs>=60000);
+  dot.style.background=online?'#30a46c':(stale?'#f5a623':'#e5484d');
+  st.textContent=online?'متصل ويعمل':(stale?'البيانات قديمة':'انقطاع بالمصدر');
+  var src=h.source||'—';var srcLabel=(src==='binance')?'Binance مباشر':(src==='cache'?'ذاكرة مؤقتة':src);
+  if($('hzSource'))$('hzSource').textContent=srcLabel;
+  if($('hzPriceAge'))$('hzPriceAge').textContent=fmtAge(h.priceAgeMs);
+  if($('hzMarketAge'))$('hzMarketAge').textContent=fmtAge(h.marketAgeMs);
+  if($('hzCached'))$('hzCached').textContent=(h.cachedPrices!=null?h.cachedPrices:'—')+' / '+(h.cachedMarkets!=null?h.cachedMarkets:'—');
+  if($('hzUptime'))$('hzUptime').textContent=fmtUp(h.uptimeSec);
+}
 
 /* ---- عملة المنصّة APX ---- */
 var AX_ENABLED=true, AX_HIST=[], AX_RANGE='24h', AX_PREV_PRICE=null, AX_PREV_CHG=null;
@@ -906,7 +936,7 @@ async function loadUsers(){
         else if(u.status==='approved')a='<button class="btn ghost sm" onclick="ban(\''+u.id+'\')">حظر</button>';
         else if(u.status==='banned')a='<button class="btn green sm" onclick="unban(\''+u.id+'\')">رفع الحظر</button>';
         else if(u.status==='rejected')a='<button class="btn green sm" onclick="approve(\''+u.id+'\')">موافقة</button>';
-        a+='<button class="btn ghost sm" onclick="openNotify(\''+u.id+'\',\''+esc(u.name).replace(/'/g,"\\'")+'\')">إشعار/رصيد</button>';
+        a+='<button class="btn ghost sm" onclick="openNotify(\''+u.id+'\',\''+esc(u.name).replace(/'/g,"\\'")+'\')">🔔 إشعار/رصيد</button>';
         a+='<button class="btn ghost sm" onclick="openBal(\''+u.id+'\',\''+esc(u.name).replace(/'/g,"\\'")+'\')">أرصدة وعملات</button>';
         a+='<button class="btn ghost sm" onclick="delUser(\''+u.id+'\')">حذف</button>';
         return '<tr><td class="u-name">'+esc(u.name)+'</td><td class="u-mail">'+esc(u.email)+'</td><td style="direction:ltr">'+u.uid+'</td>'+idCell(u)+'<td><span class="pill '+u.status+'">'+st[u.status]+'</span></td><td class="acts">'+a+'</td></tr>';}).join('')+'</tbody></table>';
