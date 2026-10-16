@@ -175,7 +175,7 @@ body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);col
 .ovchips .chip b{font-size:15px;font-weight:900;direction:ltr}
 /* bottom nav */
 .bnav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;
-  display:grid;grid-template-columns:repeat(6,1fr);background:#0f1216;border-top:1px solid var(--border);
+  display:grid;grid-template-columns:repeat(5,1fr);background:#0f1216;border-top:1px solid var(--border);
   padding:8px 0 calc(8px + env(safe-area-inset-bottom));z-index:30}
 .bnav a{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--muted);text-decoration:none;font-size:10px;font-weight:700}
 .bnav a svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8}
@@ -211,6 +211,17 @@ body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);col
 .recrow .rv .st{font-size:10.5px;color:var(--muted);margin-top:3px}
 .recrow .rv .st.ok{color:var(--green)} .recrow .rv .st.pend{color:var(--gold2)}
 .recempty{padding:50px 20px;text-align:center;color:var(--muted);font-size:13.5px;line-height:1.7}
+.recrow{cursor:pointer}
+.recdetail{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.55);display:none;align-items:flex-end;justify-content:center}
+.recdetail.show{display:flex}
+.recdetail .rdcard{width:100%;max-width:480px;background:var(--panel);border-top-left-radius:20px;border-top-right-radius:20px;border:1px solid var(--border);border-bottom:0;padding:6px 16px calc(22px + env(safe-area-inset-bottom));max-height:80%;overflow-y:auto}
+.recdetail .rdhead{display:flex;align-items:center;gap:10px;padding:12px 0 8px;position:sticky;top:0;background:var(--panel)}
+.recdetail .rdhead b{flex:1;font-size:16px;font-weight:900}
+.recdetail .rdrow{display:flex;justify-content:space-between;gap:14px;padding:12px 2px;border-bottom:1px solid var(--border);font-size:13px}
+.recdetail .rdrow:last-child{border-bottom:0}
+.recdetail .rdrow .k{color:var(--muted);font-weight:700;flex:0 0 auto}
+.recdetail .rdrow .v{text-align:end;word-break:break-all;font-weight:800;direction:ltr}
+.recdetail .rdrow .v.pos{color:var(--green)} .recdetail .rdrow .v.neg{color:var(--red)}
 </style>
 </head>
 <body>
@@ -248,8 +259,8 @@ body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);col
   </div>
   <!-- action circles -->
   <div class="acts">
-    <button class="act" onclick="actMsg('aAddFunds')"><span class="circ"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></span><span>إضافة الأموال</span></button>
-    <button class="act" onclick="actMsg('aSend')"><span class="circ"><svg viewBox="0 0 24 24"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/></svg></span><span>إرسال</span></button>
+    <button class="act" onclick="location.href='deposit.html'"><span class="circ"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></span><span>إضافة الأموال</span></button>
+    <button class="act" onclick="location.href='withdraw.html'"><span class="circ"><svg viewBox="0 0 24 24"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/></svg></span><span>إرسال</span></button>
     <button class="act" onclick="switchAccView('funding')"><span class="circ"><svg viewBox="0 0 24 24"><path d="M4 7h13l-3-3M20 17H7l3 3"/></svg></span><span>تحويل</span></button>
 
         <button class="act" onclick="actMsg('aEarn')"><span class="circ"><svg viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M4.2 7.5l2.9 2.9M16.9 13.6l2.9 2.9M3 14h4M17 14h4"/><circle cx="12" cy="13" r="3.2"/></svg></span><span>Earn</span></button>
@@ -281,8 +292,8 @@ body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);col
 </div>
 <!-- ACTION CIRCLES -->
 <div class="acts">
-  <button class="act" onclick="actMsg('aSend')"><span class="circ"><svg viewBox="0 0 24 24"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/></svg></span><span data-i18n="aSend">إرسال</span></button>
-  <button class="act" onclick="actMsg('aReceive')"><span class="circ"><svg viewBox="0 0 24 24"><path d="M12 3v14M6 11l6 6 6-6M4 21h16"/></svg></span><span data-i18n="aReceive">استلام</span></button>
+  <button class="act" onclick="location.href='withdraw.html'"><span class="circ"><svg viewBox="0 0 24 24"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/></svg></span><span data-i18n="aSend">إرسال</span></button>
+  <button class="act" onclick="location.href='deposit.html'"><span class="circ"><svg viewBox="0 0 24 24"><path d="M12 3v14M6 11l6 6 6-6M4 21h16"/></svg></span><span data-i18n="aReceive">استلام</span></button>
   <button class="act" onclick="switchAccView('funding')"><span class="circ"><svg viewBox="0 0 24 24"><path d="M4 7h13l-3-3M20 17H7l3 3"/></svg></span><span data-i18n="aTransfer">تحويل</span></button>
   <button class="act" onclick="actMsg('aMore')"><span class="circ"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></span><span data-i18n="aMore">المزيد</span></button>
 </div>
@@ -343,7 +354,6 @@ body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);col
   <a href="markets.html"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M21 7v5h-5"/></svg><span data-i18n="navMarkets">الأسواق</span></a>
   <a href="trading.html"><svg viewBox="0 0 24 24"><path d="M7 8h13l-3-3M17 16H4l3 3"/></svg><span data-i18n="navTrading">التداول</span></a>
   <a href="futures.html"><svg viewBox="0 0 24 24"><path d="M3 3v18h18M8 14l3-3 3 3 4-5"/></svg><span data-i18n="navFutures">عقود آجلة</span></a>
-  <a href="mining.html"><svg viewBox="0 0 24 24"><path d="M14 3l7 7-4 4-7-7zM10 10l-7 7 4 4 7-7"/></svg><span data-i18n="navMining">التعدين</span></a>
   <a href="wallet.html" class="active"><svg viewBox="0 0 24 24"><path d="M3 7h16a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2zM16 13h.01"/></svg><span data-i18n="navWallet">المحفظة</span></a>
 </nav>
 <!-- ===== سجلات المعاملات ===== -->
@@ -351,6 +361,7 @@ body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);col
   <div class="rhead">
     <button class="icobtn" onclick="closeRecords()" aria-label="رجوع"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
     <b>السجلات</b>
+    <button class="icobtn" onclick="exportRecords()" aria-label="تصدير" title="تصدير CSV"><svg viewBox="0 0 24 24"><path d="M12 3v12M8 11l4 4 4-4M5 21h14"/></svg></button>
     <button class="icobtn" onclick="loadRecords()" aria-label="تحديث"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 11-3-6.7M21 4v5h-5"/></svg></button>
   </div>
   <div class="recfilters">
@@ -360,6 +371,13 @@ body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);col
     <button data-f="transfer" onclick="recFilter('transfer')">التحويلات</button>
   </div>
   <div class="recbody" id="recBody"><div class="recempty">—</div></div>
+</div>
+<!-- ===== تفاصيل العملية ===== -->
+<div class="recdetail" id="recDetail">
+  <div class="rdcard">
+    <div class="rdhead"><b id="rdTitle">تفاصيل العملية</b><button class="icobtn" onclick="closeRecDetail()" aria-label="إغلاق"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div class="rdbody" id="rdBody"></div>
+  </div>
 </div>
 <div class="toast" id="toast"></div>
 <script>
@@ -691,7 +709,11 @@ function normRecord(x){
   var tnum=(typeof ts==='number')?(ts<1e12?ts*1000:ts):(Date.parse(ts)||Date.now());
   var status=String(x.status||x.state||'').toLowerCase();
   var note=x.note||x.memo||x.remark||((x.from&&x.to)?((x.from||'')+' ← '+(x.to||'')):'');
-  return {id:String(x.id||x._id||('S'+tnum+'_'+amt)),type:type,cur:cur,amt:amt,ts:tnum,status:status,note:note};
+  var counterparty=x.counterparty||x.fromName||x.toName||x.from||x.to||'';
+  var direction=x.direction||'';
+  var txid=x.txid||x.hash||x.txHash||x.reference||x.ref||'';
+  var addr=x.address||x.toAddress||x.to||x.depositAddress||'';
+  return {id:String(x.id||x._id||('S'+tnum+'_'+amt)),type:type,cur:cur,amt:amt,ts:tnum,status:status,note:note,counterparty:counterparty,direction:direction,txid:txid,addr:addr,rawType:String(x.type||x.kind||x.category||x.action||'')};
 }
 async function loadRecords(){
   var body=$('recBody');if(body)body.innerHTML='<div class="recempty">… جارِ التحميل</div>';
@@ -717,11 +739,47 @@ function renderRecords(){
   body.innerHTML=rows.map(function(r){
     var m=recMeta(r.type),st=statusTxt(r.status);
     var amtStr=m.sign+fmt(Math.abs(r.amt),r.cur==='USDT'?2:6)+' '+esc(r.cur);
-    return '<div class="recrow '+m.cls+'"><span class="ri"><svg viewBox="0 0 24 24" stroke="currentColor">'+m.svg+'</svg></span>'+
+    return '<div class="recrow '+m.cls+'" onclick="showRecDetail(\''+esc(String(r.id).replace(/'/g,''))+'\')"><span class="ri"><svg viewBox="0 0 24 24" stroke="currentColor">'+m.svg+'</svg></span>'+
       '<div class="rt"><b>'+m.label+'</b><span>'+(r.note?esc(r.note)+' · ':'')+fmtTime(r.ts)+'</span></div>'+
       '<div class="rv"><div class="amt">'+mask(amtStr)+'</div>'+(st.t?'<div class="st '+st.c+'">'+st.t+'</div>':'')+'</div></div>';
   }).join('');
 }
+/* ===== تفاصيل العملية ===== */
+function showRecDetail(id){
+  var r=null;for(var i=0;i<REC_DATA.length;i++){if(String(REC_DATA[i].id).replace(/'/g,'')===id){r=REC_DATA[i];break;}}
+  if(!r)return;var m=recMeta(r.type),st=statusTxt(r.status);
+  var sign=m.sign,cls=sign==='+'?'pos':(sign==='-'?'neg':'');
+  var amtStr=sign+fmt(Math.abs(r.amt),r.cur==='USDT'?2:8)+' '+esc(r.cur);
+  var rows=[['النوع',esc(m.label),''],['المبلغ',mask(amtStr),cls],['العملة',esc(r.cur),''],['الحالة',st.t||'—',st.c==='ok'?'pos':''],['التاريخ والوقت',fmtTime(r.ts),'']];
+  if(r.counterparty)rows.push(['الطرف الآخر',esc(r.counterparty),'']);
+  if(r.addr)rows.push(['العنوان',esc(r.addr),'']);
+  if(r.note)rows.push(['ملاحظة',esc(r.note),'']);
+  if(r.txid)rows.push(['رقم العملية',esc(r.txid),'']);
+  rows.push(['المعرّف',esc(String(r.id)),'']);
+  $('rdTitle').textContent='تفاصيل '+m.label;
+  $('rdBody').innerHTML=rows.map(function(p){return '<div class="rdrow"><span class="k">'+p[0]+'</span><span class="v '+(p[2]||'')+'">'+p[1]+'</span></div>';}).join('');
+  $('recDetail').classList.add('show');
+}
+function closeRecDetail(){$('recDetail').classList.remove('show');}
+window.showRecDetail=showRecDetail;window.closeRecDetail=closeRecDetail;
+/* ===== تصدير السجل (CSV) ===== */
+function csvCell(v){v=String(v==null?'':v);if(/[",\n]/.test(v))v='"'+v.replace(/"/g,'""')+'"';return v;}
+function exportRecords(){
+  var rows=REC_DATA.filter(function(r){return REC_FILTER==='all'||r.type===REC_FILTER;});
+  if(!rows.length){toast('لا توجد سجلات للتصدير');return;}
+  var head=['التاريخ','النوع','المبلغ','العملة','الحالة','الطرف الآخر','العنوان','ملاحظة','المعرّف'];
+  var lines=[head.map(csvCell).join(',')];
+  rows.forEach(function(r){var m=recMeta(r.type),st=statusTxt(r.status);
+    lines.push([fmtTime(r.ts),m.label,(m.sign||'')+fmt(Math.abs(r.amt),r.cur==='USDT'?2:8),r.cur,st.t||'',r.counterparty||'',r.addr||'',r.note||'',r.id].map(csvCell).join(','));});
+  var csv='\ufeff'+lines.join('\r\n');
+  var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  var url=URL.createObjectURL(blob);var a=document.createElement('a');
+  var d=new Date();var stamp=d.getFullYear()+('0'+(d.getMonth()+1)).slice(-2)+('0'+d.getDate()).slice(-2)+'-'+('0'+d.getHours()).slice(-2)+('0'+d.getMinutes()).slice(-2);
+  a.href=url;a.download='apex-transactions-'+stamp+'.csv';document.body.appendChild(a);a.click();
+  setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url);},100);
+  toast('تم تصدير '+rows.length+' عملية');
+}
+window.exportRecords=exportRecords;
 </script>
 </body>
 </html>

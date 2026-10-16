@@ -1148,7 +1148,11 @@ app.post('/api/wallet/transfer', strictLimiter, requireUser, (req, res) => {
 
 // ---- Notifications (user side) ----
 app.get('/api/notifications', requireUser, (req, res) => {
-  const list = store.getNotifications(req.user.id);
+  // جرس الصفحة الرئيسية يعرض فقط إشعارات الإدارة (العروض/الرسائل التي يرسلها
+  // الأدمن من لوحة التحكم عبر زر "إرسال إشعار"). إشعارات التحويلات والصفقات
+  // وشحن الرصيد لا تظهر هنا إطلاقاً.
+  const all = store.getNotifications(req.user.id) || [];
+  const list = all.filter((n) => n && n.kind === 'admin');
   res.json({ ok: true, notifications: list, unread: list.filter((n) => !n.read).length });
 });
 
@@ -1308,7 +1312,7 @@ app.post('/api/admin/users/:id/notify', requireAdmin, (req, res) => {
   if (!t && !b) return res.status(400).json({ error: 'empty' });
   const u = store.findUserById(String(req.params.id));
   if (!u) return res.status(404).json({ error: 'not_found' });
-  const n = store.addNotification(u.id, { title: t, body: b });
+  const n = store.addNotification(u.id, { title: t, body: b, kind: 'admin' });
   store.logAdmin({ admin: 'admin', action: 'notify', targetId: u.id, targetEmail: u.email, targetName: u.name, note: (t || b).slice(0, 200) });
   res.json({ ok: true, notification: n });
 });

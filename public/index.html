@@ -67,7 +67,7 @@ body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);col
 .sec-head a{font-size:12px;color:var(--gold2);font-weight:700;text-decoration:none;cursor:pointer}
 
 /* secondary quick actions (صف الأزرار مثل Binance) */
-.qacts{display:flex;gap:12px;overflow-x:auto;padding:14px 14px 2px;scrollbar-width:none}
+.qacts{display:flex;gap:12px;justify-content:space-around;padding:14px 14px 2px;scrollbar-width:none}
 .qacts::-webkit-scrollbar{display:none}
 .qact{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:7px;cursor:pointer;color:var(--txt);text-decoration:none;min-width:58px}
 .qact:active{transform:scale(.96)}
@@ -97,7 +97,7 @@ table.cmp-tbl td .px.eq{color:var(--txt)}
 
 /* bottom nav */
 .bnav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;
-  display:grid;grid-template-columns:repeat(6,1fr);background:#0f1216;border-top:1px solid var(--border);
+  display:grid;grid-template-columns:repeat(5,1fr);background:#0f1216;border-top:1px solid var(--border);
   padding:8px 0 calc(8px + env(safe-area-inset-bottom));z-index:30}
 .bnav a{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--muted);text-decoration:none;font-size:10px;font-weight:700}
 .bnav a svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8}
@@ -229,6 +229,18 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
 .kbanner.rejected .kico{background:rgba(246,70,93,.18)} .kbanner.rejected .kico svg{stroke:var(--red)}
 .vf.pending{color:var(--gold1)!important;background:rgba(224,166,21,.12)!important}
 .vf.rejected{color:#ff8a97!important;background:rgba(246,70,93,.12)!important}
+/* ===== QR SCANNER OVERLAY ===== */
+.scan-ov{position:fixed;inset:0;z-index:70;background:#000;display:none;flex-direction:column;max-width:480px;left:50%;transform:translateX(-50%)}
+.scan-ov.show{display:flex}
+.scan-top{display:flex;align-items:center;gap:12px;padding:calc(14px + env(safe-area-inset-top)) 16px 14px;background:linear-gradient(135deg,#1b1f24,#0f1216);border-bottom:1px solid var(--border)}
+.scan-top .bk{width:38px;height:38px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:var(--panel2);border:1px solid var(--border);border-radius:11px;cursor:pointer;font-size:20px;color:var(--txt)}
+.scan-top b{font-size:16px;font-weight:800;color:var(--txt)}
+.scan-stage{flex:1;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#000}
+.scan-stage video{width:100%;height:100%;object-fit:cover}
+.scan-frame{position:absolute;width:230px;height:230px;border:3px solid var(--gold2);border-radius:22px;box-shadow:0 0 0 100vmax rgba(0,0,0,.5)}
+.scan-ov.ok .scan-frame{border-color:#16c784;box-shadow:0 0 0 100vmax rgba(0,0,0,.5),0 0 28px rgba(22,199,132,.9)}
+.scan-hint{position:absolute;bottom:34px;left:0;right:0;text-align:center;color:#fff;font-size:13px;font-weight:700;padding:0 24px;text-shadow:0 1px 4px rgba(0,0,0,.8)}
+.scan-actions{padding:16px 16px calc(20px + env(safe-area-inset-bottom))}
 </style>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0b0e11">
@@ -241,7 +253,7 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
 <!-- ===== HEADER ===== -->
 <div class="hdr">
   <div class="icobtn" title="التنبيهات" onclick="location.href='notifications.html'"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0"/></svg><span class="nbadge" id="bellBadge"></span></div>
-  <div class="icobtn" title="مسح"><svg viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2M3 12h18"/></svg></div>
+  <div class="icobtn" title="مسح" onclick="openScan()"><svg viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2M3 12h18"/></svg></div>
   <div class="hsearch">
     <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
     <input id="searchInp" aria-label="بحث عن عملة" data-i18n-ph="searchPh" placeholder="بحث عن عملة (BTC، ETH)...">
@@ -273,10 +285,8 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
   <a class="act" href="history.html"><span class="ci"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><span data-i18n="more">المزيد</span></a>
 </div>
 
-<!-- ===== SECONDARY QUICK ACTIONS ===== -->
+<!-- ===== SECONDARY QUICK ACTIONS (بلا تكرار: إيداع/إضافة أموال والمزيد موجودة فوق) ===== -->
 <div class="qacts">
-  <a class="qact main" href="deposit.html"><span class="qi"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span><span>إضافة أموال</span></a>
-  <a class="qact" href="history.html"><span class="qi"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></span><span>المزيد</span></a>
   <div class="qact" onclick="toast('قريباً')"><span class="qi"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg></span><span>Pay</span></div>
   <div class="qact" onclick="toast('قريباً')"><span class="qi"><svg viewBox="0 0 24 24"><path d="M12 3v18M5 8c0-2 3-3 7-3s7 1 7 3-3 3-7 3-7 1-7 3 3 3 7 3 7-1 7-3"/></svg></span><span>Earn</span></div>
   <div class="qact" onclick="toast('قريباً')"><span class="qi"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5M17 11l2 2 4-4"/></svg></span><span>الإحالة</span></div>
@@ -307,9 +317,24 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
   <a href="markets.html"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M21 7v5h-5"/></svg><span data-i18n="navMarkets">الأسواق</span></a>
   <a href="trading.html"><svg viewBox="0 0 24 24"><path d="M7 8h13l-3-3M17 16H4l3 3"/></svg><span data-i18n="navTrading">التداول</span></a>
   <a href="futures.html"><svg viewBox="0 0 24 24"><path d="M3 3v18h18M8 14l3-3 3 3 4-5"/></svg><span data-i18n="navFutures">عقود آجلة</span></a>
-  <a href="mining.html"><svg viewBox="0 0 24 24"><path d="M14 3l7 7-4 4-7-7zM10 10l-7 7 4 4 7-7"/></svg><span data-i18n="navMining">التعدين</span></a>
   <a href="wallet.html"><svg viewBox="0 0 24 24"><path d="M3 7h16a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2zM16 13h.01"/></svg><span data-i18n="navWallet">المحفظة</span></a>
 </nav>
+
+<!-- ===== QR SCANNER OVERLAY (اختصار: مسح رمز ثم الانتقال لصفحة السحب) ===== -->
+<div class="scan-ov" id="scanOv">
+  <div class="scan-top">
+    <div class="bk" onclick="closeScan()">›</div>
+    <b>مسح رمز QR</b>
+  </div>
+  <div class="scan-stage">
+    <video id="scanVid" playsinline muted></video>
+    <div class="scan-frame"></div>
+    <p class="scan-hint">وجّه الكاميرا نحو رمز QR لعنوان السحب — ستنتقل تلقائياً عند التقاطه</p>
+  </div>
+  <div class="scan-actions">
+    <button class="pbtn" onclick="goWithdraw('')">المتابعة إلى السحب</button>
+  </div>
+</div>
 
 <!-- ===== PROFILE DRAWER ===== -->
 <div class="scrim" id="scrim" onclick="closeDrawer()"></div>
@@ -836,6 +861,39 @@ I18N.id={security:'Keamanan & Perlindungan',kyc:'Verifikasi Identitas (KYC)',set
 
 I18N.ja={security:'セキュリティと保護',kyc:'本人確認 (KYC)',settings:'設定と言語',help:'ヘルプとサポート',logout:'ログアウト',changePass:'パスワード変更',changePassSub:'定期的にパスワードを更新',twofa:'2段階認証 (2FA)',twofaSub:'ログイン時の追加保護',biometric:'指紋 / 顔認証',biometricSub:'素早いログイン',antiTitle:'アンチフィッシングコード',save:'保存',lastLogin:'最終ログイン',curPass:'現在のパスワード',newPass:'新しいパスワード',confPass:'パスワード確認',saveNewPass:'パスワードを保存',kycVerified:'認証済みアカウント',kycDesc:'本人確認が完了しました。フルアクセス可能。',docType:'書類の種類',status:'ステータス',verified2:'✓ 認証済み',level:'認証レベル',language:'言語',faq1q:'入金方法は？',faq1a:'ホーム画面の「入金」をタップし手順に従います。',faq2q:'アカウントを守るには？',faq2a:'セキュリティで 2FA とアンチフィッシングコードを有効化。',faq3q:'このプラットフォームは本物？',faq3a:'これは実際の市場価格を使う練習プラットフォーム（ペーパートレード）です。',liveChat:'ライブチャット',liveChatSub:'24時間サポート',email:'メール',searchPh:'通貨を検索 (BTC, ETH)...',totalAssets:'総資産 (USDT)',deposit:'入金',withdraw:'出金',transfer:'送金',more:'もっと',liveMarkets:'人気マーケット',viewAll:'すべて見る ›',copy:'コピー',supportMsg:'サポートチームがまもなくご連絡します',kycId:'身分証',kycPass:'パスポート',kycLic:'運転免許証',langChanged:'言語を変更しました',msgSaved:'保存しました',msg2faOn:'2FA 有効',msg2faOff:'2FA 無効',msgBioOn:'生体認証 有効',msgBioOff:'生体認証 無効',msgAntiEmpty:'コードを入力してください',msgNoUser:'ユーザーが見つかりません',msgPassWrong:'現在のパスワードが違います',msgPassShort:'パスワードが短すぎます（最少8文字）',msgPassMismatch:'パスワードが一致しません',msgPassChanged:'パスワードを変更しました'};
 I18N.ko={security:'보안 및 보호',kyc:'신원 인증 (KYC)',settings:'설정 및 언어',help:'도움말 및 지원',logout:'로그아웃',changePass:'비밀번호 변경',changePassSub:'정기적으로 비밀번호를 업데이트',twofa:'2단계 인증 (2FA)',twofaSub:'로그인 시 추가 보호',biometric:'지문 / 얼굴',biometricSub:'빠른 로그인',antiTitle:'피싱 방지 코드',save:'저장',lastLogin:'마지막 로그인',curPass:'현재 비밀번호',newPass:'새 비밀번호',confPass:'비밀번호 확인',saveNewPass:'비밀번호 저장',kycVerified:'인증된 계정',kycDesc:'신원이 성공적으로 인증되었습니다. 전체 액세스 가능.',docType:'서류 유형',status:'상태',verified2:'✓ 인증됨',level:'인증 단계',language:'언어',faq1q:'자금을 어떻게 입금하나요?',faq1a:'홈 화면에서 "입금" 버튼을 누르고 단계를 따르세요.',faq2q:'계정을 어떻게 보호하나요?',faq2a:'보안 섹션에서 2FA와 피싱 방지 코드를 활성화하세요.',faq3q:'이 플랫폼은 실제인가요?',faq3a:'실제 시장 가격을 사용하는 연습 플랫폼(모의 거래)입니다.',liveChat:'라이브 채팅',liveChatSub:'24/7 지원',email:'이메일',searchPh:'코인 검색 (BTC, ETH)...',totalAssets:'총 자산 (USDT)',deposit:'입금',withdraw:'출금',transfer:'이체',more:'더보기',liveMarkets:'인기 실시간 시장',viewAll:'전체 보기 ›',copy:'복사',supportMsg:'지원팀이 곳 연락드리겠습니다',kycId:'신분증',kycPass:'여권',kycLic:'운전면허증',langChanged:'언어가 변경됨',msgSaved:'저장됨',msg2faOn:'2FA 활성화',msg2faOff:'2FA 비활성화',msgBioOn:'생체인증 활성화',msgBioOff:'생체인증 비활성화',msgAntiEmpty:'코드를 입력하세요',msgNoUser:'사용자를 찾을 수 없음',msgPassWrong:'현재 비밀번호가 틀렸습니다',msgPassShort:'비밀번호가 너무 짧음 (최소 8자)',msgPassMismatch:'비밀번호가 일치하지 않음',msgPassChanged:'비밀번호가 변경됨'};
+
+/* ===== الماسح الضوئي (QR) — اختصار لصفحة السحب ===== */
+var _scanStream=null,_scanRAF=null,_scanDet=null,_scanDone=false;
+function openScan(){var ov=document.getElementById('scanOv');if(!ov)return;ov.classList.add('show');startScan();}
+function closeScan(){var ov=document.getElementById('scanOv');if(ov)ov.classList.remove('show');stopScan();}
+async function startScan(){
+  _scanDone=false;var v=document.getElementById('scanVid');
+  try{_scanStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});v.srcObject=_scanStream;await v.play();}
+  catch(e){try{toast('تعذّر فتح الكاميرا — تابع يدوياً');}catch(_){} return;}
+  if('BarcodeDetector' in window){try{_scanDet=new window.BarcodeDetector({formats:['qr_code']});}catch(e){_scanDet=null;}}
+  loopScan();
+}
+async function loopScan(){
+  if(_scanDone)return;var v=document.getElementById('scanVid');
+  if(_scanDet&&v&&v.readyState>=2){try{var codes=await _scanDet.detect(v);if(codes&&codes.length){onScanResult(codes[0].rawValue||'');return;}}catch(e){}}
+  _scanRAF=requestAnimationFrame(loopScan);
+}
+function onScanResult(val){if(_scanDone)return;_scanDone=true;stopScan();
+  var addr=String(val||'').trim();
+  try{toast('✓ تمّ مسح الرمز بنجاح'+(addr?(' · '+(addr.length>18?addr.slice(0,10)+'…'+addr.slice(-6):addr)):'')+' — جارٍ فتح صفحة السحب');}catch(e){}
+  var ov=document.getElementById('scanOv');if(ov)ov.classList.add('ok');
+  setTimeout(function(){goWithdraw(addr);},750);
+}
+function goWithdraw(val){
+  var addr=String(val||'').trim();
+  try{if(addr)localStorage.setItem('apex_scan_addr',addr);}catch(e){}
+  var q=addr?('?addr='+encodeURIComponent(addr)):'';
+  location.href='withdraw.html'+q;
+}
+function stopScan(){
+  if(_scanRAF){cancelAnimationFrame(_scanRAF);_scanRAF=null;}
+  if(_scanStream){try{_scanStream.getTracks().forEach(function(t){t.stop();});}catch(e){}_scanStream=null;}
+}
 
 initAll();
 </script>
