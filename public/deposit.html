@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<script>
+(function(){try{var s=JSON.parse(localStorage.getItem('skygo_session')||'null');if(!s||!s.email){location.replace('login.html?next=deposit.html');}}catch(e){location.replace('login.html');}})();
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Apex — الإيداع</title>
+<style>
+:root{--bg:#0b0e11;--panel:#141920;--panel2:#1c232c;--border:#252d38;--txt:#eef2f6;--muted:#8a94a3;--gold1:#f8d979;--gold2:#e0a615;--green:#0ecb81;--red:#f6465d}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);color:var(--txt);max-width:480px;margin:0 auto;min-height:100vh}
+.top{display:flex;align-items:center;gap:12px;padding:calc(16px + env(safe-area-inset-top)) 16px 14px;background:linear-gradient(135deg,#1b1f24,#12151a);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:5}
+.top .bk{width:38px;height:38px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:var(--panel2);border:1px solid var(--border);border-radius:11px;cursor:pointer;font-size:20px;color:var(--txt);text-decoration:none}
+.top b{font-size:16px;font-weight:800}
+.wrap{padding:18px 16px 40px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:18px;margin-bottom:16px}
+.hint{color:var(--muted);font-size:13px;line-height:1.7;margin-bottom:14px}
+.addr-lbl{font-size:12px;font-weight:800;color:var(--muted);margin-bottom:8px}
+.addr{background:var(--panel2);border:1px dashed var(--gold2);border-radius:12px;padding:14px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;direction:ltr;text-align:center;word-break:break-all;color:var(--gold1)}
+.cpbtn{width:100%;margin-top:12px;border:0;border-radius:12px;font-family:inherit;font-size:15px;font-weight:900;padding:14px 0;cursor:pointer;color:#231a02;background:linear-gradient(135deg,var(--gold1),var(--gold2))}
+.cpbtn:active{transform:scale(.98)}
+.qr{display:flex;justify-content:center;margin:6px 0 16px}
+.qr img{width:170px;height:170px;border-radius:14px;border:1px solid var(--border);background:#fff;padding:8px}
+.st{font-size:15px;font-weight:800;margin:6px 2px 12px}
+.dep{display:flex;align-items:center;gap:12px;padding:13px 4px;border-top:1px solid var(--border)}
+.dep:first-of-type{border-top:0}
+.dep .ic{width:38px;height:38px;flex:0 0 auto;border-radius:11px;background:rgba(14,203,129,.12);display:flex;align-items:center;justify-content:center;color:var(--green);font-size:18px}
+.dep .tx{flex:1;min-width:0}
+.dep .tx b{display:block;font-size:14px}
+.dep .tx span{font-size:11px;color:var(--muted)}
+.dep .amt{font-weight:900;color:var(--green);direction:ltr;font-size:14px}
+.empty{padding:26px;text-align:center;color:var(--muted);font-size:13.5px}
+.toast{position:fixed;bottom:30px;left:50%;transform:translate(-50%,20px);background:#20272f;color:#fff;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;opacity:0;transition:.3s;z-index:99;border:1px solid var(--border)}
+.toast.show{transform:translate(-50%,0);opacity:1}
+</style>
+<script src="i18n.js"></script>
+</head>
+<body>
+<div class="top"><a class="bk" href="index.html">›</a><b>الإيداع</b></div>
+<div class="wrap">
+  <div class="card">
+    <div class="hint">هذا هو عنوان الإيداع الخاص بحسابك. شاركه مع أي شخص ليحوّل لك رصيدًا داخل المنصة، وستصلك الأموال فورًا وتُسجّل في سجل الإيداعات.</div>
+    <div class="qr"><img id="qr" alt="QR" onerror="this.parentNode.style.display='none'"></div>
+    <div class="addr-lbl">عنوان الإيداع (شبكة Apex)</div>
+    <div class="addr" id="addr">...</div>
+    <button class="cpbtn" onclick="copyAddr()">نسخ العنوان</button>
+  </div>
+  <div class="st">سجل الإيداعات</div>
+  <div class="card" id="list"><div class="empty">…</div></div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+var $=function(id){return document.getElementById(id);};
+var sess=JSON.parse(localStorage.getItem('skygo_session')||'{}');
+var TOKEN=sess.token||localStorage.getItem('apex_token')||'';
+var ADDR='';
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function toast(m){var t=$('toast');t.textContent=m;t.className='toast show';setTimeout(function(){t.className='toast';},2000);}
+function fmt(n){n=Number(n)||0;return n.toLocaleString('en-US',{maximumFractionDigits:8});}
+function fmtTime(ms){try{return new Date(ms).toLocaleString('ar',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return '';}}
+function copyAddr(){if(!ADDR)return;if(navigator.clipboard)navigator.clipboard.writeText(ADDR);toast('تم نسخ العنوان');}
+async function load(){
+  if(!TOKEN){location.replace('login.html?next=deposit.html');return;}
+  try{var r=await fetch('/api/wallet/me',{headers:{'Authorization':'Bearer '+TOKEN}});
+    if(r.status===401){location.replace('login.html?next=deposit.html');return;}
+    var d=await r.json();
+    ADDR=d.depositAddress||'';
+    $('addr').textContent=ADDR||'—';
+    $('qr').src='https://api.qrserver.com/v1/create-qr-code/?size=170x170&data='+encodeURIComponent(ADDR);
+    var deps=d.deposits||[];
+    if(!deps.length){$('list').innerHTML='<div class="empty">لا توجد إيداعات بعد</div>';return;}
+    $('list').innerHTML=deps.map(function(x){
+      var who=x.kind==='admin'?'الإدارة':(x.fromName||'تحويل داخلي');
+      return '<div class="dep"><div class="ic">↓</div><div class="tx"><b>'+esc(who)+'</b><span>'+fmtTime(x.at)+'</span></div><div class="amt">+'+fmt(x.amount)+' '+esc(x.currency)+'</div></div>';
+    }).join('');
+  }catch(e){$('list').innerHTML='<div class="empty">تعذّر التحميل</div>';}
+}
+load();setInterval(load,10000);
+</script>
+</body>
+</html>

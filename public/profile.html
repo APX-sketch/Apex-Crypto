@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apex Crypto - الملف الشخصي</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .profile-card {
+            background: #111827;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 15px;
+        }
+        .avatar {
+            width: 70px;
+            height: 70px;
+            background: linear-gradient(135deg, #0284c7 0%, #38bdf8 100%);
+            border-radius: 50%;
+            margin: 0 auto 10px auto;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 26px;
+            color: #fff;
+            font-weight: bold;
+        }
+        .menu-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .menu-item {
+            background: #111827;
+            padding: 14px 15px;
+            border-radius: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #f8fafc;
+            text-decoration: none;
+            font-size: 13px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .menu-item:hover {
+            background: #1e293b;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <div class="app-header">
+            <h2>الملف الشخصي</h2>
+            <p>إدارة حسابك وإعدادات الأمان</p>
+        </div>
+
+        <div class="app-content">
+            <div class="profile-card">
+                <div class="avatar">A</div>
+                <h3 style="color: #fff; font-size: 16px;">مستثمر Apex</h3>
+                <p style="color: #94a3b8; font-size: 11px; margin-top: 3px;">ID: 984521</p>
+            </div>
+
+            <div class="menu-list">
+                <a href="deposit.html" class="menu-item">
+                    <span>💳 إيداع الأموال</span>
+                    <span>&larr;</span>
+                </a>
+                <a href="notifications.html" class="menu-item">
+                    <span>🔔 الإشعارات والتنبيهات</span>
+                    <span>&larr;</span>
+                </a>
+                <a href="#" class="menu-item" onclick="alert('حساب محمي بتشفير عالي')">
+                    <span>🔒 إعدادات الأمان وكلمة المرور</span>
+                    <span>&larr;</span>
+                </a>
+                <a href="#" class="menu-item" style="color: #ef4444;" onclick="alert('تم تسجيل الخروج')">
+                    <span>🚪 تسجيل الخروج</span>
+                    <span>&larr;</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- شريط التنقل السفلي -->
+        <div class="bottom-nav">
+            <a href="index.html" class="nav-item">
+                <svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+                الرئيسية
+            </a>
+            <a href="mining.html" class="nav-item">
+                <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                التعدين
+            </a>
+            <a href="trading.html" class="nav-item">
+                <svg viewBox="0 0 24 24"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg>
+                التداول
+            </a>
+            <a href="wallet.html" class="nav-item">
+                <svg viewBox="0 0 24 24"><path d="M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8zm4-2.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
+                الأصول
+            </a>
+            <a href="support.html" class="nav-item">
+                <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+                الدعم
+            </a>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<script>
+(function(){
+  try{
+    var s=JSON.parse(localStorage.getItem('skygo_session')||'null');
+    if(!s||!s.email){location.replace('login.html?next=index.html');}
+  }catch(e){location.replace('login.html');}
+})();
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Apex — الرئيسية</title>
+<style>
+:root{
+  --bg:#0b0e11;--panel:#141920;--panel2:#1c232c;--border:#252d38;
+  --txt:#eef2f6;--muted:#8a94a3;--gold1:#f8d979;--gold2:#e0a615;
+  --green:#0ecb81;--red:#f6465d;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);color:var(--txt);
+  max-width:480px;margin:0 auto;padding-bottom:76px;min-height:100vh;position:relative;overflow-x:hidden}
+
+/* header */
+.hdr{display:flex;align-items:center;gap:10px;padding:calc(12px + env(safe-area-inset-top)) 14px 12px;
+  background:linear-gradient(135deg,#1b1f24,#0f1216);position:sticky;top:0;z-index:20;border-bottom:1px solid var(--border)}
+.icobtn{width:38px;height:38px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;
+  background:var(--panel2);border:1px solid var(--border);border-radius:11px;cursor:pointer;color:var(--txt);position:relative}
+.icobtn .nbadge{position:absolute;top:-5px;right:-5px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;
+  background:var(--red);color:#fff;font-size:10px;font-weight:800;display:none;align-items:center;justify-content:center;line-height:1}
+.icobtn svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.9}
+.hsearch{flex:1;display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--border);
+  border-radius:11px;padding:0 12px;height:38px}
+.hsearch svg{width:16px;height:16px;stroke:var(--muted);fill:none;stroke-width:2}
+.hsearch input{flex:1;background:none;border:0;color:var(--txt);font-family:inherit;font-size:13px;outline:none}
+.hsearch input::placeholder{color:#5c6675}
+.avatar{width:38px;height:38px;flex:0 0 auto;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-weight:900;font-size:16px;color:#231a02;cursor:pointer;background:linear-gradient(135deg,var(--gold1),var(--gold2));
+  box-shadow:0 3px 10px rgba(224,166,21,.35)}
+
+/* balance */
+.bal{padding:22px 18px 6px}
+.bal .lbl{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;font-weight:700}
+.bal .lbl svg{width:16px;height:16px;stroke:var(--muted);fill:none;stroke-width:1.9;cursor:pointer}
+.bal .amt{font-size:36px;font-weight:900;margin-top:8px;direction:ltr;letter-spacing:-.5px}
+.bal .sub{font-size:12px;color:var(--muted);margin-top:4px;direction:ltr}
+.bal .sub b{color:var(--green)}
+.bal .sub b.dn{color:var(--red)}
+
+/* actions */
+.acts{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:18px 14px 6px}
+.act{display:flex;flex-direction:column;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--border);
+  border-radius:16px;padding:14px 4px;cursor:pointer;transition:.2s;text-decoration:none;color:var(--txt)}
+.act:active{transform:scale(.97)}
+.act .ci{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;
+  background:rgba(224,166,21,.12)}
+.act .ci svg{width:21px;height:21px;stroke:var(--gold2);fill:none;stroke-width:1.9}
+.act.dep .ci{background:linear-gradient(135deg,var(--gold1),var(--gold2))}
+.act.dep .ci svg{stroke:#231a02}
+.act span{font-size:12px;font-weight:700}
+
+/* markets */
+.sec-head{display:flex;align-items:center;justify-content:space-between;padding:20px 18px 10px}
+.sec-head b{font-size:15px;font-weight:800}
+.sec-head a{font-size:12px;color:var(--gold2);font-weight:700;text-decoration:none;cursor:pointer}
+
+/* secondary quick actions (صف الأزرار مثل Binance) */
+.qacts{display:flex;gap:12px;overflow-x:auto;padding:14px 14px 2px;scrollbar-width:none}
+.qacts::-webkit-scrollbar{display:none}
+.qact{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:7px;cursor:pointer;color:var(--txt);text-decoration:none;min-width:58px}
+.qact:active{transform:scale(.96)}
+.qact .qi{width:46px;height:46px;border-radius:15px;background:var(--panel);border:1px solid var(--border);display:flex;align-items:center;justify-content:center}
+.qact .qi svg{width:21px;height:21px;stroke:var(--gold2);fill:none;stroke-width:1.9}
+.qact.main .qi{background:linear-gradient(135deg,var(--gold1),var(--gold2));border-color:transparent}
+.qact.main .qi svg{stroke:#231a02}
+.qact span{font-size:11px;font-weight:700;color:var(--muted)}
+
+/* market category tabs (المفضلات / رائج / جديدة / الأعلى ربحاً / الأعلى خسارة) */
+.mcats{display:flex;gap:8px;overflow-x:auto;padding:4px 14px 2px;scrollbar-width:none}
+.mcats::-webkit-scrollbar{display:none}
+.mcat{flex:0 0 auto;background:var(--panel);border:1px solid var(--border);color:var(--muted);
+  border-radius:20px;padding:8px 15px;font-size:12.5px;font-weight:800;cursor:pointer;white-space:nowrap;transition:.15s;display:flex;align-items:center;gap:5px}
+.mcat:active{transform:scale(.96)}
+.mcat.on{background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#231a02;border-color:transparent}
+
+table.cmp-tbl .pc.up{color:#04180f;background:linear-gradient(90deg,#0ecb81,#0a9d64)}
+table.cmp-tbl .pc.dn{color:#fff;background:linear-gradient(90deg,#f6465d,#c62b40)}
+/* وميض السعر عند كل تحديث */
+@keyframes pxFlashUp{0%{background:rgba(14,203,129,.28)}100%{background:transparent}}
+@keyframes pxFlashDn{0%{background:rgba(246,70,93,.28)}100%{background:transparent}}
+table.cmp-tbl td .px{border-radius:6px;padding:2px 6px;transition:color .25s}
+table.cmp-tbl td .px.up{color:var(--green);animation:pxFlashUp .7s ease-out}
+table.cmp-tbl td .px.dn{color:var(--red);animation:pxFlashDn .7s ease-out}
+table.cmp-tbl td .px.eq{color:var(--txt)}
+
+/* bottom nav */
+.bnav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;
+  display:grid;grid-template-columns:repeat(6,1fr);background:#0f1216;border-top:1px solid var(--border);
+  padding:8px 0 calc(8px + env(safe-area-inset-bottom));z-index:30}
+.bnav a{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--muted);text-decoration:none;font-size:10px;font-weight:700}
+.bnav a svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8}
+.bnav a.active{color:var(--gold2)}
+
+/* drawer */
+.scrim{position:fixed;inset:0;background:rgba(4,6,9,.6);backdrop-filter:blur(3px);z-index:40;opacity:0;
+  pointer-events:none;transition:.28s}
+.scrim.show{opacity:1;pointer-events:auto}
+.drawer{position:fixed;top:0;right:0;height:100%;width:82%;max-width:360px;background:var(--panel);
+  z-index:50;transform:translateX(100%);transition:.3s cubic-bezier(.2,.7,.2,1);display:flex;flex-direction:column;
+  border-left:1px solid var(--border);box-shadow:-12px 0 40px rgba(0,0,0,.5)}
+.drawer.show{transform:translateX(0)}
+.dhead{padding:calc(22px + env(safe-area-inset-top)) 20px 20px;background:linear-gradient(135deg,#1b1f24,#12151a);
+  border-bottom:1px solid var(--border);display:flex;align-items:center;gap:13px}
+.dhead .av{width:52px;height:52px;flex:0 0 auto;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-weight:900;font-size:22px;color:#231a02;background:linear-gradient(135deg,var(--gold1),var(--gold2));box-shadow:0 4px 12px rgba(224,166,21,.4)}
+.dhead .di{flex:1;min-width:0}
+.dhead .di .nm{display:flex;align-items:center;gap:6px;font-size:16px;font-weight:800}
+.dhead .di .nm .vf{font-size:11px;color:var(--green);display:inline-flex;align-items:center;gap:2px;
+  background:rgba(14,203,129,.12);padding:2px 7px;border-radius:6px}
+.dhead .di .uid{font-size:12px;color:var(--muted);margin-top:5px;direction:ltr;display:flex;align-items:center;gap:6px}
+.dhead .di .uid .cp{cursor:pointer;color:var(--gold2)}
+.dlist{flex:1;padding:10px 8px;overflow-y:auto}
+.ditem{display:flex;align-items:center;gap:14px;padding:15px 14px;border-radius:14px;cursor:pointer;
+  color:var(--txt);text-decoration:none;transition:.15s}
+.ditem:active{background:var(--panel2)}
+.ditem .ic{width:40px;height:40px;flex:0 0 auto;border-radius:11px;background:var(--panel2);
+  display:flex;align-items:center;justify-content:center}
+.ditem .ic svg{width:20px;height:20px;stroke:var(--gold2);fill:none;stroke-width:1.8}
+.ditem b{flex:1;font-size:14px;font-weight:700}
+.ditem .ar{color:var(--muted);font-size:18px}
+.ditem.logout .ic{background:rgba(246,70,93,.12)}
+.ditem.logout .ic svg{stroke:var(--red)}
+.ditem.logout b{color:var(--red)}
+.dfoot{padding:14px 20px calc(18px + env(safe-area-inset-bottom));font-size:11px;color:var(--muted);text-align:center;border-top:1px solid var(--border)}
+
+/* ===== price comparison table ===== */
+.cmp{margin:8px 14px 4px;background:var(--panel);border:1px solid var(--border);border-radius:16px;overflow:hidden}
+table.cmp-tbl{width:100%;border-collapse:collapse}
+table.cmp-tbl th,table.cmp-tbl td{padding:12px 12px;text-align:center;white-space:nowrap}
+table.cmp-tbl thead th{font-size:11px;font-weight:800;color:var(--muted);background:var(--panel2);border-bottom:1px solid var(--border)}
+table.cmp-tbl tbody tr{border-bottom:1px solid var(--border)}
+table.cmp-tbl tbody tr:last-child{border-bottom:0}
+table.cmp-tbl .coin{display:flex;align-items:center;gap:9px;justify-content:flex-start}
+table.cmp-tbl .coin img{width:26px;height:26px;border-radius:50%;flex:0 0 auto}
+.apxlogo{width:26px;height:26px;border-radius:50%;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;font-weight:900;font-size:14px;color:#231a02;background:linear-gradient(135deg,var(--gold1),var(--gold2));box-shadow:0 2px 7px rgba(224,166,21,.4)}
+table.cmp-tbl .coin b{font-size:13.5px;font-weight:800}
+table.cmp-tbl .coin span{font-size:10px;color:var(--muted);direction:ltr}
+table.cmp-tbl td .px{font-size:13.5px;font-weight:800;direction:ltr}
+table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7px;border-radius:6px;display:inline-block}
+
+.toast{position:fixed;bottom:90px;left:50%;transform:translate(-50%,20px);background:#20272f;color:#fff;
+  padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;opacity:0;transition:.3s;z-index:99;
+  border:1px solid var(--border);box-shadow:0 10px 30px rgba(0,0,0,.5)}
+.toast.show{transform:translate(-50%,0);opacity:1}
+
+/* ===== SHEETS (لوحات فرعية) ===== */
+.sheet{position:fixed;top:0;right:0;height:100%;width:100%;max-width:480px;left:50%;transform:translateX(-50%) translateY(100%);
+  background:var(--bg);z-index:60;transition:.32s cubic-bezier(.2,.7,.2,1);display:flex;flex-direction:column;
+  visibility:hidden;opacity:0}
+.sheet.show{transform:translateX(-50%) translateY(0);visibility:visible;opacity:1}
+.sheet .sh-top{display:flex;align-items:center;gap:12px;padding:calc(16px + env(safe-area-inset-top)) 16px 14px;
+  background:linear-gradient(135deg,#1b1f24,#12151a);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:2}
+.sheet .sh-top .bk{width:38px;height:38px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;
+  background:var(--panel2);border:1px solid var(--border);border-radius:11px;cursor:pointer;font-size:20px;color:var(--txt)}
+.sheet .sh-top b{font-size:16px;font-weight:800}
+.sheet .sh-body{flex:1;overflow-y:auto;padding:16px 14px calc(30px + env(safe-area-inset-bottom))}
+.grp{background:var(--panel);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:16px}
+.grp .gt{font-size:12px;font-weight:800;color:var(--muted);padding:14px 16px 8px}
+.row{display:flex;align-items:center;gap:13px;padding:15px 16px;border-top:1px solid var(--border);cursor:pointer}
+.row:first-of-type{border-top:0}
+.row .ic{width:38px;height:38px;flex:0 0 auto;border-radius:11px;background:var(--panel2);display:flex;align-items:center;justify-content:center}
+.row .ic svg{width:19px;height:19px;stroke:var(--gold2);fill:none;stroke-width:1.8}
+.row .tx{flex:1;min-width:0}
+.row .tx b{display:block;font-size:14px;font-weight:700}
+.row .tx span{font-size:11px;color:var(--muted)}
+.row .val{font-size:12px;color:var(--muted);font-weight:700}
+.row .val.ok{color:var(--green)} .row .val.warn{color:var(--gold2)}
+.row .ar{color:var(--muted);font-size:18px}
+/* toggle */
+.sw{width:46px;height:26px;border-radius:20px;background:var(--panel2);border:1px solid var(--border);position:relative;flex:0 0 auto;transition:.2s}
+.sw::after{content:"";position:absolute;top:2px;right:2px;width:20px;height:20px;border-radius:50%;background:#5c6675;transition:.2s}
+.sw.on{background:linear-gradient(135deg,var(--gold1),var(--gold2));border-color:transparent}
+.sw.on::after{right:22px;background:#231a02}
+/* forms in sheet */
+.fld{margin:0 2px 14px}
+.fld label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin:0 2px 6px}
+.fld input{width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:12px;color:var(--txt);
+  font-family:inherit;font-size:15px;padding:13px 14px}
+.fld input:focus{outline:0;border-color:var(--gold2)}
+.pbtn{width:100%;border:0;border-radius:13px;font-family:inherit;font-size:15px;font-weight:900;padding:15px 0;
+  cursor:pointer;color:#231a02;background:linear-gradient(135deg,var(--gold1),var(--gold2));box-shadow:0 6px 18px rgba(224,166,21,.25)}
+.pbtn:active{transform:scale(.98)}
+/* language list */
+.langsearch{display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--border);
+  border-radius:12px;padding:0 12px;height:44px;margin-bottom:14px}
+.langsearch svg{width:16px;height:16px;stroke:var(--muted);fill:none;stroke-width:2}
+.langsearch input{flex:1;background:none;border:0;color:var(--txt);font-family:inherit;font-size:14px;outline:none}
+.lrow{display:flex;align-items:center;gap:12px;padding:14px 16px;border-top:1px solid var(--border);cursor:pointer}
+.lrow:first-child{border-top:0}
+.lrow .fl{font-size:22px;flex:0 0 auto}
+.lrow .ln{flex:1}
+.lrow .ln b{display:block;font-size:14px;font-weight:700}
+.lrow .ln span{font-size:11px;color:var(--muted)}
+.lrow .tick{color:var(--gold2);font-size:18px;font-weight:900;display:none}
+.lrow.sel .tick{display:inline}
+.lrow.sel{background:rgba(224,166,21,.06)}
+.kyc-badge{display:flex;flex-direction:column;align-items:center;gap:10px;padding:26px 16px;text-align:center}
+.kyc-badge .shield{width:72px;height:72px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,var(--green),#0a9d64);box-shadow:0 8px 24px rgba(14,203,129,.35)}
+.kyc-badge .shield svg{width:38px;height:38px;stroke:#04180f;fill:none;stroke-width:2.4}
+.kyc-badge h3{font-size:18px;font-weight:900}
+.kyc-badge p{font-size:13px;color:var(--muted);max-width:280px;line-height:1.6}
+.faq{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:15px 16px;margin-bottom:12px}
+.faq b{font-size:14px;font-weight:800;display:block;margin-bottom:6px}
+.faq p{font-size:13px;color:var(--muted);line-height:1.7}
+/* ===== KYC status banner + badge variants ===== */
+.kbanner{margin:12px 14px 0;border-radius:14px;padding:11px 13px;display:none;align-items:center;gap:10px;font-size:13px;font-weight:700}
+.kbanner.show{display:flex}
+.kbanner.pending{background:rgba(224,166,21,.12);border:1px solid rgba(224,166,21,.35);color:var(--gold1)}
+.kbanner.rejected{background:rgba(246,70,93,.12);border:1px solid rgba(246,70,93,.35);color:#ff8a97}
+.kbanner .ktx{flex:1;line-height:1.5}
+.kbanner .kbtn{flex:0 0 auto;background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#231a02;border:0;border-radius:10px;
+  padding:9px 12px;font-family:inherit;font-weight:800;font-size:12.5px;cursor:pointer;text-decoration:none;white-space:nowrap}
+.kbanner .kico{width:34px;height:34px;flex:0 0 auto;border-radius:50%;display:flex;align-items:center;justify-content:center}
+.kbanner .kico svg{width:18px;height:18px;fill:none;stroke-width:2}
+.kbanner.pending .kico{background:rgba(224,166,21,.18)} .kbanner.pending .kico svg{stroke:var(--gold2)}
+.kbanner.rejected .kico{background:rgba(246,70,93,.18)} .kbanner.rejected .kico svg{stroke:var(--red)}
+.vf.pending{color:var(--gold1)!important;background:rgba(224,166,21,.12)!important}
+.vf.rejected{color:#ff8a97!important;background:rgba(246,70,93,.12)!important}
+</style>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0b0e11">
+<link rel="apple-touch-icon" href="icon.svg">
+<script defer src="alerts-core.js"></script>
+<script src="apx-coin.js"></script>
+<script src="i18n.js"></script>
+</head>
+<body>
+<!-- ===== HEADER ===== -->
+<div class="hdr">
+  <div class="icobtn" title="التنبيهات" onclick="location.href='notifications.html'"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0"/></svg><span class="nbadge" id="bellBadge"></span></div>
+  <div class="icobtn" title="مسح"><svg viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2M3 12h18"/></svg></div>
+  <div class="hsearch">
+    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+    <input id="searchInp" aria-label="بحث عن عملة" data-i18n-ph="searchPh" placeholder="بحث عن عملة (BTC، ETH)...">
+  </div>
+  <div class="avatar" id="avatarBtn" onclick="openDrawer()">A</div>
+</div>
+
+<!-- ===== KYC STATUS BANNER ===== -->
+<div id="kBanner" class="kbanner">
+  <span class="kico"><svg id="kBanIco" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+  <span class="ktx" id="kBanTx">حسابك قيد المراجعة من الإدارة</span>
+  <a class="kbtn" id="kBanBtn" href="verify.html" data-i18n="reverifyNow" style="display:none">إعادة التحقق الآن</a>
+</div>
+
+<!-- ===== BALANCE ===== -->
+<div class="bal">
+  <div class="lbl"><span data-i18n="totalAssets">إجمالي الأصول (USDT)</span>
+    <svg id="eyeBtn" onclick="toggleBal()" viewBox="0 0 24 24"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
+  </div>
+  <div class="amt" id="balAmt">--</div>
+  <div class="sub" id="balSub">≈ <span id="balUsd">--</span> USD</div>
+</div>
+
+<!-- ===== ACTIONS ===== -->
+<div class="acts">
+  <a class="act dep" href="deposit.html"><span class="ci"><svg viewBox="0 0 24 24"><path d="M12 3v13M7 11l5 5 5-5M5 21h14"/></svg></span><span data-i18n="deposit">إيداع</span></a>
+  <a class="act" href="withdraw.html"><span class="ci"><svg viewBox="0 0 24 24"><path d="M12 21V8M7 13l5-5 5 5M5 3h14"/></svg></span><span data-i18n="withdraw">سحب</span></a>
+  <a class="act" href="transfer.html"><span class="ci"><svg viewBox="0 0 24 24"><path d="M7 8h13l-3-3M17 16H4l3 3"/></svg></span><span data-i18n="transfer">تحويل</span></a>
+  <a class="act" href="history.html"><span class="ci"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><span data-i18n="more">المزيد</span></a>
+</div>
+
+<!-- ===== SECONDARY QUICK ACTIONS ===== -->
+<div class="qacts">
+  <a class="qact main" href="deposit.html"><span class="qi"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span><span>إضافة أموال</span></a>
+  <a class="qact" href="history.html"><span class="qi"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></span><span>المزيد</span></a>
+  <div class="qact" onclick="toast('قريباً')"><span class="qi"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg></span><span>Pay</span></div>
+  <div class="qact" onclick="toast('قريباً')"><span class="qi"><svg viewBox="0 0 24 24"><path d="M12 3v18M5 8c0-2 3-3 7-3s7 1 7 3-3 3-7 3-7 1-7 3 3 3 7 3 7-1 7-3"/></svg></span><span>Earn</span></div>
+  <div class="qact" onclick="toast('قريباً')"><span class="qi"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5M17 11l2 2 4-4"/></svg></span><span>الإحالة</span></div>
+  <div class="qact" onclick="toast('قريباً')"><span class="qi"><svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4zM3 7v6M21 11v4c0 1.5-4 3-9 3s-9-1.5-9-3v-4"/></svg></span><span>أكاديمية</span></div>
+</div>
+
+<!-- ===== MARKETS TABLE (جدول واحد مرتّب مثل Binance) ===== -->
+<div class="sec-head"><b data-i18n="liveMarkets">الأسواق</b><a href="markets.html" data-i18n="viewAll">عرض الكل ›</a></div>
+<div class="mcats">
+  <div class="mcat" data-cat="fav" onclick="setCat('fav')">★ المفضلات</div>
+  <div class="mcat on" data-cat="trending" onclick="setCat('trending')">🔥 رائج</div>
+  <div class="mcat" data-cat="new" onclick="setCat('new')">✨ جديدة</div>
+  <div class="mcat" data-cat="gain" onclick="setCat('gain')">▲ الأعلى ربحاً</div>
+  <div class="mcat" data-cat="lose" onclick="setCat('lose')">▼ الأعلى خسارة</div>
+</div>
+<div class="cmp"><table class="cmp-tbl">
+  <thead><tr>
+    <th style="text-align:start">العملة</th>
+    <th style="text-align:end">السعر</th>
+    <th style="text-align:end">التغير 24س</th>
+  </tr></thead>
+  <tbody id="cmpBody"></tbody>
+</table></div>
+
+<!-- ===== BOTTOM NAV ===== -->
+<nav class="bnav">
+  <a href="index.html" class="active"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h14V10"/></svg><span data-i18n="navHome">الرئيسية</span></a>
+  <a href="markets.html"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M21 7v5h-5"/></svg><span data-i18n="navMarkets">الأسواق</span></a>
+  <a href="trading.html"><svg viewBox="0 0 24 24"><path d="M7 8h13l-3-3M17 16H4l3 3"/></svg><span data-i18n="navTrading">التداول</span></a>
+  <a href="futures.html"><svg viewBox="0 0 24 24"><path d="M3 3v18h18M8 14l3-3 3 3 4-5"/></svg><span data-i18n="navFutures">عقود آجلة</span></a>
+  <a href="mining.html"><svg viewBox="0 0 24 24"><path d="M14 3l7 7-4 4-7-7zM10 10l-7 7 4 4 7-7"/></svg><span data-i18n="navMining">التعدين</span></a>
+  <a href="wallet.html"><svg viewBox="0 0 24 24"><path d="M3 7h16a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2zM16 13h.01"/></svg><span data-i18n="navWallet">المحفظة</span></a>
+</nav>
+
+<!-- ===== PROFILE DRAWER ===== -->
+<div class="scrim" id="scrim" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer">
+  <div class="dhead">
+    <div class="av" id="dAv">A</div>
+    <div class="di">
+      <div class="nm"><span id="dName">مستخدم</span><span class="vf" id="vfBadge" data-i18n="statusVerified">✓ موثّق</span></div>
+      <div class="uid">UID: <span id="dUid">--</span><span class="cp" onclick="copyUid()" data-i18n="copy">نسخ</span></div>
+    </div>
+  </div>
+  <div class="dlist">
+    <a class="ditem" onclick="openSheet('shSecurity')"><span class="ic"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg></span><b data-i18n="security">الأمان والحماية</b><span class="ar">‹</span></a>
+    <a class="ditem" onclick="openSheet('shKyc')"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg></span><b data-i18n="kyc">توثيق الهوية (KYC)</b><span class="ar">‹</span></a>
+    <a class="ditem" onclick="openSheet('shLang')"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 010 18M12 3a15 15 0 000 18"/></svg></span><b data-i18n="settings">الإعدادات واللغة</b><span class="ar">‹</span></a>
+    <a class="ditem" onclick="openSheet('shHelp')"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 015 0c0 2-2.5 2-2.5 4M12 17h.01"/></svg></span><b data-i18n="help">المساعدة والدعم</b><span class="ar">‹</span></a>
+    <a class="ditem logout" onclick="doLogout()"><span class="ic"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg></span><b data-i18n="logout">تسجيل الخروج</b></a>
+  </div>
+  <div class="dfoot">Apex · v1.0</div>
+</div>
+
+<!-- ===== SECURITY SHEET ===== -->
+<div class="sheet" id="shSecurity">
+  <div class="sh-top"><div class="bk" onclick="closeSheet('shSecurity')">›</div><b data-i18n="security">الأمان والحماية</b></div>
+  <div class="sh-body">
+    <div class="grp">
+      <div class="row" onclick="openSheet('shPass')"><span class="ic"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg></span><div class="tx"><b data-i18n="changePass">تغيير كلمة المرور</b><span data-i18n="changePassSub">حدّث كلمة المرور بانتظام</span></div><span class="ar">‹</span></div>
+      <div class="row"><span class="ic"><svg viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg></span><div class="tx"><b data-i18n="twofa">المصادقة الثنائية 2FA</b><span data-i18n="twofaSub">حماية إضافية عند الدخول</span></div><div class="sw" id="sw2fa" onclick="toggleSec('2fa',this)"></div></div>
+      <div class="row"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg></span><div class="tx"><b data-i18n="biometric">بصمة / وجه</b><span data-i18n="biometricSub">تسجيل دخول سريع</span></div><div class="sw" id="swBio" onclick="toggleSec('bio',this)"></div></div>
+    </div>
+    <div class="grp">
+      <div class="gt" data-i18n="antiTitle">رمز مكافحة التصيد</div>
+      <div style="padding:0 16px 16px">
+        <div class="fld" style="margin:0"><input id="antiInp" placeholder="مثال: Apex-2024"><div style="margin-top:10px"><button class="pbtn" onclick="saveAnti()" data-i18n="save">حفظ</button></div></div>
+      </div>
+    </div>
+    <div class="grp">
+      <div class="row" style="cursor:default"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><div class="tx"><b data-i18n="lastLogin">آخر تسجيل دخول</b><span id="lastLoginVal">--</span></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== CHANGE PASSWORD SHEET ===== -->
+<div class="sheet" id="shPass">
+  <div class="sh-top"><div class="bk" onclick="closeSheet('shPass')">›</div><b data-i18n="changePass">تغيير كلمة المرور</b></div>
+  <div class="sh-body">
+    <div class="fld"><label data-i18n="curPass">كلمة المرور الحالية</label><input id="pCur" type="password" placeholder="••••••••"></div>
+    <div class="fld"><label data-i18n="newPass">كلمة المرور الجديدة</label><input id="pNew" type="password" placeholder="8 أحرف على الأقل"></div>
+    <div class="fld"><label data-i18n="confPass">تأكيد كلمة المرور</label><input id="pConf" type="password" placeholder="••••••••"></div>
+    <button class="pbtn" onclick="changePass()" data-i18n="saveNewPass">حفظ كلمة المرور</button>
+  </div>
+</div>
+
+<!-- ===== KYC SHEET ===== -->
+<div class="sheet" id="shKyc">
+  <div class="sh-top"><div class="bk" onclick="closeSheet('shKyc')">›</div><b data-i18n="kyc">توثيق الهوية (KYC)</b></div>
+  <div class="sh-body">
+    <div class="kyc-badge">
+      <div class="shield"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg></div>
+      <h3 id="kycTitle" data-i18n="kycVerified">حساب موثّق</h3>
+      <p id="kycDesc" data-i18n="kycDesc">تم التحقق من هويتك بنجاح. حسابك يتمتع بكامل الصلاحيات.</p>
+    </div>
+    <div class="grp">
+      <div class="row" style="cursor:default"><div class="tx"><b data-i18n="docType">نوع الوثيقة</b></div><span class="val ok" id="kycDoc">--</span></div>
+      <div class="row" style="cursor:default"><div class="tx"><b data-i18n="status">الحالة</b></div><span class="val ok" id="kycStatusVal">✓ موثّق</span></div>
+      <div class="row" style="cursor:default"><div class="tx"><b data-i18n="level">مستوى التوثيق</b></div><span class="val ok">Level 2</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== LANGUAGE SHEET ===== -->
+<div class="sheet" id="shLang">
+  <div class="sh-top"><div class="bk" onclick="closeSheet('shLang')">›</div><b data-i18n="language">اللغة</b></div>
+  <div class="sh-body">
+    <div class="langsearch"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><input id="langSearch" placeholder="ابحث عن لغة..." oninput="filterLang()"></div>
+    <div class="grp" id="langList"></div>
+  </div>
+</div>
+
+<!-- ===== HELP SHEET ===== -->
+<div class="sheet" id="shHelp">
+  <div class="sh-top"><div class="bk" onclick="closeSheet('shHelp')">›</div><b data-i18n="help">المساعدة والدعم</b></div>
+  <div class="sh-body">
+    <div class="faq"><b data-i18n="faq1q">كيف أودع الأموال؟</b><p data-i18n="faq1a">اضغط على زر "إيداع" في الصفحة الرئيسية واتبع الخطوات.</p></div>
+    <div class="faq"><b data-i18n="faq2q">كيف أحمي حسابي؟</b><p data-i18n="faq2a">فعّل المصادقة الثنائية 2FA ورمز مكافحة التصيد من قسم الأمان.</p></div>
+    <div class="faq"><b data-i18n="faq3q">هل المنصة حقيقية؟</b><p data-i18n="faq3a">هذه منصة تدريبية (تداول تجريبي) بأسعار حية حقيقية من السوق.</p></div>
+    <div class="grp">
+      <div class="row" onclick="openSupport()"><span class="ic"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H7l-3 3z"/></svg></span><div class="tx"><b data-i18n="liveChat">الدردشة المباشرة</b><span data-i18n="liveChatSub">دعم فني 24/7</span></div><span class="ar">‹</span></div>
+      <div class="row" onclick="toast(t('supportMsg'))"><span class="ic"><svg viewBox="0 0 24 24"><path d="M4 6h16v12H4zM4 7l8 6 8-6"/></svg></span><div class="tx"><b data-i18n="email">البريد الإلكتروني</b><span>support@apex.com</span></div><span class="ar">‹</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SUPPORT CHAT ===== -->
+<style>
+.sup-fab{position:fixed;bottom:74px;left:16px;width:54px;height:54px;border-radius:50%;border:0;z-index:40;background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#231a02;box-shadow:0 6px 20px rgba(224,166,21,.4);display:flex;align-items:center;justify-content:center;cursor:pointer}
+.sup-fab svg{width:26px;height:26px;stroke:#231a02;fill:none;stroke-width:2}
+.sup-fab .dot{position:absolute;top:2px;right:2px;width:12px;height:12px;border-radius:50%;background:var(--red);border:2px solid var(--bg);display:none}
+.sup-fab .dot.on{display:block}
+.sup-panel{position:fixed;inset:0;z-index:60;background:var(--bg);display:none;flex-direction:column}
+.sup-panel.show{display:flex}
+.sup-head{display:flex;align-items:center;gap:12px;padding:14px 16px;background:linear-gradient(135deg,#1b1f24,#0f1216);border-bottom:1px solid var(--border)}
+.sup-head .bk{font-size:22px;color:var(--txt);background:none;border:0;cursor:pointer;line-height:1}
+.sup-head .ti b{font-size:15px;display:block}
+.sup-head .ti span{font-size:11px;color:var(--green)}
+.sup-head .av{width:38px;height:38px;border-radius:50%;background:rgba(224,166,21,.15);display:flex;align-items:center;justify-content:center}
+.sup-head .av svg{width:20px;height:20px;stroke:var(--gold2);fill:none;stroke-width:2}
+.sup-body{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
+.sup-body .welc{text-align:center;color:var(--muted);font-size:12.5px;margin:auto 0;line-height:1.8}
+.sbub{max-width:78%;padding:10px 13px;border-radius:14px;font-size:13.5px;line-height:1.55;word-break:break-word}
+.sbub.me{align-self:flex-start;background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#231a02;border-bottom-right-radius:4px}
+.sbub.op{align-self:flex-end;background:var(--panel2);border:1px solid var(--border);border-bottom-left-radius:4px}
+.sbub .tm{display:block;font-size:10px;opacity:.7;margin-top:4px}
+.sup-in{display:flex;gap:8px;padding:12px;border-top:1px solid var(--border);background:var(--panel)}
+.sup-in input{flex:1;padding:12px 14px;border-radius:24px;background:var(--panel2);border:1px solid var(--border);color:var(--txt);font-family:inherit;font-size:14px;outline:none}
+.sup-in button{border:0;border-radius:50%;width:44px;height:44px;background:linear-gradient(135deg,var(--gold1),var(--gold2));cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.sup-in button svg{width:20px;height:20px;stroke:#231a02;fill:none;stroke-width:2}
+</style>
+<button class="sup-fab" id="supFab" onclick="openSupport()" title="الدعم الفني"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg><span class="dot" id="supDot"></span></button>
+<div class="sup-panel" id="supPanel">
+  <div class="sup-head">
+    <button class="bk" onclick="closeSupport()">›</button>
+    <div class="av"><svg viewBox="0 0 24 24"><path d="M18.5 8a6.5 6.5 0 10-13 0v4a3 3 0 003 3M12 18h4"/><rect x="3" y="11" width="4" height="6" rx="1"/><rect x="17" y="11" width="4" height="6" rx="1"/></svg></div>
+    <div class="ti"><b>فريق الدعم</b><span>• متصل — نردّ عادة خلال دقائق</span></div>
+  </div>
+  <div class="sup-body" id="supBody"></div>
+  <div class="sup-in">
+    <input id="supInput" placeholder="اكتب رسالتك أو شكواك...">
+    <button onclick="sendSupport()"><svg viewBox="0 0 24 24"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/></svg></button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script>
+const $=id=>document.getElementById(id);
+const fmt=(n,d=2)=>Number(n).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+function toast(m){const t=$('toast');t.textContent=m;t.className='toast show';setTimeout(()=>t.className='toast',2200);}
+
+/* ===== الجلسة والمستخدم ===== */
+const sess=JSON.parse(localStorage.getItem('skygo_session')||'{}');
+function makeUid(email){let h=0;email=(email||'').toLowerCase();for(let i=0;i<email.length;i++){h=(h*31+email.charCodeAt(i))>>>0;}return (100000000+(h%900000000));}
+let UID=sess.uid;
+if(!UID){UID=makeUid(sess.email);sess.uid=UID;localStorage.setItem('skygo_session',JSON.stringify(sess));}
+const uname=sess.name||'مستخدم';
+const initial=(uname.trim()[0]||'A').toUpperCase();
+$('avatarBtn').textContent=initial;
+$('dAv').textContent=initial;
+$('dName').textContent=uname;
+$('dUid').textContent=UID;
+
+function openDrawer(){$('drawer').classList.add('show');$('scrim').classList.add('show');}
+function closeDrawer(){$('drawer').classList.remove('show');$('scrim').classList.remove('show');}
+function copyUid(){navigator.clipboard&&navigator.clipboard.writeText(''+UID);toast('تم نسخ رقم المستخدم');}
+function doLogout(){localStorage.removeItem('skygo_session');localStorage.removeItem('apex_token');localStorage.removeItem('apex_kyc_status');location.replace('login.html');}
+
+/* ===== الدعم الفني (محادثة مع الإدارة) ===== */
+const SUP_TOKEN=sess.token||localStorage.getItem('apex_token')||'';
+let supPoll=null;
+function escH(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function supTime(ms){return new Date(ms).toLocaleString('ar',{hour:'2-digit',minute:'2-digit'});}
+async function supFetch(){
+  if(!SUP_TOKEN)return null;
+  try{const r=await fetch('/api/support/messages',{headers:{'Authorization':'Bearer '+SUP_TOKEN}});if(!r.ok)return null;return (await r.json()).messages||[];}catch(e){return null;}
+}
+function renderSup(msgs){
+  const body=$('supBody');
+  if(!msgs||!msgs.length){body.innerHTML='<div class="welc">👋 أهلاً بك في الدعم الفني<br>اكتب رسالتك أو شكواك وسيتواصل معك فريقنا قريباً.</div>';return;}
+  body.innerHTML=msgs.map(m=>'<div class="sbub '+(m.from==='user'?'me':'op')+'">'+escH(m.text)+'<span class="tm">'+supTime(m.at)+'</span></div>').join('');
+  body.scrollTop=body.scrollHeight;
+  const lastAdmin=[...msgs].reverse().find(x=>x.from==='admin');
+  if(lastAdmin)localStorage.setItem('apex_sup_last',lastAdmin.at);
+}
+async function openSupport(){
+  if(!SUP_TOKEN){toast('الرجاء تسجيل الدخول لاستخدام الدعم');return;}
+  closeSheet&&closeSheet('shHelp');closeDrawer();
+  $('supPanel').classList.add('show');$('supDot').classList.remove('on');
+  renderSup(await supFetch());
+  if(supPoll)clearInterval(supPoll);
+  supPoll=setInterval(async()=>{const m=await supFetch();if(m)renderSup(m);},4000);
+}
+function closeSupport(){$('supPanel').classList.remove('show');if(supPoll){clearInterval(supPoll);supPoll=null;}localStorage.setItem('apex_sup_seen',Date.now());}
+async function sendSupport(){
+  const inp=$('supInput'),text=inp.value.trim();if(!text||!SUP_TOKEN)return;inp.value='';
+  try{await fetch('/api/support/messages',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUP_TOKEN},body:JSON.stringify({text})});renderSup(await supFetch());}catch(e){toast('تعذّر الإرسال');inp.value=text;}
+}
+if($('supInput'))$('supInput').addEventListener('keydown',e=>{if(e.key==='Enter')sendSupport();});
+async function supUnread(){const m=await supFetch();if(!m)return;const la=[...m].reverse().find(x=>x.from==='admin');const seen=+(localStorage.getItem('apex_sup_seen')||0);if(la&&la.at>seen&&!$('supPanel').classList.contains('show'))$('supDot').classList.add('on');}
+if(SUP_TOKEN){supUnread();setInterval(supUnread,15000);}
+
+/* ===== مزامنة الرصيد الحي مع الإدارة ===== */
+/* ===== الرصيد يُقرأ من السيرفر (المصدر الموثوق) ===== */
+/* السيرفر يحفظ رصيد كل حساب على حدة؛ شحن الإدارة والتحويلات تُحدّث الرصيد هناك
+   مباشرةً، والصفحة تعرض رصيد السيرفر فقط — لا خلط بين الحسابات على نفس المتصفح. */
+function walletKey(){return 'skygo_wallet_'+(UID||makeUid(sess.email));}
+async function refreshWallet(){
+  if(!SUP_TOKEN)return;
+  try{const r=await fetch('/api/wallet/me',{headers:{'Authorization':'Bearer '+SUP_TOKEN}});
+    if(!r.ok)return;
+    const d=await r.json();
+    const bals=d.balances||{};
+    for(const k in wallet){wallet[k]=0;}
+    for(const k in bals){wallet[String(k).toUpperCase()]=Number(bals[k])||0;}
+    localStorage.setItem(walletKey(),JSON.stringify(wallet));
+    renderBalance();
+  }catch(e){}
+}
+/* ===== رصيد محفظة العقود الآجلة (لدمجه ضمن نظرة عامة) ===== */
+async function refreshFutures(){
+  if(!SUP_TOKEN)return;
+  try{const r=await fetch('/api/wallet/futures',{headers:{'Authorization':'Bearer '+SUP_TOKEN}});
+    if(!r.ok)return;
+    const d=await r.json();const b=d.balances||{};const m={};
+    for(const k in b){m[String(k).toUpperCase()]=Number(b[k])||0;}
+    futBal=m;renderBalance();
+  }catch(e){}
+}
+/* ===== شارة الإشعارات غير المقروءة ===== */
+async function refreshNotifBadge(){
+  if(!SUP_TOKEN)return;
+  try{const r=await fetch('/api/notifications',{headers:{'Authorization':'Bearer '+SUP_TOKEN}});
+    if(!r.ok)return;const d=await r.json();const b=$('bellBadge');if(!b)return;
+    if(d.unread>0){b.textContent=d.unread>99?'99+':String(d.unread);b.style.display='flex';}
+    else{b.style.display='none';}
+  }catch(e){}
+}
+if(SUP_TOKEN){setTimeout(refreshWallet,0);setTimeout(refreshFutures,0);setTimeout(refreshNotifBadge,0);setInterval(refreshWallet,8000);setInterval(refreshFutures,8000);setInterval(refreshNotifBadge,15000);}
+
+/* ===== الرصيد والمحفظة ===== */
+function loadWallet(){const k=walletKey();const w=localStorage.getItem(k);if(w){try{return JSON.parse(w);}catch(e){}}
+  const init={USDT:0,ETH:0,BTC:0,BNB:0,SOL:0,XRP:0};localStorage.setItem(k,JSON.stringify(init));return init;}
+const wallet=loadWallet();
+/* السيرفر هو المصدر الوحيد للرصيد؛ لا نظهر رصيداً محلياً قديماً ريثما يردّ السيرفر. */
+if(SUP_TOKEN){for(const _k in wallet)wallet[_k]=0;}
+let balHidden=false, priceMap={}, futBal={};
+/* نظرة عامة = الرصيد الفوري + رصيد العقود الآجلة (مثل تبويب "نظرة عامة" في المحفظة) */
+/* رصيد العقود كحقوق ملكية: الحر + المحجوز بالصفقات + الربح/الخسارة غير المحقق
+   (نفس منطق صفحة المحفظة) حتى لا يظهر الإجمالي منقوصاً عند فتح صفقة عقود. */
+function futPosStats(){
+  let locked=0,upnl=0;
+  try{const ps=JSON.parse(localStorage.getItem('skygo_futures_pos')||'[]');
+    if(Array.isArray(ps))ps.forEach(p=>{
+      locked+=(+p.margin||0);
+      const px=priceMap[p.sym]||(+p.entry||0);
+      if(p.entry>0&&p.notional){const diff=(px-p.entry)/p.entry;upnl+=(p.side==='long'?1:-1)*diff*(+p.notional||0);}
+    });
+  }catch(e){}
+  return {locked,upnl};
+}
+function futEquityUSDT(){const s=futPosStats();return (futBal.USDT||0)+s.locked+s.upnl;}
+function renderBalance(){
+  let total=wallet.USDT||0;
+  for(const k in wallet){if(k==='USDT')continue;const p=priceMap[k+'USDT'];if(p)total+=(wallet[k]||0)*p;}
+  total+=futEquityUSDT();
+  for(const k in futBal){if(k==='USDT')continue;const p=priceMap[k+'USDT'];if(p)total+=(futBal[k]||0)*p;}
+  if(window.APX){const ah=APX.hold();if(ah>0&&priceMap[APX.SYM])total+=ah*priceMap[APX.SYM];}
+  if(balHidden){$('balAmt').textContent='••••••';$('balUsd').textContent='••••';}
+  else{$('balAmt').textContent=fmt(total,2);$('balUsd').textContent=fmt(total,2);}
+}
+function toggleBal(){balHidden=!balHidden;renderBalance();}
+
+/* ===== الأسواق الحية ===== */
+/* يقرأ الأسعار من سيرفرك (وكيل Binance + كاش) تماماً مثل باقي الصفحات.
+   مطابق لـ server.js عندك: GET /api/markets يعيد كل الأزواج بنفس شكل Binance ticker/24hr.
+   API_BASE فارغ = نفس نطاق السيرفر (same-origin). */
+const API_BASE='';
+const MARKETS_PATH='/api/markets';
+/* عملات جدول الأسواق (بنفس ترتيب Binance) */
+/* عملات الأسواق مصنفة بفئات (رائج = أقوى/أشهر العملات، جديدة = المدرجة حديثاً) */
+const FAMOUS=['APXUSDT','BTCUSDT','ETHUSDT','BNBUSDT','SOLUSDT','XRPUSDT','DOGEUSDT','ADAUSDT','TRXUSDT','TONUSDT','AVAXUSDT','LINKUSDT','DOTUSDT','MATICUSDT','LTCUSDT','BCHUSDT','SHIBUSDT','UNIUSDT','ATOMUSDT','ETCUSDT','NEARUSDT','APTUSDT','FILUSDT','ARBUSDT','OPUSDT'];
+const NEW_LIST=['SUIUSDT','SEIUSDT','TIAUSDT','PEPEUSDT','WIFUSDT','JUPUSDT','PYTHUSDT','ENAUSDT','WLDUSDT','ORDIUSDT','STRKUSDT','ONDOUSDT','NOTUSDT','FETUSDT','RNDRUSDT'];
+const mktMap={};
+let activeCat='trending';
+const pxPrev={};/* آخر سعر لكل رمز لتلوين التحديث */
+function pdec(p){return p>=1000?2:p>=1?2:p>=0.1?4:6;}
+function icoUrl(b){return 'https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/128/color/'+b.toLowerCase()+'.png';}
+function favArr(){try{return JSON.parse(localStorage.getItem('apex_favs_'+UID)||'[]')||[];}catch(e){return [];}}
+function catSyms(cat){
+  if(cat==='fav')return favArr();
+  if(cat==='trending')return FAMOUS;
+  if(cat==='new')return NEW_LIST;
+  const uni=Array.from(new Set(FAMOUS.concat(NEW_LIST))).filter(s=>mktMap[s]);
+  uni.sort((a,b)=>cat==='gain'?(parseFloat(mktMap[b].P)-parseFloat(mktMap[a].P)):(parseFloat(mktMap[a].P)-parseFloat(mktMap[b].P)));
+  return uni.slice(0,15);
+}
+function rowHtml(sym){
+  const d=mktMap[sym]; if(!d)return '';
+  const b=sym.replace('USDT','');
+  const price=parseFloat(d.c),chg=parseFloat(d.P),up=chg>=0;
+  const logo=(window.APX&&b===APX.BASE)?'<span class="apxlogo">A</span>':'<img src="'+icoUrl(b)+'" onerror="this.style.visibility=\'hidden\'">';
+  const nm=(window.APX&&b===APX.BASE)?'Apex Coin':b;
+  const prev=pxPrev[sym];let dir='eq';if(prev!=null){if(price>prev)dir='up';else if(price<prev)dir='dn';}pxPrev[sym]=price;
+  return '<tr onclick="location.href=\'trading.html?symbol='+sym.toLowerCase()+'\'" style="cursor:pointer">'+
+    '<td><div class="coin">'+logo+'<div><b>'+nm+'</b><br><span>'+b+'/USDT</span></div></div></td>'+
+    '<td style="text-align:end"><span class="px '+dir+'">$'+fmt(price,pdec(price))+'</span></td>'+
+    '<td style="text-align:end"><span class="pc '+(up?'up':'dn')+'">'+(up?'+':'')+chg.toFixed(2)+'%</span></td>'+
+  '</tr>';
+}
+function renderMarkets(){
+  const body=$('cmpBody'); if(!body)return;
+  const syms=catSyms(activeCat).filter(s=>mktMap[s]);
+  if(!syms.length){
+    const msg=activeCat==='fav'?'ما في عملات بالمفضلة بعد — ضيفها من صفحة الأسواق ★':'جارٍ تحميل الأسعار…';
+    body.innerHTML='<tr><td colspan="3" style="padding:26px;text-align:center;color:var(--muted);font-size:13px">'+msg+'</td></tr>';
+    return;
+  }
+  body.innerHTML=syms.map(rowHtml).join('');
+}
+function setCat(cat){activeCat=cat;document.querySelectorAll('.mcat').forEach(el=>el.classList.toggle('on',el.dataset.cat===cat));renderMarkets();}
+async function poll(){
+  try{
+    const need=new Set(FAMOUS.concat(NEW_LIST).concat(favArr()).concat(Object.keys(wallet).filter(k=>k!=='USDT').map(k=>k+'USDT')));
+    /* يُقرأ من سيرفرك (/api/markets) لا من Binance مباشرة — طلب واحد يغطي كل الأزواج */
+    const url=API_BASE+MARKETS_PATH;
+    const r=await fetch(url,{headers:{'Accept':'application/json'}});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const raw=await r.json();
+    /* يدعم مصفوفة مباشرة (/api/markets) أو شكل {data:[...]} (/api/prices) */
+    const list=Array.isArray(raw)?raw:(Array.isArray(raw.data)?raw.data:Object.values(raw));
+    const map={};
+    list.forEach(d=>{
+      const sym=d.symbol||d.s; if(!sym||!need.has(sym))return;
+      const last=d.lastPrice!=null?d.lastPrice:(d.c!=null?d.c:(d.price!=null?d.price:d.p));
+      const pct=d.priceChangePercent!=null?d.priceChangePercent:(d.P!=null?d.P:(d.changePct24h!=null?d.changePct24h:0));
+      const hi=d.highPrice!=null?d.highPrice:(d.h!=null?d.h:(d.high!=null?d.high:null));
+      const lo=d.lowPrice!=null?d.lowPrice:(d.l!=null?d.l:(d.low!=null?d.low:null));
+      const vol=d.quoteVolume!=null?d.quoteVolume:(d.q!=null?d.q:(d.volume!=null?d.volume:(d.v!=null?d.v:null)));
+      map[sym]={c:last,P:pct,h:hi,l:lo,v:vol};priceMap[sym]=parseFloat(last);
+    });
+    for(const s in map){mktMap[s]=map[s];}
+    /* حقن عملة المنصّة APX (سعرها يتحكّم فيه الأدمن) */
+    if(window.APX&&APX.cfg().enabled){var _at=APX.ticker();mktMap[APX.SYM]={c:_at.lastPrice,P:_at.priceChangePercent,h:_at.highPrice,l:_at.lowPrice,v:_at.quoteVolume};priceMap[APX.SYM]=APX.live();}
+    else if(window.APX){delete mktMap[APX.SYM];}
+    renderMarkets(); renderBalance();
+  }catch(e){/* تجاهل مؤقت وأعد المحاولة في الدورة القادمة */}
+}
+renderBalance(); renderMarkets(); poll(); setInterval(poll,6000);
+/* تحديث فوري عند تغيّر سعر APX من لوحة الأدمن */
+if(window.APX&&APX.onChange){APX.onChange(function(){try{poll();}catch(e){}});}
+
+/* البحث → صفحة الأسواق */
+$('searchInp').addEventListener('keydown',e=>{if(e.key==='Enter'){const q=e.target.value.trim();location.href='markets.html'+(q?'?q='+encodeURIComponent(q):'');}});
+
+/* ================= الأوراق المنبثقة (Sheets) ================= */
+function openSheet(id){$(id).classList.add('show');$('scrim').classList.add('show');}
+function closeSheet(id){$(id).classList.remove('show');
+  const anyOpen=document.querySelector('.sheet.show')||document.querySelector('.drawer.show');
+  if(!anyOpen)$('scrim').classList.remove('show');
+}
+
+/* ================= الأمان ================= */
+function getUsers(){return JSON.parse(localStorage.getItem('skygo_users')||'[]');}
+function saveUsers(u){localStorage.setItem('skygo_users',JSON.stringify(u));}
+function curUser(){const us=getUsers();return us.find(u=>(u.email||'').toLowerCase()===(sess.email||'').toLowerCase())||null;}
+
+function toggleSec(key,el){
+  const on=!el.classList.contains('on');
+  el.classList.toggle('on',on);
+  localStorage.setItem('apex_'+key,on?'1':'0');
+  toast(on?t(key==='2fa'?'msg2faOn':'msgBioOn'):t(key==='2fa'?'msg2faOff':'msgBioOff'));
+}
+function saveAnti(){
+  const v=$('antiInp').value.trim();
+  if(!v){toast(t('msgAntiEmpty'));return;}
+  localStorage.setItem('apex_anti',v);
+  toast(t('msgSaved'));
+}
+function changePass(){
+  const cur=$('pCur').value, nw=$('pNew').value, cf=$('pConf').value;
+  const u=curUser();
+  if(!u){toast(t('msgNoUser'));return;}
+  if(u.pass && cur!==u.pass){toast(t('msgPassWrong'));return;}
+  if(nw.length<8){toast(t('msgPassShort'));return;}
+  if(nw!==cf){toast(t('msgPassMismatch'));return;}
+  const us=getUsers();
+  const idx=us.findIndex(x=>(x.email||'').toLowerCase()===(sess.email||'').toLowerCase());
+  if(idx>=0){us[idx].pass=nw;saveUsers(us);}
+  $('pCur').value=$('pNew').value=$('pConf').value='';
+  toast(t('msgPassChanged'));
+  setTimeout(()=>closeSheet('shPass'),600);
+}
+function initSecurity(){
+  if(localStorage.getItem('apex_2fa')==='1')$('sw2fa').classList.add('on');
+  if(localStorage.getItem('apex_bio')==='1')$('swBio').classList.add('on');
+  const a=localStorage.getItem('apex_anti');if(a)$('antiInp').value=a;
+  const at=sess.at||(curUser()&&curUser().at)||Date.now();
+  try{$('lastLoginVal').textContent=new Date(at).toLocaleString();}catch(e){$('lastLoginVal').textContent='--';}
+}
+
+/* ================= KYC ================= */
+function initKyc(){
+  const u=curUser();
+  const map={id:'kycId',passport:'kycPass',license:'kycLic'};
+  const dt=u&&u.doc?u.doc:'id';
+  $('kycDoc').setAttribute('data-i18n',map[dt]||'kycId');
+  $('kycDoc').textContent=t(map[dt]||'kycId');
+}
+
+/* ================= اللغات i18n ================= */
+var I18N={};
+var LANGS=[
+  {c:'ar',n:'العربية',e:'Arabic',f:'🇸🇦',dir:'rtl'},
+  {c:'en',n:'English',e:'English',f:'🇬🇧',dir:'ltr'},
+  {c:'fr',n:'Français',e:'French',f:'🇫🇷',dir:'ltr'},
+  {c:'es',n:'Español',e:'Spanish',f:'🇪🇸',dir:'ltr'},
+  {c:'de',n:'Deutsch',e:'German',f:'🇩🇪',dir:'ltr'},
+  {c:'tr',n:'Türkçe',e:'Turkish',f:'🇹🇷',dir:'ltr'},
+  {c:'ru',n:'Русский',e:'Russian',f:'🇷🇺',dir:'ltr'},
+  {c:'zh',n:'中文',e:'Chinese',f:'🇨🇳',dir:'ltr'},
+  {c:'hi',n:'हिन्दी',e:'Hindi',f:'🇮🇳',dir:'ltr'},
+  {c:'ur',n:'اردو',e:'Urdu',f:'🇵🇰',dir:'rtl'},
+  {c:'pt',n:'Português',e:'Portuguese',f:'🇵🇹',dir:'ltr'},
+  {c:'id',n:'Indonesia',e:'Indonesian',f:'🇮🇩',dir:'ltr'},
+  {c:'ja',n:'日本語',e:'Japanese',f:'🇯🇵',dir:'ltr'},
+  {c:'ko',n:'한국어',e:'Korean',f:'🇰🇷',dir:'ltr'}
+];
+var curLang=localStorage.getItem('apex_lang')||'ar';
+function t(k){var d=I18N[curLang]||I18N.ar;return (d&&d[k])||(I18N.ar&&I18N.ar[k])||k;}
+function applyLang(code){
+  curLang=code;localStorage.setItem('apex_lang',code);
+  var meta=LANGS.find(function(l){return l.c===code;})||LANGS[0];
+  document.documentElement.lang=code;
+  document.documentElement.dir=meta.dir;
+  document.querySelectorAll('[data-i18n]').forEach(function(el){
+    var k=el.getAttribute('data-i18n');var v=t(k);if(v)el.textContent=v;
+  });
+  document.querySelectorAll('[data-i18n-ph]').forEach(function(el){
+    var k=el.getAttribute('data-i18n-ph');var v=t(k);if(v)el.setAttribute('placeholder',v);
+  });
+  // Also apply the SHARED dictionary (covers nav labels + keys shared across
+  // pages), and persist so every other page picks up the same language.
+  if(window.APEX_I18N)window.APEX_I18N.apply(code);
+  renderLangList();
+}
+function renderLangList(){
+  var q=(($('langSearch')&&$('langSearch').value)||'').trim().toLowerCase();
+  var html=LANGS.filter(function(l){
+    return !q||l.n.toLowerCase().indexOf(q)>=0||l.e.toLowerCase().indexOf(q)>=0||l.c.indexOf(q)>=0;
+  }).map(function(l){
+    var sel=l.c===curLang;
+    return '<div class="lrow'+(sel?' sel':'')+'" onclick="pickLang(\''+l.c+'\')">'+
+      '<span class="fl">'+l.f+'</span>'+
+      '<div class="ln"><b>'+l.n+'</b><span>'+l.e+'</span></div>'+
+      '<span class="tick">✓</span></div>';
+  }).join('');
+  $('langList').innerHTML=html||'<div style="padding:20px;text-align:center;color:#7a8794">—</div>';
+}
+function filterLang(){renderLangList();}
+function pickLang(code){applyLang(code);toast(t('langChanged'));setTimeout(function(){closeSheet('shLang');},500);}
+
+/* ================= حالة التوثيق KYC (pending / approved / rejected) ================= */
+var KYC_TOKEN=(sess&&sess.token)||localStorage.getItem('apex_token')||'';
+var KYC_POLL=null, KYC_CUR='';
+function kL(k,fb){try{var v=window.APEX_I18N&&window.APEX_I18N.t(k);return (v&&v!==k)?v:fb;}catch(e){return fb;}}
+function applyKycStatus(status){
+  KYC_CUR=status||'pending';
+  var badge=$('vfBadge'),ban=$('kBanner'),btn=$('kBanBtn'),tx=$('kBanTx'),ico=$('kBanIco');
+  var title=$('kycTitle'),desc=$('kycDesc'),shield=document.querySelector('#shKyc .shield'),kst=$('kycStatusVal');
+  if(badge){badge.classList.remove('pending','rejected');
+    if(status==='approved'){badge.setAttribute('data-i18n','statusVerified');badge.textContent='✓ '+kL('statusVerified','موثّق');}
+    else if(status==='rejected'){badge.classList.add('rejected');badge.setAttribute('data-i18n','statusRejected');badge.textContent=kL('statusRejected','مرفوض');}
+    else{badge.classList.add('pending');badge.setAttribute('data-i18n','statusPending');badge.textContent=kL('statusPending','قيد المراجعة');}
+  }
+  if(ban){ban.classList.remove('show','pending','rejected');
+    if(status==='pending'){ban.classList.add('show','pending');if(tx)tx.textContent=kL('pendingBanner','حسابك قيد المراجعة من الإدارة');if(btn)btn.style.display='none';if(ico)ico.innerHTML='<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>';}
+    else if(status==='rejected'){ban.classList.add('show','rejected');if(tx)tx.textContent=kL('rejectedBanner','تم رفض توثيقك. أعد رفع وثيقة صحيحة.');if(btn)btn.style.display='';if(ico)ico.innerHTML='<circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/>';}
+  }
+  if(title&&desc){
+    if(status==='approved'){title.setAttribute('data-i18n','kycVerified');title.textContent=kL('kycVerified','حساب موثّق');desc.setAttribute('data-i18n','kycDesc');desc.textContent=kL('kycDesc','تم التحقق من هويتك بنجاح.');if(shield)shield.style.background='linear-gradient(135deg,var(--green),#0a9d64)';}
+    else if(status==='rejected'){title.setAttribute('data-i18n','kycRejectedTitle');title.textContent=kL('kycRejectedTitle','تم رفض التوثيق');desc.setAttribute('data-i18n','kycRejectedDesc');desc.textContent=kL('kycRejectedDesc','لم يتم قبول وثيقتك. يرجى إعادة التحقق.');if(shield)shield.style.background='linear-gradient(135deg,#f6465d,#c62b40)';}
+    else{title.setAttribute('data-i18n','kycPendingTitle');title.textContent=kL('kycPendingTitle','الحساب قيد المراجعة');desc.setAttribute('data-i18n','kycPendingDesc');desc.textContent=kL('kycPendingDesc','تم استلام وثيقتك وهي قيد المراجعة.');if(shield)shield.style.background='linear-gradient(135deg,var(--gold1),var(--gold2))';}
+  }
+  if(kst){kst.classList.remove('ok','warn');kst.style.color='';
+    if(status==='approved'){kst.classList.add('ok');kst.textContent='✓ '+kL('statusVerified','موثّق');}
+    else if(status==='rejected'){kst.style.color='var(--red)';kst.textContent=kL('statusRejected','مرفوض');}
+    else{kst.classList.add('warn');kst.textContent=kL('statusPending','قيد المراجعة');}
+  }
+}
+function handleKyc(status){
+  var prev=localStorage.getItem('apex_kyc_status')||'';
+  if(status==='approved'&&prev&&prev!=='approved'){toast(kL('approvedToast','تمت الموافقة على حسابك ✅'));}
+  localStorage.setItem('apex_kyc_status',status);
+  applyKycStatus(status);
+}
+async function fetchKyc(){
+  if(!KYC_TOKEN)return;
+  try{
+    var r=await fetch('/api/auth/me',{headers:{'Authorization':'Bearer '+KYC_TOKEN}});
+    if(r.status===401||r.status===403){doLogout();return;}
+    if(!r.ok)return;
+    var d=await r.json();var st=d&&d.user&&d.user.status;
+    if(st)handleKyc(st);
+  }catch(e){}
+}
+function initKycStatus(){
+  var cached=localStorage.getItem('apex_kyc_status');
+  if(cached)applyKycStatus(cached);
+  fetchKyc();
+  if(KYC_POLL)clearInterval(KYC_POLL);
+  KYC_POLL=setInterval(fetchKyc,15000);
+}
+window.onApexLang=function(){if(KYC_CUR)applyKycStatus(KYC_CUR);};
+
+/* تهيئة */
+function initAll(){initSecurity();initKyc();initKycStatus();applyLang(curLang);}
+
+I18N.ar={security:'الأمان والحماية',kyc:'توثيق الهوية (KYC)',settings:'الإعدادات واللغة',help:'المساعدة والدعم',logout:'تسجيل الخروج',changePass:'تغيير كلمة المرور',changePassSub:'حدّث كلمة المرور بانتظام',twofa:'المصادقة الثنائية 2FA',twofaSub:'حماية إضافية عند الدخول',biometric:'بصمة / وجه',biometricSub:'تسجيل دخول سريع',antiTitle:'رمز مكافحة التصيد',save:'حفظ',lastLogin:'آخر تسجيل دخول',curPass:'كلمة المرور الحالية',newPass:'كلمة المرور الجديدة',confPass:'تأكيد كلمة المرور',saveNewPass:'حفظ كلمة المرور',kycVerified:'حساب موثّق',kycDesc:'تم التحقق من هويتك بنجاح. حسابك يتمتع بكامل الصلاحيات.',docType:'نوع الوثيقة',status:'الحالة',verified2:'✓ موثّق',level:'مستوى التوثيق',language:'اللغة',faq1q:'كيف أودع الأموال؟',faq1a:'اضغط على زر "إيداع" في الصفحة الرئيسية واتبع الخطوات.',faq2q:'كيف أحمي حسابي؟',faq2a:'فعّل المصادقة الثنائية 2FA ورمز مكافحة التصيد من قسم الأمان.',faq3q:'هل المنصة حقيقية؟',faq3a:'هذه منصة تدريبية (تداول تجريبي) بأسعار حية حقيقية من السوق.',liveChat:'الدردشة المباشرة',liveChatSub:'دعم فني 24/7',email:'البريد الإلكتروني',searchPh:'بحث عن عملة (BTC، ETH)...',totalAssets:'إجمالي الأصول (USDT)',deposit:'إيداع',withdraw:'سحب',transfer:'تحويل',more:'المزيد',liveMarkets:'أبرز الأسواق الحية',viewAll:'عرض الكل ‹',copy:'نسخ',supportMsg:'سيتواصل معك فريق الدعم قريباً',kycId:'بطاقة هوية وطنية',kycPass:'جواز سفر',kycLic:'رخصة قيادة',langChanged:'تم تغيير اللغة',msgSaved:'تم الحفظ بنجاح',msg2faOn:'تم تفعيل المصادقة الثنائية',msg2faOff:'تم إيقاف المصادقة الثنائية',msgBioOn:'تم تفعيل البصمة',msgBioOff:'تم إيقاف البصمة',msgAntiEmpty:'الرجاء إدخال رمز',msgNoUser:'تعذر إيجاد المستخدم',msgPassWrong:'كلمة المرور الحالية غير صحيحة',msgPassShort:'كلمة المرور قصيرة (8 أحرف على الأقل)',msgPassMismatch:'كلمتا المرور غير متطابقتين',msgPassChanged:'تم تغيير كلمة المرور بنجاح'};
+
+I18N.en={security:'Security & Protection',kyc:'Identity Verification (KYC)',settings:'Settings & Language',help:'Help & Support',logout:'Log out',changePass:'Change Password',changePassSub:'Update your password regularly',twofa:'Two-Factor Auth (2FA)',twofaSub:'Extra protection on login',biometric:'Fingerprint / Face',biometricSub:'Fast sign-in',antiTitle:'Anti-Phishing Code',save:'Save',lastLogin:'Last login',curPass:'Current password',newPass:'New password',confPass:'Confirm password',saveNewPass:'Save password',kycVerified:'Verified account',kycDesc:'Your identity has been verified successfully. Your account has full access.',docType:'Document type',status:'Status',verified2:'✓ Verified',level:'Verification level',language:'Language',faq1q:'How do I deposit funds?',faq1a:'Tap the "Deposit" button on the home page and follow the steps.',faq2q:'How do I protect my account?',faq2a:'Enable 2FA and the anti-phishing code from the Security section.',faq3q:'Is the platform real?',faq3a:'This is a training platform (paper trading) with real live market prices.',liveChat:'Live Chat',liveChatSub:'24/7 technical support',email:'Email',searchPh:'Search a coin (BTC, ETH)...',totalAssets:'Total Assets (USDT)',deposit:'Deposit',withdraw:'Withdraw',transfer:'Transfer',more:'More',liveMarkets:'Top Live Markets',viewAll:'View all ›',copy:'Copy',supportMsg:'Our support team will contact you soon',kycId:'National ID Card',kycPass:'Passport',kycLic:'Driver License',langChanged:'Language changed',msgSaved:'Saved successfully',msg2faOn:'Two-factor auth enabled',msg2faOff:'Two-factor auth disabled',msgBioOn:'Biometric enabled',msgBioOff:'Biometric disabled',msgAntiEmpty:'Please enter a code',msgNoUser:'User not found',msgPassWrong:'Current password is incorrect',msgPassShort:'Password too short (min 8 chars)',msgPassMismatch:'Passwords do not match',msgPassChanged:'Password changed successfully'};
+
+I18N.fr={security:'Sécurité & Protection',kyc:'Vérification d\'identité (KYC)',settings:'Paramètres & Langue',help:'Aide & Support',logout:'Déconnexion',changePass:'Changer le mot de passe',changePassSub:'Mettez à jour régulièrement',twofa:'Authentification à deux facteurs',twofaSub:'Protection supplémentaire',biometric:'Empreinte / Visage',biometricSub:'Connexion rapide',antiTitle:'Code anti-hameçonnage',save:'Enregistrer',lastLogin:'Dernière connexion',curPass:'Mot de passe actuel',newPass:'Nouveau mot de passe',confPass:'Confirmer le mot de passe',saveNewPass:'Enregistrer',kycVerified:'Compte vérifié',kycDesc:'Votre identité a été vérifiée avec succès. Accès complet.',docType:'Type de document',status:'Statut',verified2:'✓ Vérifié',level:'Niveau de vérification',language:'Langue',faq1q:'Comment déposer des fonds ?',faq1a:'Appuyez sur "Dépôt" sur la page d\'accueil et suivez les étapes.',faq2q:'Comment protéger mon compte ?',faq2a:'Activez la 2FA et le code anti-hameçonnage dans Sécurité.',faq3q:'La plateforme est-elle réelle ?',faq3a:'Ceci est une plateforme d\'entraînement (trading papier) avec de vrais prix.',liveChat:'Chat en direct',liveChatSub:'Support 24/7',email:'E-mail',searchPh:'Rechercher une pièce (BTC, ETH)...',totalAssets:'Actifs totaux (USDT)',deposit:'Dépôt',withdraw:'Retrait',transfer:'Transfert',more:'Plus',liveMarkets:'Meilleurs marchés en direct',viewAll:'Tout voir ›',copy:'Copier',supportMsg:'Notre équipe vous contactera bientôt',kycId:'Carte d\'identité',kycPass:'Passeport',kycLic:'Permis de conduire',langChanged:'Langue modifiée',msgSaved:'Enregistré avec succès',msg2faOn:'2FA activée',msg2faOff:'2FA désactivée',msgBioOn:'Biométrie activée',msgBioOff:'Biométrie désactivée',msgAntiEmpty:'Veuillez saisir un code',msgNoUser:'Utilisateur introuvable',msgPassWrong:'Mot de passe actuel incorrect',msgPassShort:'Mot de passe trop court (min 8)',msgPassMismatch:'Les mots de passe ne correspondent pas',msgPassChanged:'Mot de passe modifié'};
+I18N.es={security:'Seguridad y Protección',kyc:'Verificación de identidad (KYC)',settings:'Ajustes e Idioma',help:'Ayuda y Soporte',logout:'Cerrar sesión',changePass:'Cambiar contraseña',changePassSub:'Actualiza tu contraseña con frecuencia',twofa:'Autenticación de dos factores',twofaSub:'Protección adicional al iniciar',biometric:'Huella / Rostro',biometricSub:'Inicio rápido',antiTitle:'Código anti-phishing',save:'Guardar',lastLogin:'Último inicio',curPass:'Contraseña actual',newPass:'Nueva contraseña',confPass:'Confirmar contraseña',saveNewPass:'Guardar',kycVerified:'Cuenta verificada',kycDesc:'Tu identidad se verificó con éxito. Acceso completo.',docType:'Tipo de documento',status:'Estado',verified2:'✓ Verificado',level:'Nivel de verificación',language:'Idioma',faq1q:'¿Cómo deposito fondos?',faq1a:'Toca "Depósito" en la página principal y sigue los pasos.',faq2q:'¿Cómo protejo mi cuenta?',faq2a:'Activa 2FA y el código anti-phishing en Seguridad.',faq3q:'¿La plataforma es real?',faq3a:'Es una plataforma de práctica (trading en papel) con precios reales.',liveChat:'Chat en vivo',liveChatSub:'Soporte 24/7',email:'Correo',searchPh:'Buscar moneda (BTC, ETH)...',totalAssets:'Activos totales (USDT)',deposit:'Depósito',withdraw:'Retirar',transfer:'Transferir',more:'Más',liveMarkets:'Mercados en vivo',viewAll:'Ver todo ›',copy:'Copiar',supportMsg:'Nuestro equipo te contactará pronto',kycId:'DNI / Cédula',kycPass:'Pasaporte',kycLic:'Licencia de conducir',langChanged:'Idioma cambiado',msgSaved:'Guardado con éxito',msg2faOn:'2FA activada',msg2faOff:'2FA desactivada',msgBioOn:'Biometría activada',msgBioOff:'Biometría desactivada',msgAntiEmpty:'Introduce un código',msgNoUser:'Usuario no encontrado',msgPassWrong:'Contraseña actual incorrecta',msgPassShort:'Contraseña muy corta (mín 8)',msgPassMismatch:'Las contraseñas no coinciden',msgPassChanged:'Contraseña cambiada'};
+
+I18N.de={security:'Sicherheit & Schutz',kyc:'Identitätsprüfung (KYC)',settings:'Einstellungen & Sprache',help:'Hilfe & Support',logout:'Abmelden',changePass:'Passwort ändern',changePassSub:'Aktualisiere dein Passwort regelmäßig',twofa:'Zwei-Faktor-Auth (2FA)',twofaSub:'Zusätzlicher Schutz beim Login',biometric:'Fingerabdruck / Gesicht',biometricSub:'Schnelle Anmeldung',antiTitle:'Anti-Phishing-Code',save:'Speichern',lastLogin:'Letzter Login',curPass:'Aktuelles Passwort',newPass:'Neues Passwort',confPass:'Passwort bestätigen',saveNewPass:'Speichern',kycVerified:'Verifiziertes Konto',kycDesc:'Deine Identität wurde erfolgreich verifiziert. Voller Zugriff.',docType:'Dokumenttyp',status:'Status',verified2:'✓ Verifiziert',level:'Verifizierungsstufe',language:'Sprache',faq1q:'Wie zahle ich ein?',faq1a:'Tippe auf "Einzahlung" auf der Startseite und folge den Schritten.',faq2q:'Wie schütze ich mein Konto?',faq2a:'Aktiviere 2FA und den Anti-Phishing-Code im Bereich Sicherheit.',faq3q:'Ist die Plattform echt?',faq3a:'Dies ist eine Übungsplattform (Paper-Trading) mit echten Marktpreisen.',liveChat:'Live-Chat',liveChatSub:'24/7 Support',email:'E-Mail',searchPh:'Münze suchen (BTC, ETH)...',totalAssets:'Gesamtvermögen (USDT)',deposit:'Einzahlen',withdraw:'Auszahlen',transfer:'Übertragen',more:'Mehr',liveMarkets:'Top Live-Märkte',viewAll:'Alle ansehen ›',copy:'Kopieren',supportMsg:'Unser Support meldet sich bald bei dir',kycId:'Personalausweis',kycPass:'Reisepass',kycLic:'Führerschein',langChanged:'Sprache geändert',msgSaved:'Erfolgreich gespeichert',msg2faOn:'2FA aktiviert',msg2faOff:'2FA deaktiviert',msgBioOn:'Biometrie aktiviert',msgBioOff:'Biometrie deaktiviert',msgAntiEmpty:'Bitte Code eingeben',msgNoUser:'Benutzer nicht gefunden',msgPassWrong:'Aktuelles Passwort falsch',msgPassShort:'Passwort zu kurz (min 8)',msgPassMismatch:'Passwörter stimmen nicht überein',msgPassChanged:'Passwort geändert'};
+I18N.tr={security:'Güvenlik & Koruma',kyc:'Kimlik Doğrulama (KYC)',settings:'Ayarlar & Dil',help:'Yardım & Destek',logout:'Çıkış yap',changePass:'Şifre değiştir',changePassSub:'Şifreni düzenli güncelle',twofa:'İki Faktörlü Doğrulama',twofaSub:'Girişte ekstra koruma',biometric:'Parmak izi / Yüz',biometricSub:'Hızlı giriş',antiTitle:'Anti-Phishing Kodu',save:'Kaydet',lastLogin:'Son giriş',curPass:'Mevcut şifre',newPass:'Yeni şifre',confPass:'Şifreyi onayla',saveNewPass:'Kaydet',kycVerified:'Doğrulanmış hesap',kycDesc:'Kimliğiniz başarıyla doğrulandı. Tam erişim.',docType:'Belge türü',status:'Durum',verified2:'✓ Doğrulandı',level:'Doğrulama seviyesi',language:'Dil',faq1q:'Nasıl para yatırırım?',faq1a:'Ana sayfada "Yatır" düğmesine dokunun ve adımları izleyin.',faq2q:'Hesabımı nasıl korurum?',faq2a:'Güvenlik bölümünden 2FA ve anti-phishing kodunu etkinleştirin.',faq3q:'Platform gerçek mi?',faq3a:'Bu, gerçek piyasa fiyatlarıyla bir eğitim platformudur (kağıt ticareti).',liveChat:'Canlı sohbet',liveChatSub:'7/24 destek',email:'E-posta',searchPh:'Coin ara (BTC, ETH)...',totalAssets:'Toplam Varlık (USDT)',deposit:'Yatır',withdraw:'Çek',transfer:'Transfer',more:'Daha',liveMarkets:'Popüler Canlı Piyasalar',viewAll:'Tümünü gör ›',copy:'Kopyala',supportMsg:'Destek ekibimiz sizinle yakında iletişime geçecek',kycId:'Kimlik Kartı',kycPass:'Pasaport',kycLic:'Sürücü belgesi',langChanged:'Dil değiştirildi',msgSaved:'Başarıyla kaydedildi',msg2faOn:'2FA etkin',msg2faOff:'2FA devre dışı',msgBioOn:'Biyometri etkin',msgBioOff:'Biyometri devre dışı',msgAntiEmpty:'Lütfen bir kod girin',msgNoUser:'Kullanıcı bulunamadı',msgPassWrong:'Mevcut şifre yanlış',msgPassShort:'Şifre çok kısa (min 8)',msgPassMismatch:'Şifreler eşleşmiyor',msgPassChanged:'Şifre değiştirildi'};
+
+I18N.ru={security:'Безопасность и защита',kyc:'Подтверждение личности (KYC)',settings:'Настройки и язык',help:'Помощь и поддержка',logout:'Выйти',changePass:'Сменить пароль',changePassSub:'Регулярно обновляйте пароль',twofa:'Двухфакторная (2FA)',twofaSub:'Дополнительная защита',biometric:'Отпечаток / Лицо',biometricSub:'Быстрый вход',antiTitle:'Антифишинговый код',save:'Сохранить',lastLogin:'Последний вход',curPass:'Текущий пароль',newPass:'Новый пароль',confPass:'Подтвердите пароль',saveNewPass:'Сохранить',kycVerified:'Аккаунт подтверждён',kycDesc:'Ваша личность успешно подтверждена. Полный доступ.',docType:'Тип документа',status:'Статус',verified2:'✓ Подтверждён',level:'Уровень верификации',language:'Язык',faq1q:'Как пополнить счёт?',faq1a:'Нажмите "Депозит" на главной странице и следуйте шагам.',faq2q:'Как защитить аккаунт?',faq2a:'Включите 2FA и антифишинговый код в разделе Безопасность.',faq3q:'Платформа настоящая?',faq3a:'Это учебная платформа (бумажная торговля) с реальными ценами.',liveChat:'Онлайн-чат',liveChatSub:'Поддержка 24/7',email:'Эл. почта',searchPh:'Поиск монеты (BTC, ETH)...',totalAssets:'Общие активы (USDT)',deposit:'Пополнить',withdraw:'Вывести',transfer:'Перевод',more:'Ещё',liveMarkets:'Топ рынков',viewAll:'Все ›',copy:'Копировать',supportMsg:'Наша поддержка скоро свяжется с вами',kycId:'Удостоверение личности',kycPass:'Паспорт',kycLic:'Водительское удостоверение',langChanged:'Язык изменён',msgSaved:'Успешно сохранено',msg2faOn:'2FA включена',msg2faOff:'2FA выключена',msgBioOn:'Биометрия включена',msgBioOff:'Биометрия выключена',msgAntiEmpty:'Введите код',msgNoUser:'Пользователь не найден',msgPassWrong:'Неверный текущий пароль',msgPassShort:'Пароль слишком короткий (мин 8)',msgPassMismatch:'Пароли не совпадают',msgPassChanged:'Пароль изменён'};
+I18N.zh={security:'安全与保护',kyc:'身份验证 (KYC)',settings:'设置与语言',help:'帮助与支持',logout:'退出登录',changePass:'修改密码',changePassSub:'定期更新您的密码',twofa:'双重验证 (2FA)',twofaSub:'登录时额外保护',biometric:'指纹 / 人脸',biometricSub:'快速登录',antiTitle:'反钓鱼验证码',save:'保存',lastLogin:'上次登录',curPass:'当前密码',newPass:'新密码',confPass:'确认密码',saveNewPass:'保存密码',kycVerified:'已验证账户',kycDesc:'您的身份已成功验证，账户拥有完整权限。',docType:'证件类型',status:'状态',verified2:'✓ 已验证',level:'验证级别',language:'语言',faq1q:'如何存入资金？',faq1a:'在首页点击“存款”按钮并按步骤操作。',faq2q:'如何保护我的账户？',faq2a:'在安全部分启用 2FA 和反钓鱼验证码。',faq3q:'这个平台是真的吗？',faq3a:'这是一个培训平台（模拟交易），使用真实市场价格。',liveChat:'在线客服',liveChatSub:'7×24 技术支持',email:'电子邮件',searchPh:'搜索币种 (BTC, ETH)...',totalAssets:'总资产 (USDT)',deposit:'存款',withdraw:'提现',transfer:'转账',more:'更多',liveMarkets:'热门实时行情',viewAll:'查看全部 ›',copy:'复制',supportMsg:'客服团队将尽快与您联系',kycId:'身份证',kycPass:'护照',kycLic:'驾驶证',langChanged:'语言已更改',msgSaved:'保存成功',msg2faOn:'已启用双重验证',msg2faOff:'已关闭双重验证',msgBioOn:'已启用生物识别',msgBioOff:'已关闭生物识别',msgAntiEmpty:'请输入验证码',msgNoUser:'未找到用户',msgPassWrong:'当前密码错误',msgPassShort:'密码太短（至少8位）',msgPassMismatch:'两次密码不一致',msgPassChanged:'密码修改成功'};
+
+I18N.hi={security:'सुरक्षा और संरक्षण',kyc:'पहचान सत्यापन (KYC)',settings:'सेटिंग्स और भाषा',help:'सहायता और समर्थन',logout:'लॉग आउट',changePass:'पासवर्ड बदलें',changePassSub:'नियमित रूप से पासवर्ड अपडेट करें',twofa:'दो-कारक प्रमाणीकरण',twofaSub:'लॉगिन पर अतिरिक्त सुरक्षा',biometric:'फ़िंगरप्रिंट / चेहरा',biometricSub:'तेज़ लॉगिन',antiTitle:'एंटी-फ़िशिंग कोड',save:'सहेजें',lastLogin:'अंतिम लॉगिन',curPass:'वर्तमान पासवर्ड',newPass:'नया पासवर्ड',confPass:'पासवर्ड की पुष्टि',saveNewPass:'पासवर्ड सहेजें',kycVerified:'सत्यापित खाता',kycDesc:'आपकी पहचान सफलतापूर्वक सत्यापित हुई। पूर्ण पहुंच।',docType:'दस्तावेज़ प्रकार',status:'स्थिति',verified2:'✓ सत्यापित',level:'सत्यापन स्तर',language:'भाषा',faq1q:'फ़ंड कैसे जमा करें?',faq1a:'होम पेज पर "जमा" बटन पर टैप करें।',faq2q:'अपना खाता कैसे सुरक्षित करें?',faq2a:'सुरक्षा अनुभाग से 2FA और एंटी-फ़िशिंग कोड सक्षम करें।',faq3q:'क्या प्लेटफ़ॉर्म वास्तविक है?',faq3a:'यह एक प्रशिक्षण प्लेटफ़ॉर्म है (पेपर ट्रेडिंग) वास्तविक कीमतों के साथ।',liveChat:'लाइव चैट',liveChatSub:'24/7 समर्थन',email:'ईमेल',searchPh:'सिक्का खोजें (BTC, ETH)...',totalAssets:'कुल संपत्ति (USDT)',deposit:'जमा',withdraw:'निकासी',transfer:'स्थानांतरण',more:'और',liveMarkets:'शीर्ष लाइव बाज़ार',viewAll:'सभी देखें ›',copy:'कॉपी',supportMsg:'हमारी सपोर्ट टीम जल्द संपर्क करेगी',kycId:'राष्ट्रीय पहचान पत्र',kycPass:'पासपोर्ट',kycLic:'ड्राइविंग लाइसेंस',langChanged:'भाषा बदल गई',msgSaved:'सफलतापूर्वक सहेजा गया',msg2faOn:'2FA सक्षम',msg2faOff:'2FA अक्षम',msgBioOn:'बायोमेट्रिक सक्षम',msgBioOff:'बायोमेट्रिक अक्षम',msgAntiEmpty:'कृपया कोड दर्ज करें',msgNoUser:'उपयोगकर्ता नहीं मिला',msgPassWrong:'वर्तमान पासवर्ड गलत',msgPassShort:'पासवर्ड बहुत छोटा (कम से कम 8)',msgPassMismatch:'पासवर्ड मेल नहीं खाते',msgPassChanged:'पासवर्ड बदल गया'};
+I18N.ur={security:'تحفظ و سيکیورٹی',kyc:'شناخت کی توثیق (KYC)',settings:'ترتیبات و زبان',help:'مدد و معاونت',logout:'لاگ آؤٹ',changePass:'پاس ورڈ تبدیل کریں',changePassSub:'اپنا پاس ورڈ باقاعدگی سے اپ ڈیٹ کریں',twofa:'دو عناصر توثیق',twofaSub:'لاگ ان پر اضافی تحفظ',biometric:'فنگر پرنٹ / چہرہ',biometricSub:'تیز لاگ ان',antiTitle:'اینٹی فشنگ کوڈ',save:'محفوظ کریں',lastLogin:'آخری لاگ ان',curPass:'موجودہ پاس ورڈ',newPass:'نیا پاس ورڈ',confPass:'پاس ورڈ کی تصدیق',saveNewPass:'پاس ورڈ محفوظ کریں',kycVerified:'تصدیق شدہ اکاؤنٹ',kycDesc:'آپ کی شناخت کامیابی سے تصدیق ہو گئی۔ مکمل رسائی۔',docType:'دستاویز کی قسم',status:'حیثیت',verified2:'✓ تصدیق شدہ',level:'توثیق کی سطح',language:'زبان',faq1q:'رقم کیسے جمع کروں؟',faq1a:'ہوم پیج پر "ڈپازٹ" بٹن دبائیں۔',faq2q:'اپنے اکاؤنٹ کو کیسے محفوظ کروں؟',faq2a:'سیکیورٹی سیکشن سے 2FA اور اینٹی فشنگ کوڈ آن کریں۔',faq3q:'کیا پلیٹ فارم اصلی ہے؟',faq3a:'یہ ایک تربیتی پلیٹ فارم ہے (پیپر ٹریڈنگ) اصل قیمتوں کے ساتھ۔',liveChat:'لائو چیٹ',liveChatSub:'24/7 معاونت',email:'ای میل',searchPh:'سکہ تلاش کریں (BTC, ETH)...',totalAssets:'کل اثاثہ (USDT)',deposit:'ڈپازٹ',withdraw:'نکالیں',transfer:'منتقلی',more:'مزید',liveMarkets:'سرفہرست لائو مارکیٹ',viewAll:'سب دیکھیں ›',copy:'کاپی',supportMsg:'ہماری ٹیم جلد رابطہ کرے گی',kycId:'قومی شناختی کارڈ',kycPass:'پاسپورٹ',kycLic:'ڈرائیونگ لائسنس',langChanged:'زبان تبدیل ہو گئی',msgSaved:'کامیابی سے محفوظ',msg2faOn:'2FA فعال',msg2faOff:'2FA غیر فعال',msgBioOn:'بائومیٹرک فعال',msgBioOff:'بائومیٹرک غیر فعال',msgAntiEmpty:'براء مہربانی کوڈ درج کریں',msgNoUser:'صارف نہیں ملا',msgPassWrong:'موجودہ پاس ورڈ غلط ہے',msgPassShort:'پاس ورڈ بہت چھوٹا (کم از کم 8)',msgPassMismatch:'پاس ورڈ میل نہیں کھاتے',msgPassChanged:'پاس ورڈ تبدیل ہو گیا'};
+
+I18N.pt={security:'Segurança e Proteção',kyc:'Verificação de identidade (KYC)',settings:'Configurações e Idioma',help:'Ajuda e Suporte',logout:'Sair',changePass:'Alterar senha',changePassSub:'Atualize sua senha regularmente',twofa:'Autenticação de dois fatores',twofaSub:'Proteção extra no login',biometric:'Digital / Rosto',biometricSub:'Login rápido',antiTitle:'Código anti-phishing',save:'Salvar',lastLogin:'Último login',curPass:'Senha atual',newPass:'Nova senha',confPass:'Confirmar senha',saveNewPass:'Salvar senha',kycVerified:'Conta verificada',kycDesc:'Sua identidade foi verificada com sucesso. Acesso completo.',docType:'Tipo de documento',status:'Status',verified2:'✓ Verificado',level:'Nível de verificação',language:'Idioma',faq1q:'Como deposito fundos?',faq1a:'Toque em "Depósito" na página inicial e siga os passos.',faq2q:'Como protejo minha conta?',faq2a:'Ative o 2FA e o código anti-phishing na seção Segurança.',faq3q:'A plataforma é real?',faq3a:'Esta é uma plataforma de treino (paper trading) com preços reais.',liveChat:'Chat ao vivo',liveChatSub:'Suporte 24/7',email:'E-mail',searchPh:'Buscar moeda (BTC, ETH)...',totalAssets:'Ativos totais (USDT)',deposit:'Depositar',withdraw:'Sacar',transfer:'Transferir',more:'Mais',liveMarkets:'Principais mercados ao vivo',viewAll:'Ver tudo ›',copy:'Copiar',supportMsg:'Nossa equipe entrará em contato em breve',kycId:'Documento de identidade',kycPass:'Passaporte',kycLic:'Carteira de motorista',langChanged:'Idioma alterado',msgSaved:'Salvo com sucesso',msg2faOn:'2FA ativado',msg2faOff:'2FA desativado',msgBioOn:'Biometria ativada',msgBioOff:'Biometria desativada',msgAntiEmpty:'Digite um código',msgNoUser:'Usuário não encontrado',msgPassWrong:'Senha atual incorreta',msgPassShort:'Senha muito curta (mín 8)',msgPassMismatch:'As senhas não coincidem',msgPassChanged:'Senha alterada'};
+I18N.id={security:'Keamanan & Perlindungan',kyc:'Verifikasi Identitas (KYC)',settings:'Pengaturan & Bahasa',help:'Bantuan & Dukungan',logout:'Keluar',changePass:'Ubah kata sandi',changePassSub:'Perbarui kata sandi secara berkala',twofa:'Autentikasi Dua Faktor',twofaSub:'Perlindungan ekstra saat masuk',biometric:'Sidik jari / Wajah',biometricSub:'Masuk cepat',antiTitle:'Kode anti-phishing',save:'Simpan',lastLogin:'Login terakhir',curPass:'Kata sandi saat ini',newPass:'Kata sandi baru',confPass:'Konfirmasi kata sandi',saveNewPass:'Simpan kata sandi',kycVerified:'Akun terverifikasi',kycDesc:'Identitas Anda berhasil diverifikasi. Akses penuh.',docType:'Jenis dokumen',status:'Status',verified2:'✓ Terverifikasi',level:'Tingkat verifikasi',language:'Bahasa',faq1q:'Bagaimana cara menyetor dana?',faq1a:'Ketuk tombol "Setor" di halaman utama dan ikuti langkahnya.',faq2q:'Bagaimana melindungi akun saya?',faq2a:'Aktifkan 2FA dan kode anti-phishing di bagian Keamanan.',faq3q:'Apakah platform ini nyata?',faq3a:'Ini platform pelatihan (paper trading) dengan harga pasar nyata.',liveChat:'Obrolan langsung',liveChatSub:'Dukungan 24/7',email:'Email',searchPh:'Cari koin (BTC, ETH)...',totalAssets:'Total Aset (USDT)',deposit:'Setor',withdraw:'Tarik',transfer:'Transfer',more:'Lainnya',liveMarkets:'Pasar Langsung Teratas',viewAll:'Lihat semua ›',copy:'Salin',supportMsg:'Tim dukungan kami akan segera menghubungi Anda',kycId:'Kartu Identitas',kycPass:'Paspor',kycLic:'SIM',langChanged:'Bahasa diubah',msgSaved:'Berhasil disimpan',msg2faOn:'2FA aktif',msg2faOff:'2FA nonaktif',msgBioOn:'Biometrik aktif',msgBioOff:'Biometrik nonaktif',msgAntiEmpty:'Masukkan kode',msgNoUser:'Pengguna tidak ditemukan',msgPassWrong:'Kata sandi saat ini salah',msgPassShort:'Kata sandi terlalu pendek (min 8)',msgPassMismatch:'Kata sandi tidak cocok',msgPassChanged:'Kata sandi diubah'};
+
+I18N.ja={security:'セキュリティと保護',kyc:'本人確認 (KYC)',settings:'設定と言語',help:'ヘルプとサポート',logout:'ログアウト',changePass:'パスワード変更',changePassSub:'定期的にパスワードを更新',twofa:'2段階認証 (2FA)',twofaSub:'ログイン時の追加保護',biometric:'指紋 / 顔認証',biometricSub:'素早いログイン',antiTitle:'アンチフィッシングコード',save:'保存',lastLogin:'最終ログイン',curPass:'現在のパスワード',newPass:'新しいパスワード',confPass:'パスワード確認',saveNewPass:'パスワードを保存',kycVerified:'認証済みアカウント',kycDesc:'本人確認が完了しました。フルアクセス可能。',docType:'書類の種類',status:'ステータス',verified2:'✓ 認証済み',level:'認証レベル',language:'言語',faq1q:'入金方法は？',faq1a:'ホーム画面の「入金」をタップし手順に従います。',faq2q:'アカウントを守るには？',faq2a:'セキュリティで 2FA とアンチフィッシングコードを有効化。',faq3q:'このプラットフォームは本物？',faq3a:'これは実際の市場価格を使う練習プラットフォーム（ペーパートレード）です。',liveChat:'ライブチャット',liveChatSub:'24時間サポート',email:'メール',searchPh:'通貨を検索 (BTC, ETH)...',totalAssets:'総資産 (USDT)',deposit:'入金',withdraw:'出金',transfer:'送金',more:'もっと',liveMarkets:'人気マーケット',viewAll:'すべて見る ›',copy:'コピー',supportMsg:'サポートチームがまもなくご連絡します',kycId:'身分証',kycPass:'パスポート',kycLic:'運転免許証',langChanged:'言語を変更しました',msgSaved:'保存しました',msg2faOn:'2FA 有効',msg2faOff:'2FA 無効',msgBioOn:'生体認証 有効',msgBioOff:'生体認証 無効',msgAntiEmpty:'コードを入力してください',msgNoUser:'ユーザーが見つかりません',msgPassWrong:'現在のパスワードが違います',msgPassShort:'パスワードが短すぎます（最少8文字）',msgPassMismatch:'パスワードが一致しません',msgPassChanged:'パスワードを変更しました'};
+I18N.ko={security:'보안 및 보호',kyc:'신원 인증 (KYC)',settings:'설정 및 언어',help:'도움말 및 지원',logout:'로그아웃',changePass:'비밀번호 변경',changePassSub:'정기적으로 비밀번호를 업데이트',twofa:'2단계 인증 (2FA)',twofaSub:'로그인 시 추가 보호',biometric:'지문 / 얼굴',biometricSub:'빠른 로그인',antiTitle:'피싱 방지 코드',save:'저장',lastLogin:'마지막 로그인',curPass:'현재 비밀번호',newPass:'새 비밀번호',confPass:'비밀번호 확인',saveNewPass:'비밀번호 저장',kycVerified:'인증된 계정',kycDesc:'신원이 성공적으로 인증되었습니다. 전체 액세스 가능.',docType:'서류 유형',status:'상태',verified2:'✓ 인증됨',level:'인증 단계',language:'언어',faq1q:'자금을 어떻게 입금하나요?',faq1a:'홈 화면에서 "입금" 버튼을 누르고 단계를 따르세요.',faq2q:'계정을 어떻게 보호하나요?',faq2a:'보안 섹션에서 2FA와 피싱 방지 코드를 활성화하세요.',faq3q:'이 플랫폼은 실제인가요?',faq3a:'실제 시장 가격을 사용하는 연습 플랫폼(모의 거래)입니다.',liveChat:'라이브 채팅',liveChatSub:'24/7 지원',email:'이메일',searchPh:'코인 검색 (BTC, ETH)...',totalAssets:'총 자산 (USDT)',deposit:'입금',withdraw:'출금',transfer:'이체',more:'더보기',liveMarkets:'인기 실시간 시장',viewAll:'전체 보기 ›',copy:'복사',supportMsg:'지원팀이 곳 연락드리겠습니다',kycId:'신분증',kycPass:'여권',kycLic:'운전면허증',langChanged:'언어가 변경됨',msgSaved:'저장됨',msg2faOn:'2FA 활성화',msg2faOff:'2FA 비활성화',msgBioOn:'생체인증 활성화',msgBioOff:'생체인증 비활성화',msgAntiEmpty:'코드를 입력하세요',msgNoUser:'사용자를 찾을 수 없음',msgPassWrong:'현재 비밀번호가 틀렸습니다',msgPassShort:'비밀번호가 너무 짧음 (최소 8자)',msgPassMismatch:'비밀번호가 일치하지 않음',msgPassChanged:'비밀번호가 변경됨'};
+
+initAll();
+</script>
+</body>
+</html>

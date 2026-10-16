@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>إنشاء حساب — Apex</title>
+<style>
+:root{--bg:#0b0e11;--panel:#141920;--panel2:#1c232c;--border:#252d38;--txt:#eef2f6;--muted:#8a94a3;--gold1:#f8d979;--gold2:#e0a615;--green:#0ecb81;--red:#f6465d}
+*{box-sizing:border-box}
+body{margin:0;font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);color:var(--txt);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.wrap{width:100%;max-width:420px}
+.logo{text-align:center;margin-bottom:22px}
+.logo b{font-size:30px;font-weight:900;background:linear-gradient(135deg,var(--gold1),var(--gold2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.logo span{display:block;color:var(--muted);font-size:12px;margin-top:4px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:24px}
+h1{font-size:20px;margin:0 0 4px}
+.sub{color:var(--muted);font-size:13px;margin-bottom:18px}
+.fld{margin-bottom:14px}
+.fld label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:700}
+.fld input{width:100%;padding:12px 14px;border-radius:12px;background:var(--panel2);border:1px solid var(--border);color:var(--txt);font-family:inherit;font-size:14px;outline:none}
+.fld input:focus{border-color:var(--gold2)}
+.btn{width:100%;padding:13px;border:0;border-radius:12px;font-family:inherit;font-weight:800;font-size:15px;cursor:pointer;background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#231a02;margin-top:6px}
+.btn:disabled{opacity:.6;cursor:default}
+.alt{text-align:center;margin-top:16px;font-size:13px;color:var(--muted)}
+.alt a{color:var(--gold2);font-weight:700;text-decoration:none}
+.msg{padding:11px 14px;border-radius:10px;font-size:13px;margin-bottom:14px;display:none}
+.msg.err{display:block;background:rgba(246,70,93,.12);color:#ff8a97;border:1px solid rgba(246,70,93,.3)}
+.msg.ok{display:block;background:rgba(14,203,129,.12);color:#5be0a8;border:1px solid rgba(14,203,129,.3)}
+.pending{text-align:center;padding:14px 0}
+.pending .ic{width:74px;height:74px;margin:0 auto 16px;border-radius:50%;background:rgba(224,166,21,.14);display:flex;align-items:center;justify-content:center}
+.pending .ic svg{width:38px;height:38px;stroke:var(--gold2);fill:none;stroke-width:1.8}
+.pending h2{margin:0 0 8px;font-size:20px}
+.pending p{color:var(--muted);font-size:13.5px;line-height:1.7;margin:0 0 18px}
+.fld select{width:100%;padding:12px 14px;border-radius:12px;background:var(--panel2);border:1px solid var(--border);color:var(--txt);font-family:inherit;font-size:14px;outline:none}
+.fld select:focus{border-color:var(--gold2)}
+.fld input[type=file]{padding:9px 12px;font-size:13px}
+.hint{color:var(--muted);font-size:11.5px;margin-top:6px}
+.idprev{margin-top:10px;width:100%;max-height:180px;object-fit:contain;border-radius:10px;border:1px solid var(--border);display:none;background:#000}
+</style>
+<script src="i18n.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo"><b>Apex</b><span>\\\\\</span></div>
+  <div class="card" id="formCard">
+    <h1 data-i18n="regTitle">إنشاء حساب جديد</h1>
+    <div class="sub" data-i18n="regSub">سيتم مراجعة طلبك من الإدارة قبل تفعيل الحساب</div>
+    <div class="msg" id="msg"></div>
+    <div class="fld"><label data-i18n="fullName">الاسم الكامل</label><input id="name" autocomplete="name" placeholder="الاسم الكامل"></div>
+    <div class="fld"><label data-i18n="email">البريد الإلكتروني</label><input id="email" type="email" autocomplete="email" placeholder="name@email.com" dir="ltr" style="text-align:right"></div>
+    <div class="fld"><label data-i18n="countryOpt">الدولة (اختياري)</label><input id="country" placeholder="الدولة"></div>
+    <div class="fld"><label data-i18n="password">كلمة المرور</label><input id="pass" type="password" autocomplete="new-password" placeholder="8 أحرف على الأقل"></div>
+    <div class="fld"><label data-i18n="confirmPass">تأكيد كلمة المرور</label><input id="pass2" type="password" autocomplete="new-password" placeholder="أعد إدخال كلمة المرور"></div>
+    <div class="fld"><label data-i18n="idType">نوع وثيقة الهوية</label>
+      <select id="idType">
+        <option value="national_id" data-i18n="kycId">بطاقة هوية وطنية</option>
+        <option value="passport" data-i18n="kycPass">جواز سفر</option>
+        <option value="driver_license" data-i18n="kycLic">رخصة قيادة</option>
+      </select></div>
+    <div class="fld"><label data-i18n="idUpload">صورة الوثيقة</label>
+      <input id="idFile" type="file" accept="image/*" onchange="onIdFile(event)">
+      <div class="hint" data-i18n="idHint">ارفع صورة واضحة للوثيقة (JPG/PNG)</div>
+      <img id="idPrev" class="idprev" alt="">
+    </div>
+    <button class="btn" id="submitBtn" onclick="doRegister()" data-i18n="createAccount">إنشاء الحساب</button>
+    <div class="alt"><span data-i18n="haveAccount">لديك حساب بالفعل؟</span> <a href="login.html" data-i18n="loginBtn">تسجيل الدخول</a></div>
+  </div>
+  <div class="card" id="pendingCard" style="display:none">
+    <div class="pending">
+      <div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+      <h2>تم استلام طلبك</h2>
+      <p>طلب إنشاء حسابك قيد المراجعة من فريق الإدارة. ستتمكّن من تسجيل الدخول بمجرّد الموافقة على الحساب.</p>
+      <a class="btn" href="login.html" style="display:block;text-decoration:none;text-align:center">الذهاب لتسجيل الدخول</a>
+    </div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+var ID_IMG='';
+function showMsg(t,ok){const m=$('msg');m.textContent=t;m.className='msg '+(ok?'ok':'err');}
+function tr(k,fb){try{return (window.APEX_I18N&&window.APEX_I18N.t(k))||fb;}catch(e){return fb;}}
+// Read the chosen file, downscale it with a canvas (max 1280px, JPEG q0.82)
+// so the payload stays small, and keep the resulting data URL for submit.
+function onIdFile(ev){
+  const f=ev.target.files&&ev.target.files[0];if(!f)return;
+  if(!/^image\//.test(f.type)){showMsg(tr('bad_id_image','الرجاء اختيار صورة صالحة'));return;}
+  const rd=new FileReader();
+  rd.onload=function(){
+    const img=new Image();
+    img.onload=function(){
+      let w=img.width,h=img.height;const MAX=1280;
+      if(w>MAX||h>MAX){if(w>=h){h=Math.round(h*MAX/w);w=MAX;}else{w=Math.round(w*MAX/h);h=MAX;}}
+      const c=document.createElement('canvas');c.width=w;c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      ID_IMG=c.toDataURL('image/jpeg',0.82);
+      const p=$('idPrev');p.src=ID_IMG;p.style.display='block';
+    };
+    img.onerror=function(){showMsg('تعذّر قراءة الصورة');};
+    img.src=rd.result;
+  };
+  rd.readAsDataURL(f);
+}
+async function doRegister(){
+  const name=$('name').value.trim(),email=$('email').value.trim(),country=$('country').value.trim();
+  const pass=$('pass').value,pass2=$('pass2').value;
+  const idDocType=$('idType').value;
+  if(name.length<2)return showMsg('الرجاء إدخال الاسم الكامل');
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return showMsg('البريد الإلكتروني غير صالح');
+  if(pass.length<8)return showMsg('كلمة المرور قصيرة (8 أحرف على الأقل)');
+  if(pass!==pass2)return showMsg('كلمتا المرور غير متطابقتين');
+  if(!ID_IMG)return showMsg('الرجاء إرفاق صورة وثيقة الهوية');
+  const btn=$('submitBtn');btn.disabled=true;btn.textContent='جارٍ الإرسال...';
+  try{
+    const r=await fetch('/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,country,password:pass,idDocType,idImage:ID_IMG})});
+    const d=await r.json();
+    if(!r.ok){
+      const map={email_exists:'البريد مسجّل مسبقاً',bad_email:'البريد غير صالح',weak_password:'كلمة المرور ضعيفة',bad_name:'الاسم غير صالح',bad_id_type:'اختر نوع وثيقة صالح',bad_id_image:'صورة الوثيقة غير صالحة أو كبيرة جداً'};
+      showMsg(map[d.error]||'تعذّر إنشاء الحساب');btn.disabled=false;btn.textContent=tr('createAccount','إنشاء الحساب');return;
+    }
+    if(d.status==='approved'){
+      showMsg('تم إنشاء الحساب! جارٍ التحويل...',true);
+      setTimeout(()=>location.href='login.html',1200);return;
+    }
+    $('formCard').style.display='none';$('pendingCard').style.display='block';
+  }catch(e){showMsg('خطأ في الاتصال بالخادم');btn.disabled=false;btn.textContent=tr('createAccount','إنشاء الحساب');}
+}
+$('pass2').addEventListener('keydown',e=>{if(e.key==='Enter')doRegister();});
+</script>
+</body>
+</html>

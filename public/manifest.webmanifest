@@ -1,0 +1,16 @@
+{
+  "name": "Apex",
+  "short_name": "Apex",
+  "description": "تداول العملات الرقمية — تدريبي",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "wallet.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b0e11",
+  "theme_color": "#0b0e11",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

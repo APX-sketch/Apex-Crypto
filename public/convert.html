@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<script>
+(function(){try{var s=JSON.parse(localStorage.getItem('skygo_session')||'null');if(!s||!s.email){location.replace('login.html?next=convert.html');}}catch(e){location.replace('login.html');}})();
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Apex — تحويل</title>
+<style>
+:root{--bg:#0b0e11;--panel:#141920;--panel2:#1c232c;--border:#252d38;--txt:#eef2f6;--muted:#8a94a3;--gold1:#f8d979;--gold2:#e0a615;--green:#0ecb81;--red:#f6465d}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{-webkit-text-size-adjust:100%}
+body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);color:var(--txt);max-width:480px;margin:0 auto;min-height:100vh;position:relative;overflow-x:hidden;padding-bottom:40px}
+input{font-size:16px}
+.hdr{display:flex;align-items:center;gap:10px;padding:calc(12px + env(safe-area-inset-top)) 14px 12px;background:linear-gradient(135deg,#1b1f24,#0f1216);position:sticky;top:0;z-index:20;border-bottom:1px solid var(--border)}
+.icobtn{width:38px;height:38px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:var(--panel2);border:1px solid var(--border);border-radius:11px;cursor:pointer;color:var(--txt)}
+.icobtn svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:2}
+.hdr h1{flex:1;font-size:17px;font-weight:900}
+.hdr .to{font-size:12px;font-weight:800;color:var(--gold2);text-decoration:none}
+.wrap{padding:16px 14px}
+.lbl{font-size:12px;font-weight:800;color:var(--muted);margin:16px 4px 8px}
+.coins{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}
+.coins::-webkit-scrollbar{display:none}
+.chip{flex:0 0 auto;display:flex;align-items:center;gap:7px;padding:9px 13px;border-radius:12px;background:var(--panel);border:1px solid var(--border);cursor:pointer;font-weight:800;font-size:13px}
+.chip img{width:20px;height:20px;border-radius:50%}
+.chip.sel{border-color:var(--gold2);background:rgba(224,166,21,.1)}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:16px;margin-top:8px}
+.amtbox{display:flex;align-items:center;gap:10px;background:var(--panel2);border:1px solid var(--border);border-radius:14px;padding:14px 15px}
+.amtbox input{flex:1;background:none;border:0;color:var(--txt);font-family:inherit;font-size:22px;font-weight:900;outline:none;min-width:0}
+.amtbox .cur{font-size:14px;font-weight:800;color:var(--muted)}
+.amtbox .max{background:rgba(224,166,21,.12);color:var(--gold2);border:0;font-family:inherit;font-weight:800;font-size:12px;padding:6px 11px;border-radius:9px;cursor:pointer}
+.quick{display:flex;gap:8px;margin-top:10px}
+.quick button{flex:1;background:var(--panel2);border:1px solid var(--border);color:var(--txt);font-family:inherit;font-weight:800;font-size:12px;padding:9px 0;border-radius:10px;cursor:pointer}
+.quick button:active{background:var(--border)}
+.field{width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:12px;color:var(--txt);font-family:inherit;font-size:14px;padding:13px 14px;outline:none}
+.field:focus{border-color:var(--gold2)}
+.rowinfo{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);padding:6px 4px}
+.rowinfo b{color:var(--txt);font-weight:800}
+.note{display:flex;gap:9px;background:rgba(224,166,21,.07);border:1px solid rgba(224,166,21,.25);border-radius:12px;padding:12px 13px;margin-top:14px;font-size:12px;color:#d9c48d;line-height:1.6}
+.note svg{width:17px;height:17px;flex:0 0 auto;stroke:var(--gold2);fill:none;stroke-width:2;margin-top:1px}
+.addr{display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px dashed var(--border);border-radius:12px;padding:12px 13px;margin-top:8px;font-size:12px;word-break:break-all;font-family:monospace}
+.addr .cp{margin-inline-start:auto;color:var(--gold2);font-weight:800;cursor:pointer;flex:0 0 auto;font-family:inherit}
+.btn{width:100%;border:0;border-radius:14px;font-family:inherit;font-size:16px;font-weight:900;padding:16px 0;margin-top:22px;cursor:pointer;background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#231a02}
+.btn:active{transform:scale(.98)}
+.btn.dis{opacity:.5;pointer-events:none}
+.toast{position:fixed;bottom:40px;left:50%;transform:translate(-50%,20px);background:#20272f;color:#fff;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;opacity:0;transition:.3s;z-index:99;pointer-events:none;border:1px solid var(--border);max-width:88%;text-align:center}
+.toast.show{transform:translate(-50%,0);opacity:1}
+.toast.err{border-color:var(--red);color:#ffd7dd}
+.toast.ok{border-color:var(--green);color:#c8f7e3}
+</style>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0b0e11">
+<link rel="apple-touch-icon" href="icon.svg">
+<script defer src="alerts-core.js"></script>
+</head>
+<body>
+<!--B-->
+<div class="hdr">
+  <div class="icobtn" onclick="location.href='wallet.html'"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
+  <h1>تحويل (تحويل عملة)</h1>
+  <a class="to" href="history.html">السجل ›</a>
+</div>
+<div class="wrap">
+  <div class="lbl">من عملة</div>
+  <div class="coins" id="fromCoins"></div>
+
+  <div class="lbl">إلى عملة</div>
+  <div class="coins" id="toCoins"></div>
+
+  <div class="lbl">المبلغ</div>
+  <div class="card">
+    <div class="amtbox">
+      <input id="amt" type="text" inputmode="decimal" placeholder="0.00" oninput="onAmt()">
+      <span class="cur" id="curLbl">USDT</span>
+      <button class="max" onclick="setMax()">الأقصى</button>
+    </div>
+    <div class="quick">
+      <button onclick="setPct(.25)">25%</button>
+      <button onclick="setPct(.5)">50%</button>
+      <button onclick="setPct(.75)">75%</button>
+      <button onclick="setPct(99.8)">100%</button>
+    </div>
+    <div class="rowinfo"><span>رصيد <span id="fromLbl">USDT</span></span><b id="curBal">0.00</b></div>
+    <div class="rowinfo"><span>سعر التحويل</span><b id="rateLbl">--</b></div>
+  </div>
+
+  <div class="lbl">ستستلم</div>
+  <div class="card">
+    <div class="amtbox">
+      <input id="recv" type="text" value="0.00" readonly style="color:var(--gold2)">
+      <span class="cur" id="recvLbl">BTC</span>
+    </div>
+    <div class="rowinfo"><span>القيمة التقديرية</span><b id="estVal">≈ $0.00</b></div>
+  </div>
+
+  <div class="note"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
+    </div>
+
+  <button class="btn dis" id="submitBtn" onclick="doConvert()">تأكيد التحويل</button>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+//J
+const $=id=>document.getElementById(id);
+const fmt=(n,d=2)=>Number(n).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+function toast(m,t){var e=$('toast');e.textContent=m;e.className='toast show '+(t||'');setTimeout(function(){e.className='toast '+(t||'');},2400);}
+function icoUrl(b){return 'https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/128/color/'+b.toLowerCase()+'.png';}
+function pdec(p){return p>=1000?2:p>=1?2:p>=0.1?4:6;}
+
+const CATALOG=['USDT','BTC','ETH','BNB','SOL','XRP','ADA','DOGE','TRX','LTC'];
+function loadWallet(){var w=localStorage.getItem('skygo_wallet');if(w)return JSON.parse(w);var init={USDT:3737.73,ETH:0,BTC:0,BNB:0,SOL:0,XRP:0};localStorage.setItem('skygo_wallet',JSON.stringify(init));return init;}
+function saveWallet(w){localStorage.setItem('skygo_wallet',JSON.stringify(w));}
+function loadHist(){return JSON.parse(localStorage.getItem('skygo_hist')||'[]');}
+function saveHist(h){localStorage.setItem('skygo_hist',JSON.stringify(h));}
+var wallet=loadWallet(), priceMap={}, fromC='USDT', toC='BTC';
+
+// أظهر كل العملات مع أولوية لما يملكه المستخدم
+function coinList(){
+  var set={};CATALOG.forEach(function(b){set[b]=1;});
+  Object.keys(wallet).forEach(function(k){if((wallet[k]||0)>0)set[k]=1;});
+  return Object.keys(set);
+}
+function priceOf(b){return b==='USDT'?1:(priceMap[b+'USDT']||0);}
+
+function renderCoins(){
+  var list=coinList();
+  $('fromCoins').innerHTML=list.map(function(b){
+    return '<div class="chip'+(b===fromC?' sel':'')+'" onclick="pickFrom(\''+b+'\')">'+
+      '<img src="'+icoUrl(b)+'" onerror="this.style.display=\'none\'">'+b+'</div>';
+  }).join('');
+  $('toCoins').innerHTML=list.map(function(b){
+    return '<div class="chip'+(b===toC?' sel':'')+(b===fromC?' dis':'')+'" onclick="pickTo(\''+b+'\')" style="'+(b===fromC?'opacity:.35;pointer-events:none':'')+'">'+
+      '<img src="'+icoUrl(b)+'" onerror="this.style.display=\'none\'">'+b+'</div>';
+  }).join('');
+}
+function pickFrom(b){fromC=b;if(toC===b){var l=coinList();toC=l.find(function(x){return x!==b;})||'USDT';}
+  refresh();}
+function pickTo(b){if(b===fromC)return;toC=b;refresh();}
+function refresh(){
+  renderCoins();
+  $('curLbl').textContent=fromC;$('fromLbl').textContent=fromC;$('recvLbl').textContent=toC;
+  var bal=wallet[fromC]||0;
+  $('curBal').textContent=fmt(bal,bal>=1?4:6);
+  var pf=priceOf(fromC),pt=priceOf(toC);
+  $('rateLbl').textContent=(pf&&pt)?('1 '+fromC+' ≈ '+fmt(pf/pt,(pf/pt)>=1?4:6)+' '+toC):'--';
+  $('amt').value='';onAmt();
+}
+function setMax(){$('amt').value=(wallet[fromC]||0);onAmt();}
+function setPct(p){var bal=wallet[fromC]||0;var v=bal*p;$('amt').value=p===1?bal:parseFloat(v.toFixed(bal>=1?6:8));onAmt();}
+function onAmt(){
+  var v=parseFloat($('amt').value)||0;
+  var bal=wallet[fromC]||0;
+  var pf=priceOf(fromC),pt=priceOf(toC);
+  var recv=(pf&&pt)?v*pf/pt:0;
+  $('recv').value=fmt(recv,recv>=1?6:8);
+  $('estVal').textContent='≈ $'+fmt(v*pf,2);
+  var ok=v>0 && v<=bal && fromC!==toC && pf>0 && pt>0;
+  $('submitBtn').className='btn'+(ok?'':' dis');
+}
+function doConvert(){
+  var v=parseFloat($('amt').value)||0;
+  var bal=wallet[fromC]||0;
+  var pf=priceOf(fromC),pt=priceOf(toC);
+  if(v<=0){toast('أدخل مبلغاً صحيحاً','err');return;}
+  if(v>bal){toast('الرصيد غير كافٍ','err');return;}
+  if(fromC===toC){toast('اختر عملتين مختلفتين','err');return;}
+  if(!pf||!pt){toast('جارٍ تحديث الأسعار...','err');return;}
+  var recv=v*pf/pt;
+  wallet[fromC]=bal-v;
+  wallet[toC]=(wallet[toC]||0)+recv;
+  saveWallet(wallet);
+  var h=loadHist();
+  h.unshift({id:Date.now()+'-'+Math.random().toString(36).slice(2,7),kind:'convert',from:fromC,to:toC,fromAmount:v,toAmount:recv,coin:toC,amount:recv,value:v*pf,time:Date.now(),status:'completed'});
+  saveHist(h);
+  toast('تم تحويل '+fmt(v,v>=1?4:6)+' '+fromC+' إلى '+fmt(recv,recv>=1?4:6)+' '+toC,'ok');
+  $('submitBtn').className='btn dis';
+  setTimeout(function(){location.href='wallet.html';},1200);
+}
+async function loadPrices(){
+  try{
+    var list=coinList().filter(function(b){return b!=='USDT';});
+    var syms=list.map(function(b){return b+'USDT';});
+    if(syms.length){
+      try{
+        var r=await fetch('https://api.binance.com/api/v3/ticker/price?symbols='+encodeURIComponent(JSON.stringify(syms)));
+        if(!r.ok)throw 0;
+        var arr=await r.json();
+        if(!Array.isArray(arr))throw 0;
+        arr.forEach(function(d){priceMap[d.symbol]=parseFloat(d.price);});
+      }catch(e){
+        var results=await Promise.allSettled(syms.map(function(s){
+          return fetch('https://api.binance.com/api/v3/ticker/price?symbol='+s).then(function(x){return x.ok?x.json():null;});
+        }));
+        results.forEach(function(res){
+          if(res.status==='fulfilled'&&res.value&&res.value.symbol){priceMap[res.value.symbol]=parseFloat(res.value.price);}
+        });
+      }
+    }
+    refresh();
+  }catch(e){refresh();}
+}
+refresh(); loadPrices();
+</script>
+</body>
+</html>

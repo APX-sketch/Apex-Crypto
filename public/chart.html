@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apex Crypto - شارت العملة</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background-color: #030712; font-family: 'Segoe UI', Tahoma, sans-serif;
+            display: flex; justify-content: center; align-items: center; min-height: 100vh; direction: rtl; color: #f8fafc;
+        }
+        .app-container {
+            width: 100%; max-width: 400px; height: 840px;
+            background: #090d16; border-radius: 40px; border: 4px solid #1e293b;
+            display: flex; flex-direction: column; overflow: hidden; position: relative;
+        }
+        .app-content { flex: 1; display: flex; flex-direction: column; padding: 12px; }
+        .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .back-btn {
+            background: rgba(255,255,255,0.08); width: 34px; height: 34px; border-radius: 50%;
+            display: flex; justify-content: center; align-items: center; color: #fff; text-decoration: none;
+        }
+        .coin-title-info h3 { font-size: 15px; color: #fff; }
+        .tradingview-widget-container { flex: 1; border-radius: 16px; overflow: hidden; background: #0f172a; }
+        .trade-footer { padding: 12px 4px 4px 4px; display: flex; gap: 10px; }
+        .trade-btn { flex: 1; padding: 12px; border-radius: 12px; font-weight: bold; font-size: 13px; border: none; text-align: center; text-decoration: none; color: #fff; }
+        .buy-btn { background: #10b981; }
+        .sell-btn { background: #ef4444; }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <div class="app-content">
+            <div class="chart-header">
+                <div class="coin-title-info">
+                    <h3 id="coin-name">جارٍ التحميل...</h3>
+                </div>
+                <a href="trading.html" class="back-btn">✕</a>
+            </div>
+
+            <div class="tradingview-widget-container">
+                <div id="tradingview_chart" style="height:100%;width:100%;"></div>
+            </div>
+
+            <div class="trade-footer">
+                <a href="#" class="trade-btn buy-btn">شراء</a>
+                <a href="#" class="trade-btn sell-btn">بيع</a>
+            </div>
+        </div>
+    </div>
+
+    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+    <script>
+        // قراءة رمز العملة من الرابط (مثلاً ?symbol=ETHUSDT)
+        const urlParams = new URLSearchParams(window.location.search);
+        let symbol = urlParams.get('symbol') || 'BTCUSDT';
+        
+        document.getElementById('coin-name').innerText = symbol;
+
+        new TradingView.widget({
+            "width": "100%",
+            "height": "100%",
+            "symbol": "BINANCE:" + symbol,
+            "interval": "D",
+            "timezone": "Etc/UTC",
+            "theme": "dark",
+            "style": "1",
+            "locale": "ar",
+            "toolbar_bg": "#0f172a",
+            "enable_publishing": false,
+            "allow_symbol_change": true,
+            "container_id": "tradingview_chart"
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; -webkit-tap-highlight-color: transparent; }
+        body { background-color: #0b0e11; color: #eaecef; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 10px 0; }
+        
+        .app-container { background: #12141c; border: 1px solid #232733; border-radius: 36px; width: 100%; max-width: 420px; min-height: 920px; display: flex; flex-direction: column; position: relative; box-shadow: 0 30px 60px rgba(0,0,0,0.9); overflow: hidden; }
+
+        .content { padding: 18px 16px 95px 16px; overflow-y: auto; flex-grow: 1; width: 100%; }
+        .content::-webkit-scrollbar { width: 4px; }
+        .content::-webkit-scrollbar-thumb { background: #232733; border-radius: 10px; }
+
+        .mining-header { text-align: center; margin-bottom: 18px; background: linear-gradient(135deg, #181c25 0%, #12141c 100%); padding: 16px; border-radius: 20px; border: 1px solid #232733; box-shadow: 0 8px 20px rgba(0,0,0,0.3); }
+        .mining-header h2 { font-size: 16px; color: #fff; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 6px; letter-spacing: 0.5px; }
+        .mining-header h2 span { background: linear-gradient(90deg, #f0b90b, #fcd535); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .mining-header p { font-size: 11px; color: #848e9c; margin-top: 4px; font-weight: 500; }
+
+        .balances-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
+        .balance-box { background: linear-gradient(145deg, #181c25 0%, #151821 100%); border: 1px solid #2b313a; border-radius: 20px; padding: 14px; text-align: center; position: relative; overflow: hidden; box-shadow: 0 6px 15px rgba(0,0,0,0.3); }
+        .balance-box::after { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: linear-gradient(90deg, transparent, rgba(240,185,11,0.4), transparent); }
+        .balance-box .title { font-size: 10px; color: #848e9c; margin-bottom: 6px; font-weight: 600; }
+        .balance-box .value { font-size: 13px; font-weight: 800; color: #fff; direction: ltr; margin-bottom: 10px; letter-spacing: 0.3px; }
+        .transfer-btn { background: rgba(240,185,11,0.12); border: 1px solid rgba(240,185,11,0.35); color: #f0b90b; font-size: 10px; padding: 6px 10px; border-radius: 10px; font-weight: 700; cursor: pointer; width: 100%; transition: all 0.2s; }
+        .transfer-btn:hover { background: #f0b90b; color: #12141c; box-shadow: 0 4px 12px rgba(240,185,11,0.3); }
+
+        .section-title { font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; padding: 0 4px; }
+
+        .plans-container { display: flex; flex-direction: column; gap: 12px; }
+        .plan-card { background: linear-gradient(145deg, #181c25 0%, #141720 100%); border: 1px solid #282d3d; border-radius: 20px; padding: 16px; position: relative; overflow: hidden; box-shadow: 0 8px 20px rgba(0,0,0,0.4); transition: transform 0.2s, border-color 0.2s; }
+        .plan-card:hover { border-color: #3b4256; transform: translateY(-2px); }
+        .plan-card::before { content: ''; position: absolute; top: 0; right: 0; width: 4px; height: 100%; background: #0ecb81; box-shadow: 0 0 10px #0ecb81; }
+        
+        .plan-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .plan-name { font-size: 13px; font-weight: 800; color: #fff; display: flex; align-items: center; gap: 8px; }
+        .plan-price { font-size: 12px; font-weight: 800; color: #f0b90b; background: rgba(240,185,11,0.12); padding: 4px 10px; border-radius: 8px; border: 1px solid rgba(240,185,11,0.25); direction: ltr; }
+
+        .plan-details { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px; color: #848e9c; margin-bottom: 12px; background: #11131a; padding: 10px 12px; border-radius: 12px; border: 1px solid #222632; }
+        .plan-details div span { display: block; color: #fff; font-weight: 700; margin-top: 3px; direction: ltr; font-size: 12px; }
+
+        .cancel-plan-btn { width: 100%; background: rgba(246,70,93,0.08); border: 1px solid rgba(246,70,93,0.25); color: #f6465d; font-size: 11px; padding: 8px; border-radius: 10px; cursor: pointer; font-weight: 700; text-align: center; transition: all 0.2s; }
+        .cancel-plan-btn:hover { background: rgba(246,70,93,0.18); border-color: rgba(246,70,93,0.5); }
+
+        .toast-msg { position: fixed; top: 20px; left: 50%; transform: translateX(-50%) translateY(-120px); background: #0ecb81; color: #12141c; font-weight: 800; font-size: 12px; padding: 12px 24px; border-radius: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); z-index: 200; transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); display: flex; align-items: center; gap: 8px; }
+        .toast-msg.show { transform: translateX(-50%) translateY(0); }
+
+/* bottom nav */
+.bnav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;
+  display:grid;grid-template-columns:repeat(6,1fr);background:#0f1216;border-top:1px solid var(--border);
+  padding:8px 0 calc(8px + env(safe-area-inset-bottom));z-index:30}
+.bnav a{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--muted);text-decoration:none;font-size:10px;font-weight:700}
+.bnav a svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8}
+.bnav a.active{color:var(--gold2)}
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        
+        <div class="toast-msg" id="toastMsg">
+            <svg style="width:16px;height:16px;fill:#12141c;" viewBox="0 0 24 24"><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/></svg>
+            <span id="toastText">تم بنجاح!</span>
+        </div>
+
+        <div class="content">
+            <div class="mining-header">
+                <h2>Smart Cloud <span>Mining</span></h2>
+                <p>عائد استثماري يومي 7% لمدة عقد شهر (30 يوماً)</p>
+            </div>
+
+            <div class="balances-grid">
+                <div class="balance-box">
+                    <div class="title">الرصيد الأساسي (المحفظة)</div>
+                    <div class="value" id="miningMainBalance">2,239.00 USDT</div>
+                    <button class="transfer-btn" onclick="location.href='wallet.html'">إدارة المحفظة</button>
+                </div>
+                <div class="balance-box">
+                    <div class="title">رصيد التعدين (المؤقت)</div>
+                    <div class="value" id="miningPendingBalance" style="color: #0ecb81;">00.00000000 USDT</div>
+                    <button class="transfer-btn" onclick="claimMiningProfit()">تحويل للمحفظة</button>
+                </div>
+            </div>
+
+            <div class="section-title">
+                <svg style="width:15px;height:15px;fill:#f0b90b;" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+                باقات التعدين السحابي النشطة
+            </div>
+
+            <div class="plans-container">
+                <div class="plan-card">
+                    <div class="plan-top">
+                        <div class="plan-name">
+                            <span style="width:9px;height:9px;background:#0ecb81;border-radius:50%;display:inline-block;box-shadow: 0 0 8px #0ecb81;"></span>
+                            باقة البداية (Starter)
+                        </div>
+                        <div class="plan-price">10.00 $</div>
+                    </div>
+                    <div class="plan-details">
+                        <div>الربح اليومي (7%): <span style="color: #0ecb81;">+$0.70</span></div>
+                        <div>إجمالي العائد (30 يوم): <span>$21.00</span></div>
+                    </div>
+                    <button class="cancel-plan-btn" onclick="showToast('العقد يعمل بكفاءة تامة حالياً.', '#0ecb81')">إلغاء العقد</button>
+                </div>
+
+                <div class="plan-card">
+                    <div class="plan-top">
+                        <div class="plan-name">
+                            <span style="width:9px;height:9px;background:#0ecb81;border-radius:50%;display:inline-block;box-shadow: 0 0 8px #0ecb81;"></span>
+                            الباقة البرونزية
+                        </div>
+                        <div class="plan-price">25.00 $</div>
+                    </div>
+                    <div class="plan-details">
+                        <div>الربح اليومي (7%): <span style="color: #0ecb81;">+$1.75</span></div>
+                        <div>إجمالي العائد (30 يوم): <span>$52.50</span></div>
+                    </div>
+                    <button class="cancel-plan-btn" onclick="showToast('العقد يعمل بكفاءة تامة حالياً.', '#0ecb81')">إلغاء العقد</button>
+                </div>
+
+                <div class="plan-card">
+                    <div class="plan-top">
+                        <div class="plan-name">
+                            <span style="width:9px;height:9px;background:#0ecb81;border-radius:50%;display:inline-block;box-shadow: 0 0 8px #0ecb81;"></span>
+                            الباقة الفضية
+                        </div>
+                        <div class="plan-price">50.00 $</div>
+                    </div>
+                    <div class="plan-details">
+                        <div>الربح اليومي (7%): <span style="color: #0ecb81;">+$3.50</span></div>
+                        <div>إجمالي العائد (30 يوم): <span>$105.00</span></div>
+                    </div>
+                    <button class="cancel-plan-btn" onclick="showToast('العقد يعمل بكفاءة تامة حالياً.', '#0ecb81')">إلغاء العقد</button>
+                </div>
+
+                <div class="plan-card">
+                    <div class="plan-top">
+                        <div class="plan-name">
+                            <span style="width:9px;height:9px;background:#0ecb81;border-radius:50%;display:inline-block;box-shadow: 0 0 8px #0ecb81;"></span>
+                            الباقة الذهبية
+                        </div>
+                        <div class="plan-price">100.00 $</div>
+                    </div>
+                    <div class="plan-details">
+                        <div>الربح اليومي (7%): <span style="color: #0ecb81;">+$7.00</span></div>
+                        <div>إجمالي العائد (30 يوم): <span>$210.00</span></div>
+                    </div>
+                    <button class="cancel-plan-btn" onclick="showToast('العقد يعمل بكفاءة تامة حالياً.', '#0ecb81')">إلغاء العقد</button>
+                </div>
+            </div>
+        </div>
+
+<nav class="bnav">
+  <a href="index.html" class="active"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h14V10"/></svg>الرئيسية</a>
+  <a href="markets.html"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M21 7v5h-5"/></svg>الأسواق</a>
+  <a href="trading.html"><svg viewBox="0 0 24 24"><path d="M7 8h13l-3-3M17 16H4l3 3"/></svg>التداول</a>
+  <a href="futures.html"><svg viewBox="0 0 24 24"><path d="M3 3v18h18M8 14l3-3 3 3 4-5"/></svg>عقود آجلة</a>
+  <a href="mining.html"><svg viewBox="0 0 24 24"><path d="M14 3l7 7-4 4-7-7zM10 10l-7 7 4 4 7-7"/></svg>التعدين</a>
+  <a href="wallet.html"><svg viewBox="0 0 24 24"><path d="M3 7h16a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2zM16 13h.01"/></svg>المحفظة</a>
+</nav>
+ </div>
+
+    <script>
+        let miningBalance = parseFloat(localStorage.getItem('apex_main_balance')) || 2239.00;
+        let pendingProfit = 13.358180;
+
+        function updateMiningUI() {
+            let current = parseFloat(localStorage.getItem('apex_main_balance'));
+            if (!isNaN(current)) miningBalance = current;
+            document.getElementById('miningMainBalance').textContent = miningBalance.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " USDT";
+            document.getElementById('miningPendingBalance').textContent = pendingProfit.toFixed(6) + " USDT";
+        }
+
+        window.onload = function() {
+            updateMiningUI();
+            
+            // عداد تصاعدي لأرباح التعدين المؤقتة
+            setInterval(() => {
+                pendingProfit += 0.000065;
+                document.getElementById('miningPendingBalance').textContent = pendingProfit.toFixed(6) + " USDT";
+            }, 1000);
+        };
+
+        function claimMiningProfit() {
+            if (pendingProfit <= 0.001) {
+                showToast("لا يوجد أرباح كافية للتحويل حالياً!", "#f6465d");
+                return;
+            }
+            miningBalance += pendingProfit;
+            localStorage.setItem('apex_main_balance', miningBalance);
+            
+            showToast(`✅ تم تحويل أرباح التعدين (${pendingProfit.toFixed(2)} USDT) إلى المحفظة الرئيسية!`, "#0ecb81");
+            pendingProfit = 0;
+            updateMiningUI();
+        }
+
+    
+        function showToast(text, color) {
+            const toast = document.getElementById('toastMsg');
+            const toastText = document.getElementById('toastText');
+            toast.style.background = color;
+            toast.style.color = (color === '#0ecb81' || color === '#f6465d') ? '#fff' : '#12141c';
+            toastText.textContent = text;
+            toast.classList.add('show');
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3500);
+        }
+
+        // مزامنة الرصيد فوراً في حال تم تغييره من صفحة أخرى
+        window.addEventListener('storage', function(e) {
+            if (e.key === 'apex_main_balance') {
+                updateMiningUI();
+            }
+        });
+    </script>
+</body>
+</html>

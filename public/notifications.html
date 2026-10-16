@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<script>
+(function(){try{var s=JSON.parse(localStorage.getItem('skygo_session')||'null');if(!s||!s.email){location.replace('login.html?next=notifications.html');}}catch(e){location.replace('login.html');}})();
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Apex — الإشعارات</title>
+<style>
+:root{--bg:#0b0e11;--panel:#141920;--panel2:#1c232c;--border:#252d38;--txt:#eef2f6;--muted:#8a94a3;--gold1:#f8d979;--gold2:#e0a615;--green:#0ecb81;--red:#f6465d}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);color:var(--txt);max-width:480px;margin:0 auto;min-height:100vh}
+.top{display:flex;align-items:center;gap:12px;padding:calc(16px + env(safe-area-inset-top)) 16px 14px;background:linear-gradient(135deg,#1b1f24,#12151a);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:5}
+.top .bk{width:38px;height:38px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:var(--panel2);border:1px solid var(--border);border-radius:11px;cursor:pointer;font-size:20px;color:var(--txt);text-decoration:none}
+.top b{font-size:16px;font-weight:800}
+.wrap{padding:16px 16px 40px}
+.note{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:15px 16px;margin-bottom:12px;position:relative}
+.note.unread{border-color:rgba(224,166,21,.5)}
+.note.unread::before{content:"";position:absolute;top:16px;right:-1px;width:4px;height:26px;border-radius:4px;background:linear-gradient(var(--gold1),var(--gold2))}
+.note .h{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.note .h .ic{width:34px;height:34px;flex:0 0 auto;border-radius:10px;background:rgba(224,166,21,.12);display:flex;align-items:center;justify-content:center;color:var(--gold1)}
+.note .h .ic svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.9}
+.note .h b{flex:1;font-size:14.5px;font-weight:800}
+.note .h span{font-size:11px;color:var(--muted)}
+.note p{font-size:13.5px;color:#c7cfda;line-height:1.7;margin-right:44px}
+.empty{padding:50px 20px;text-align:center;color:var(--muted);font-size:14px}
+.empty .ic{font-size:38px;opacity:.5;margin-bottom:10px}
+</style>
+<script src="i18n.js"></script>
+</head>
+<body>
+<div class="top"><a class="bk" href="index.html">›</a><b>الإشعارات</b></div>
+<div class="wrap" id="list"><div class="empty"><div class="ic">🔔</div>…</div></div>
+<script>
+var $=function(id){return document.getElementById(id);};
+var sess=JSON.parse(localStorage.getItem('skygo_session')||'{}');
+var TOKEN=sess.token||localStorage.getItem('apex_token')||'';
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function fmtTime(ms){try{return new Date(ms).toLocaleString('ar',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return '';}}
+async function load(){
+  if(!TOKEN){location.replace('login.html?next=notifications.html');return;}
+  try{var r=await fetch('/api/notifications',{headers:{'Authorization':'Bearer '+TOKEN}});
+    if(r.status===401){location.replace('login.html?next=notifications.html');return;}
+    var d=await r.json();var ns=d.notifications||[];
+    if(!ns.length){$('list').innerHTML='<div class="empty"><div class="ic">🔔</div>لا توجد إشعارات بعد</div>';}
+    else{
+      $('list').innerHTML=ns.map(function(n){
+        return '<div class="note'+(n.read?'':' unread')+'"><div class="h"><span class="ic"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0"/></svg></span><b>'+esc(n.title||'إشعار')+'</b><span>'+fmtTime(n.at)+'</span></div>'+(n.body?'<p>'+esc(n.body)+'</p>':'')+'</div>';
+      }).join('');
+    }
+    // mark all read (so the header badge clears)
+    if(d.unread>0){try{await fetch('/api/notifications/read',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},body:'{}'});}catch(e){}}
+  }catch(e){$('list').innerHTML='<div class="empty">تعذّر التحميل</div>';}
+}
+load();
+</script>
+</body>
+</html>

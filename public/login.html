@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>تسجيل الدخول — Apex</title>
+<script src="i18n.js"></script>
+<style>
+:root{--bg:#0b0e11;--panel:#141920;--panel2:#1c232c;--border:#252d38;--txt:#eef2f6;--muted:#8a94a3;--gold1:#f8d979;--gold2:#e0a615;--green:#0ecb81;--red:#f6465d}
+*{box-sizing:border-box}
+body{margin:0;font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);color:var(--txt);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.wrap{width:100%;max-width:420px}
+.logo{text-align:center;margin-bottom:22px}
+.logo b{font-size:30px;font-weight:900;background:linear-gradient(135deg,var(--gold1),var(--gold2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.logo span{display:block;color:var(--muted);font-size:12px;margin-top:4px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:24px}
+h1{font-size:20px;margin:0 0 4px}
+.sub{color:var(--muted);font-size:13px;margin-bottom:18px}
+.fld{margin-bottom:14px}
+.fld label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:700}
+.fld input{width:100%;padding:12px 14px;border-radius:12px;background:var(--panel2);border:1px solid var(--border);color:var(--txt);font-family:inherit;font-size:14px;outline:none}
+.fld input:focus{border-color:var(--gold2)}
+.btn{width:100%;padding:13px;border:0;border-radius:12px;font-family:inherit;font-weight:800;font-size:15px;cursor:pointer;background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#231a02;margin-top:6px}
+.btn:disabled{opacity:.6;cursor:default}
+.alt{text-align:center;margin-top:16px;font-size:13px;color:var(--muted)}
+.alt a{color:var(--gold2);font-weight:700;text-decoration:none}
+.msg{padding:11px 14px;border-radius:10px;font-size:13px;margin-bottom:14px;display:none}
+.msg.err{display:block;background:rgba(246,70,93,.12);color:#ff8a97;border:1px solid rgba(246,70,93,.3)}
+.msg.warn{display:block;background:rgba(224,166,21,.12);color:var(--gold1);border:1px solid rgba(224,166,21,.3)}
+.msg.ok{display:block;background:rgba(14,203,129,.12);color:#5be0a8;border:1px solid rgba(14,203,129,.3)}
+.adminlink{text-align:center;margin-top:22px;font-size:12px}
+.adminlink a{color:var(--muted);text-decoration:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo"><b>Apex</b><span>\\\\\\</span></div>
+  <div class="card">
+    <h1 data-i18n="loginTitle">تسجيل الدخول</h1>
+    <div class="sub" data-i18n="loginSub">أدخل بيانات حسابك للمتابعة</div>
+    <div class="msg" id="msg"></div>
+    <div class="fld"><label data-i18n="email">البريد الإلكتروني</label><input id="email" type="email" autocomplete="email" placeholder="name@email.com" dir="ltr" style="text-align:right"></div>
+    <div class="fld"><label data-i18n="password">كلمة المرور</label><input id="pass" type="password" autocomplete="current-password" placeholder="••••••••"></div>
+    <button class="btn" id="submitBtn" onclick="doLogin()">دخول</button>
+    <div class="alt">ليس لديك حساب؟ <a href="register.html">إنشاء حساب</a></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+function getNext(){const p=new URLSearchParams(location.search);const n=p.get('next')||'index.html';return /^[a-zA-Z0-9_\-]+\.html$/.test(n)?n:'index.html';}
+function showMsg(t,cls){const m=$('msg');m.textContent=t;m.className='msg '+(cls||'err');}
+async function doLogin(){
+  const email=$('email').value.trim(),pass=$('pass').value;
+  if(!email||!pass)return showMsg('الرجاء إدخال البريد وكلمة المرور');
+  const btn=$('submitBtn');btn.disabled=true;btn.textContent='جارٍ الدخول...';
+  try{
+    const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password:pass})});
+    const d=await r.json();
+    if(!r.ok){
+      if(d.error==='pending')showMsg('حسابك قيد المراجعة من الإدارة. الرجاء الانتظار حتى الموافقة.','warn');
+      else if(d.error==='rejected')showMsg('تم رفض طلبك'+(d.reason?(': '+d.reason):'.'),'err');
+      else if(d.error==='banned')showMsg('تم حظر هذا الحساب. تواصل مع الدعم.','err');
+      else showMsg('البريد أو كلمة المرور غير صحيحة','err');
+      btn.disabled=false;btn.textContent='دخول';return;
+    }
+    const sess={email:d.user.email,name:d.user.name,uid:d.user.uid,token:d.token};
+    localStorage.setItem('skygo_session',JSON.stringify(sess));
+    localStorage.setItem('apex_token',d.token);
+    localStorage.setItem('apex_kyc_status',(d.user&&d.user.status)||'pending');
+    location.replace(getNext());
+  }catch(e){showMsg('خطأ في الاتصال بالخادم','err');btn.disabled=false;btn.textContent='دخول';}
+}
+$('pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+</script>
+</body>
+</html>

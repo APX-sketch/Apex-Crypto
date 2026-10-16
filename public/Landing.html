@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إنشاء حساب جديد - Apex Crypto Official</title>
+    <style>
+        :root {
+            --bg-main: #0b0e11;
+            --bg-surface: #1e2329;
+            --bg-input: #0b0e11;
+            --primary: #f0b90b;
+            --primary-hover: #fcd535;
+            --text-main: #eaecef;
+            --text-secondary: #848e9c;
+            --border-color: #2b313a;
+            --border-focus: #f0b90b;
+            --success: #0ecb81;
+            --error: #f6465d;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            overflow-x: hidden;
+        }
+
+        /* خلفية ضوئية جمالية خفيفة */
+        .bg-glow {
+            position: absolute;
+            top: -10%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 600px;
+            height: 300px;
+            background: radial-gradient(circle, rgba(240, 185, 11, 0.07) 0%, rgba(11, 14, 17, 0) 70%);
+            z-index: -1;
+        }
+
+        /* شريط التنقل العلوي */
+        header {
+            padding: 24px 8%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(43, 49, 58, 0.5);
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: 800;
+            color: var(--text-main);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            letter-spacing: 0.5px;
+        }
+
+        .logo span {
+            color: var(--primary);
+        }
+
+        .secure-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            background: rgba(14, 203, 129, 0.1);
+            padding: 6px 12px;
+            border-radius: 20px;
+            border: 1px solid rgba(14, 203, 129, 0.2);
+        }
+
+        .secure-badge svg {
+            fill: var(--success);
+            width: 14px;
+            height: 14px;
+        }
+
+        /* الحاوية الرئيسية */
+        .register-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 50px 8%;
+            gap: 60px;
+            flex-wrap: wrap;
+            flex: 1;
+            max-width: 1440px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        /* القسم الأيمن (الترويج والمكافآت) */
+        .promo-section {
+            flex: 1.1;
+            max-width: 550px;
+            text-align: right;
+        }
+
+        .promo-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(240, 185, 11, 0.1);
+            color: var(--primary);
+            padding: 8px 16px;
+            border-radius: 30px;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 24px;
+            border: 1px solid rgba(240, 185, 11, 0.2);
+        }
+
+        .promo-section h1 {
+            font-size: 42px;
+            color: var(--text-main);
+            margin-bottom: 20px;
+            line-height: 1.25;
+            font-weight: 700;
+        }
+
+        .promo-section h1 span {
+            color: var(--primary);
+        }
+
+        .promo-section p {
+            font-size: 16px;
+            color: var(--text-secondary);
+            margin-bottom: 35px;
+            line-height: 1.6;
+        }
+
+        /* مميزات المنصة باحترافية */
+        .features-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .feature-box {
+            background: rgba(30, 35, 41, 0.5);
+            border: 1px solid var(--border-color);
+            padding: 18px;
+            border-radius: 12px;
+            transition: 0.3s;
+        }
+
+        .feature-box:hover {
+            border-color: var(--primary);
+            transform: translateY(-3px);
+        }
+
+        .feature-box h4 {
+            font-size: 15px;
+            color: var(--text-main);
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .feature-box p {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin: 0;
+        }
+
+        /* القسم الأيسر (فورم التسجيل الاحترافي) */
+        .form-card {
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            padding: 40px;
+            border-radius: 20px;
+            width: 100%;
+            max-width: 480px;
+            text-align: right;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+            position: relative;
+        }
+
+        .form-card::after {
+            content: '';
+            position: absolute;
+            top: 0; right: 0; left: 0;
+            height: 3px;
+            background: linear-gradient(90deg, transparent, var(--primary), transparent);
+            border-radius: 20px 20px 0 0;
+        }
+
+        .form-card h2 {
+            font-size: 26px;
+            color: var(--text-main);
+            margin-bottom: 8px;
+            font-weight: 700;
+        }
+
+        .form-card .subtitle {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 30px;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 14px 16px;
+            background-color: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            color: var(--text-main);
+            font-size: 15px;
+            outline: none;
+            transition: 0.3s;
+        }
+
+        .input-group input:focus {
+            border-color: var(--border-focus);
+            box-shadow: 0 0 0 3px rgba(240, 185, 11, 0.15);
+        }
+
+        /* شريط قوة كلمة المرور */
+        .password-strength {
+            display: flex;
+            gap: 5px;
+            margin-top: 8px;
+        }
+
+        .strength-bar {
+            flex: 1;
+            height: 3px;
+            background: var(--border-color);
+            border-radius: 2px;
+            transition: 0.3s;
+        }
+
+        .terms-check {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 25px;
+            cursor: pointer;
+            line-height: 1.5;
+        }
+
+        .terms-check input {
+            accent-color: var(--primary);
+            margin-top: 3px;
+            width: 16px;
+            height: 16px;
+        }
+
+        .terms-check a {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .btn-submit {
+            width: 100%;
+            background-color: var(--primary);
+            color: #000;
+            border: none;
+            padding: 15px;
+            font-size: 16px;
+            font-weight: 700;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: 0.3s;
+            box-shadow: 0 4px 15px rgba(240, 185, 11, 0.3);
+            margin-bottom: 20px;
+        }
+
+        .btn-submit:hover {
+            background-color: var(--primary-hover);
+            transform: translateY(-1px);
+        }
+
+        .divider {
+            text-align: center;
+            position: relative;
+            margin: 20px 0;
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+
+        .divider::before, .divider::after {
+            content: "";
+            position: absolute;
+            top: 50%;
+            width: 40%;
+            height: 1px;
+            background-color: var(--border-color);
+        }
+
+        .divider::before { right: 0; }
+        .divider::after { left: 0; }
+
+        /* أزرار التسجيل الاجتماعي */
+        .social-btns {
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn-social {
+            flex: 1;
+            padding: 12px;
+            background-color: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            color: var(--text-main);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: 0.3s;
+            text-decoration: none;
+        }
+
+        .btn-social:hover {
+            border-color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .login-redirect {
+            text-align: center;
+            margin-top: 25px;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .login-redirect a {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .login-redirect a:hover {
+            text-decoration: underline;
+        }
+
+        /* الفوتر السفلي */
+        footer {
+            padding: 25px 8%;
+            text-align: center;
+            border-top: 1px solid rgba(43, 49, 58, 0.5);
+            color: var(--text-secondary);
+            font-size: 13px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 20px;
+        }
+
+        .footer-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: 0.2s;
+        }
+
+        .footer-links a:hover {
+            color: var(--primary);
+        }
+
+        @media (max-width: 900px) {
+            .register-container {
+                flex-direction: column;
+                text-align: center;
+                padding: 30px 5%;
+            }
+            .promo-section {
+                max-width: 100%;
+                text-align: center;
+            }
+            .features-grid {
+                text-align: right;
+            }
+            footer {
+                flex-direction: column;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="bg-glow"></div>
+
+    <!-- الهيدر -->
+    <header>
+        <a href="Landing.html" class="logo">Apex <span>Crypto</span></a>
+        <div class="secure-badge">
+            <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
+            اتصال مشفر وآمن 256-bit SSL
+        </div>
+    </header>
+
+    <!-- الحاوية الرئيسية -->
+    <div class="register-container">
+        
+        <!-- القسم الأيمن (الترويج والمميزات الاحترافية) -->
+        <div class="promo-section">
+            <div class="promo-tag">
+                🔥 انضم لأسرع منصة تداول نمواً في الشرق الأوسط
+            </div>
+            <h1>ابدأ رحلة الاستثمار الرقمي مع <span>Apex Crypto</span></h1>
+            <p>سجل الآن واحصل على حزمة المكافآت الترحيبية، وتداول بأمان تام مع سيولة لحظية وتنفيذ فائق السرعة للصفقات على مدار الساعة.</p>
+            
+            <div class="features-grid">
+                <div class="feature-box">
+                    <h4>🛡️ أعلى معايير الأمان</h4>
+                    <p>صندوق حماية احتياطي بقيمة مليار دولار وأمان متكامل للأصول.</p>
+                </div>
+                <div class="feature-box">
+                    <h4>⚡ تنفيذ لحظي فوري</h4>
+                    <p>محرك مطابقة أودرات متطور يستوعب ملايين الصفقات في الثانية.</p>
+                </div>
+                <div class="feature-box">
+                    <h4>💼 محافظ متعددة</h4>
+                    <p>دعم كامل لمختلف العملات الرقمية والأصول المشفرة بأقل رسوم.</p>
+                </div>
+                <div class="feature-box">
+                    <h4>🌐 دعم فني 24/7</h4>
+                    <p>فريق مختص لمساعدتك في عمليات الإيداع والسحب والتداول.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- القسم الأيسر (فورم التسجيل الاحترافي) -->
+        <div class="form-card">
+            <h2>إنشاء حساب مجاني</h2>
+            <p class="subtitle">أدخل بياناتك للبدء في التداول فوراً</p>
+            
+            <form action="#" method="POST">
+                <div class="input-group">
+                    <label>البريد الإلكتروني / رقم الهاتف</label>
+                    <input type="text" placeholder="name@example.com أو رقم الهاتف" required>
+                </div>
+
+                <div class="input-group">
+                    <label>كلمة المرور</label>
+                    <input type="password" placeholder="••••••••••••" required>
+                    <div class="password-strength">
+                        <div class="strength-bar" style="background: var(--primary);"></div>
+                        <div class="strength-bar"></div>
+                        <div class="strength-bar"></div>
+                        <div class="strength-bar"></div>
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label>معرف الإحالة (اختياري)</label>
+                    <input type="text" placeholder="APEX2026VIP">
+                </div>
+
+                <label class="terms-check">
+                    <input type="checkbox" required>
+                    <span>أوافق على <a href="#">شروط الخدمة</a> و<a href="#">سياسة الخصوصية</a> الخاصة بمنصة Apex.</span>
+                </label>
+
+                <button type="submit" class="btn-submit">إنشاء الحساب الشخصي</button>
+            </form>
+
+            <div class="divider">أو المتابعة باستخدام</div>
+
+            <div class="social-btns">
+                <a href="#" class="btn-social">
+                    <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.8 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.4l3.7 2.9C6.5 7.3 9 5 12 5z"/><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.8z"/><path fill="#FBBC05" d="M5.6 14.7c-.2-.7-.4-1.5-.4-2.7s.2-2 .4-2.7L1.9 6.4C.7 8.8 0 10.3 0 12s.7 3.2 1.9 5.6l3.7-2.9z"/><path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.3-6.4-5.2L1.9 16C3.7 19.8 7.5 23 12 23z"/></svg>
+                    Google
+                </a>
+                <a href="#" class="btn-social">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.31c.64-.78 1.08-1.86.96-2.94-1 .04-2.14.67-2.83 1.45-.59.66-1.11 1.74-.97 2.81 1.12.09 2.2-.56 2.84-1.32z"/></svg>
+                    Apple ID
+                </a>
+            </div>
+
+            <div class="login-redirect">
+                لديك حساب بالفعل؟ <a href="login.html">تسجيل الدخول</a>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- التذييل -->
+    <footer>
+        <p>جميع الحقوق محفوظة © 2026 Apex Crypto Global</p>
+        <div class="footer-links">
+            <a href="#">الخصوصية</a>
+            <a href="#">الشروط والأحكام</a>
+            <a href="#">المساعدة</a>
+        </div>
+    </footer>
+
+</body>
+</html>

@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<script>
+(function(){try{var s=JSON.parse(localStorage.getItem('skygo_session')||'null');if(!s||!s.email){location.replace('login.html?next=transfer.html');}}catch(e){location.replace('login.html');}})();
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Apex — التحويل</title>
+<style>
+:root{--bg:#0b0e11;--panel:#141920;--panel2:#1c232c;--border:#252d38;--txt:#eef2f6;--muted:#8a94a3;--gold1:#f8d979;--gold2:#e0a615;--green:#0ecb81;--red:#f6465d}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);color:var(--txt);max-width:480px;margin:0 auto;min-height:100vh}
+.top{display:flex;align-items:center;gap:12px;padding:calc(16px + env(safe-area-inset-top)) 16px 14px;background:linear-gradient(135deg,#1b1f24,#12151a);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:5}
+.top .bk{width:38px;height:38px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:var(--panel2);border:1px solid var(--border);border-radius:11px;cursor:pointer;font-size:20px;color:var(--txt);text-decoration:none}
+.top b{font-size:16px;font-weight:800}
+.wrap{padding:18px 16px 40px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:18px;margin-bottom:16px}
+.fld{margin-bottom:15px}
+.fld label{display:block;font-size:12px;font-weight:800;color:var(--muted);margin:0 2px 7px}
+.fld input,.fld select{width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:12px;color:var(--txt);font-family:inherit;font-size:15px;padding:13px 14px}
+.fld input:focus,.fld select:focus{outline:0;border-color:var(--gold2)}
+.fld .bal{font-size:11.5px;color:var(--muted);margin:6px 2px 0}
+.fld .bal b{color:var(--gold1)}
+.pbtn{width:100%;border:0;border-radius:13px;font-family:inherit;font-size:15px;font-weight:900;padding:15px 0;cursor:pointer;color:#231a02;background:linear-gradient(135deg,var(--gold1),var(--gold2))}
+.pbtn:active{transform:scale(.98)}
+.pbtn:disabled{opacity:.6}
+.msg{padding:11px 13px;border-radius:11px;font-size:13px;margin-bottom:14px;display:none;line-height:1.6}
+.msg.err{display:block;background:rgba(246,70,93,.12);color:#ff8a97;border:1px solid rgba(246,70,93,.3)}
+.msg.ok{display:block;background:rgba(14,203,129,.12);color:var(--green);border:1px solid rgba(14,203,129,.3)}
+.myaddr{font-size:12px;color:var(--muted);line-height:1.7}
+.myaddr code{direction:ltr;display:inline-block;color:var(--gold1);word-break:break-all}
+</style>
+<script src="i18n.js"></script>
+</head>
+<body>
+<div class="top"><a class="bk" href="index.html">›</a><b>تحويل داخلي</b></div>
+<div class="wrap">
+  <div class="card">
+    <div id="msg" class="msg"></div>
+    <div class="fld">
+      <label>عنوان المستلم</label>
+      <input id="toAddr" placeholder="APX..." autocomplete="off" style="direction:ltr;text-align:left">
+    </div>
+    <div class="fld">
+      <label>العملة</label>
+      <select id="cur" onchange="showBal()"></select>
+      <div class="bal" id="balTx"></div>
+    </div>
+    <div class="fld">
+      <label>المبلغ</label>
+      <input id="amt" type="number" inputmode="decimal" min="0" step="any" placeholder="0.00" style="direction:ltr;text-align:left">
+    </div>
+    <button class="pbtn" id="send" onclick="doTransfer()">تأكيد التحويل</button>
+  </div>
+  <div class="card">
+    <div class="myaddr">عنوان إيداعك (لاستقبال التحويلات):<br><code id="myaddr">…</code></div>
+  </div>
+</div>
+<script>
+var $=function(id){return document.getElementById(id);};
+var sess=JSON.parse(localStorage.getItem('skygo_session')||'{}');
+var TOKEN=sess.token||localStorage.getItem('apex_token')||'';
+var wallet={};
+var ORDER=['USDT','BTC','ETH','BNB','SOL','XRP'];
+function msg(t,cls){var m=$('msg');m.textContent=t;m.className='msg '+cls;}
+function fmt(n){n=Number(n)||0;return n.toLocaleString('en-US',{maximumFractionDigits:8});}
+function curKeys(){var ks=Object.keys(wallet);ORDER.forEach(function(k){if(ks.indexOf(k)<0)ks.push(k);});return ks;}
+function fillCur(){var ks=curKeys();$('cur').innerHTML=ks.map(function(k){return '<option value="'+k+'">'+k+'</option>';}).join('');showBal();}
+function showBal(){var c=$('cur').value;$('balTx').innerHTML='الرصيد المتاح: <b>'+fmt(wallet[c]||0)+' '+c+'</b>';}
+async function loadMe(){
+  if(!TOKEN){location.replace('login.html?next=transfer.html');return;}
+  try{var r=await fetch('/api/wallet/me',{headers:{'Authorization':'Bearer '+TOKEN}});
+    if(r.status===401){location.replace('login.html?next=transfer.html');return;}
+    var d=await r.json();$('myaddr').textContent=d.depositAddress||'—';
+    wallet=d.balances||{};fillCur();
+  }catch(e){}
+}
+async function doTransfer(){
+  var to=$('toAddr').value.trim(),cur=$('cur').value,amt=parseFloat($('amt').value);
+  if(!to){msg('الرجاء إدخال عنوان المستلم','err');return;}
+  if(!(amt>0)){msg('الرجاء إدخال مبلغ صحيح','err');return;}
+  if((Number(wallet[cur])||0)<amt){msg('رصيدك من '+cur+' غير كافٍ','err');return;}
+  var btn=$('send');btn.disabled=true;btn.textContent='جارٍ التنفيذ...';
+  try{
+    var r=await fetch('/api/wallet/transfer',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},body:JSON.stringify({toAddress:to,currency:cur,amount:amt})});
+    var d=await r.json().catch(function(){return{};});
+    if(!r.ok){
+      var map={address_not_found:'لا يوجد حساب بهذا العنوان',self_transfer:'لا يمكن التحويل لنفسك',bad_amount:'مبلغ غير صحيح',bad_address:'عنوان غير صحيح',recipient_banned:'حساب المستلم محظور',insufficient_balance:'رصيدك غير كافٍ'};
+      msg(map[d.error]||'تعذّر التحويل','err');btn.disabled=false;btn.textContent='تأكيد التحويل';return;
+    }
+    // السيرفر خصم المبلغ من رصيدك وأضافه للمستلم؛ نحدّث العرض من ردّ السيرفر.
+    if(d.balances)wallet=d.balances;
+    var outs=[];try{outs=JSON.parse(localStorage.getItem('apex_out_transfers')||'[]');}catch(e){outs=[];}
+    outs.push({id:'o'+Date.now(),amount:amt,currency:cur,to:to,toName:d.recipientName||'',at:Date.now()});
+    localStorage.setItem('apex_out_transfers',JSON.stringify(outs));
+    msg('تم التحويل بنجاح إلى '+(d.recipientName||to),'ok');
+    $('amt').value='';showBal();
+    btn.disabled=false;btn.textContent='تأكيد التحويل';
+  }catch(e){msg('خطأ في الاتصال','err');btn.disabled=false;btn.textContent='تأكيد التحويل';}
+}
+loadMe();
+</script>
+</body>
+</html>

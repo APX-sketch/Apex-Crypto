@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<script>
+(function(){
+  try{
+    var s=JSON.parse(localStorage.getItem('skygo_session')||'null');
+    if(!s||!s.email){location.replace('login.html?next=verify.html');}
+  }catch(e){location.replace('login.html');}
+})();
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Apex — إعادة التحقق</title>
+<style>
+:root{--bg:#0b0e11;--panel:#141920;--panel2:#1c232c;--border:#252d38;--txt:#eef2f6;--muted:#8a94a3;
+  --gold1:#f8d979;--gold2:#e0a615;--green:#0ecb81;--red:#f6465d;}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);color:var(--txt);
+  max-width:480px;margin:0 auto;min-height:100vh}
+.sh-top{display:flex;align-items:center;gap:12px;padding:calc(16px + env(safe-area-inset-top)) 16px 14px;
+  background:linear-gradient(135deg,#1b1f24,#12151a);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:2}
+.sh-top .bk{width:38px;height:38px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;
+  background:var(--panel2);border:1px solid var(--border);border-radius:11px;cursor:pointer;font-size:20px;color:var(--txt);text-decoration:none}
+.sh-top b{font-size:16px;font-weight:800}
+.wrap{padding:20px 16px calc(30px + env(safe-area-inset-bottom))}
+.hero{display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;padding:14px 10px 22px}
+.hero .shield{width:76px;height:76px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,var(--gold1),var(--gold2));box-shadow:0 8px 24px rgba(224,166,21,.35)}
+.hero .shield svg{width:38px;height:38px;stroke:#231a02;fill:none;stroke-width:2.4}
+.hero h1{font-size:19px;font-weight:900}
+.hero p{font-size:13px;color:var(--muted);max-width:300px;line-height:1.6}
+.fld{margin:0 2px 16px}
+.fld label{display:block;font-size:12.5px;font-weight:700;color:var(--muted);margin:0 2px 7px}
+.fld select{width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:12px;color:var(--txt);
+  font-family:inherit;font-size:15px;padding:13px 14px;appearance:none}
+.fld select:focus{outline:0;border-color:var(--gold2)}
+.upl{border:1.5px dashed var(--border);border-radius:14px;background:var(--panel);padding:22px 14px;text-align:center;cursor:pointer;transition:.2s}
+.upl:active{border-color:var(--gold2)}
+.upl svg{width:34px;height:34px;stroke:var(--gold2);fill:none;stroke-width:1.8;margin-bottom:8px}
+.upl .t{font-size:13.5px;font-weight:700}
+.upl .h{font-size:11.5px;color:var(--muted);margin-top:5px}
+.prev{margin-top:12px;display:none}
+.prev img{width:100%;border-radius:12px;border:1px solid var(--border);max-height:260px;object-fit:contain;background:#000}
+.pbtn{width:100%;border:0;border-radius:13px;font-family:inherit;font-size:15px;font-weight:900;padding:15px 0;margin-top:8px;
+  cursor:pointer;color:#231a02;background:linear-gradient(135deg,var(--gold1),var(--gold2));box-shadow:0 6px 18px rgba(224,166,21,.25)}
+.pbtn:disabled{opacity:.5;cursor:not-allowed}
+.pbtn:active{transform:scale(.98)}
+.toast{position:fixed;bottom:30px;left:50%;transform:translate(-50%,20px);background:#20272f;color:#fff;
+  padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;opacity:0;transition:.3s;z-index:99;
+  border:1px solid var(--border);box-shadow:0 10px 30px rgba(0,0,0,.5);max-width:90%;text-align:center}
+.toast.show{transform:translate(-50%,0);opacity:1}
+</style>
+<script src="i18n.js"></script>
+</head>
+<body>
+<div class="sh-top">
+  <a class="bk" href="index.html">›</a>
+  <b data-i18n="verifyTitle">إعادة التحقق من الهوية</b>
+</div>
+<div class="wrap">
+  <div class="hero">
+    <div class="shield"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg></div>
+    <h1 data-i18n="verifyTitle">إعادة التحقق من الهوية</h1>
+    <p data-i18n="verifySub">ارفع صورة واضحة لوثيقة هويتك لإعادة المراجعة</p>
+  </div>
+
+  <div class="fld">
+    <label data-i18n="idType">نوع وثيقة الهوية</label>
+    <select id="idType">
+      <option value="national_id" data-i18n="kycId">بطاقة هوية وطنية</option>
+      <option value="passport" data-i18n="kycPass">جواز سفر</option>
+      <option value="driver_license" data-i18n="kycLic">رخصة قيادة</option>
+    </select>
+  </div>
+
+  <div class="fld">
+    <label data-i18n="idUpload">صورة الوثيقة</label>
+    <div class="upl" id="uplBox" onclick="document.getElementById('idFile').click()">
+      <svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg>
+      <div class="t" data-i18n="idUpload">صورة الوثيقة</div>
+      <div class="h" data-i18n="idHint">ارفع صورة واضحة للوثيقة (JPG/PNG)</div>
+    </div>
+    <input type="file" id="idFile" accept="image/png,image/jpeg,image/webp" style="display:none">
+    <div class="prev" id="prev"><img id="prevImg" alt=""></div>
+  </div>
+
+  <button class="pbtn" id="submitBtn" onclick="submitReverify()" disabled data-i18n="verifySubmit">إرسال للمراجعة</button>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+var $=function(id){return document.getElementById(id);};
+var sess=JSON.parse(localStorage.getItem('skygo_session')||'{}');
+var TOKEN=(sess&&sess.token)||localStorage.getItem('apex_token')||'';
+var imgData='';
+function t(k,fb){try{var v=window.APEX_I18N&&window.APEX_I18N.t(k);return (v&&v!==k)?v:fb;}catch(e){return fb;}}
+function toast(m){var el=$('toast');el.textContent=m;el.className='toast show';setTimeout(function(){el.className='toast';},2600);}
+$('idFile').addEventListener('change',function(e){
+  var f=e.target.files&&e.target.files[0];if(!f)return;
+  if(f.size>2*1024*1024){toast(t('idHint','الصورة كبيرة جداً (الحد 2MB)'));return;}
+  var rd=new FileReader();
+  rd.onload=function(){imgData=rd.result;$('prevImg').src=imgData;$('prev').style.display='block';$('submitBtn').disabled=false;};
+  rd.readAsDataURL(f);
+});
+async function submitReverify(){
+  if(!imgData){toast(t('idHint','ارفع صورة الوثيقة'));return;}
+  if(!TOKEN){location.replace('login.html?next=verify.html');return;}
+  var btn=$('submitBtn');btn.disabled=true;
+  try{
+    var r=await fetch('/api/auth/reverify',{method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},
+      body:JSON.stringify({idDocType:$('idType').value,idImage:imgData})});
+    var d=await r.json().catch(function(){return{};});
+    if(r.ok&&d.ok){
+      localStorage.setItem('apex_kyc_status','pending');
+      toast(t('verifyDone','تم الإرسال! حسابك قيد المراجعة الآن.'));
+      setTimeout(function(){location.replace('index.html');},1500);
+    }else{
+      btn.disabled=false;
+      toast(t('idHint','تعذّر الإرسال، حاول مجدداً'));
+    }
+  }catch(e){btn.disabled=false;toast(t('idHint','تعذّر الاتصال بالخادم'));}
+}
+</script>
+</body>
+</html>

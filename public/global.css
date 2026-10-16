@@ -1,0 +1,136 @@
+/* تنسيقات عامة وثابتة لكل صفحات التطبيق */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+}
+
+body {
+    background-color: #0b0e11; /* خلفية شاشة الهاتف الخارجية */
+    color: #eaecef;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 10px 0;
+}
+
+/* الحجم الموحد لشاشة التطبيق (هيكل الموبايل) */
+.app-container {
+    background: #12141c; /* لون خلفية التطبيق الموحد */
+    border: 1px solid #232733;
+    border-radius: 36px;
+    width: 100%;
+    max-width: 420px; /* العرض الثابت والموحد لكل الصفحات */
+    min-height: 920px; /* الطول الأدنى الموحد */
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    box-shadow: 0 30px 60px rgba(0,0,0,0.9);
+    overflow: hidden;
+}
+
+/* الهيدر العلوي الموحد */
+.top-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px;
+    background: #12141c;
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    border-bottom: 1px solid #232733;
+}
+
+.page-title {
+    font-size: 16px;
+    font-weight: 800;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* منطقة المحتوى الداخلية مع مسافة للسلطة السفلية */
+.content {
+    padding: 16px;
+    padding-bottom: 95px;
+    overflow-y: auto;
+    flex-grow: 1;
+    width: 100%;
+}
+
+.content::-webkit-scrollbar {
+    width: 4px;
+}
+.content::-webkit-scrollbar-thumb {
+    background: #232733;
+    border-radius: 10px;
+}
+
+/* الحاوية الرئيسية للقائمة السفلية */
+.bottom-nav {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  width: 100% !important;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-color: #121212; /* لون الخلفية الداكن للتطبيق */
+  padding: 8px 0;
+  box-sizing: border-box;
+}
+
+/* كل عنصر داخل القائمة السفلية */
+.bottom-nav-item, .bottom-nav a, .bottom-nav div {
+  flex: 1 !important; /* توزيع العناصر بمساحات متساوية تماماً */
+  text-align: center !important;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+
+.nav-item {
+    text-decoration: none;
+    color: #848e9c;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-size: 10px;
+    gap: 4px;
+    transition: color 0.2s;
+    width: 20%;
+}
+
+.nav-item svg {
+    width: 20px;
+    height: 20px;
+    fill: #848e9c;
+    transition: fill 0.2s, transform 0.2s;
+}
+
+.nav-item.active {
+    color: #f0b90b; /* لون التحديد الموحد (أصفر بينانس) */
+    font-weight: 700;
+}
+
+.nav-item.active svg {
+    fill: #f0b90b;
+    transform: translateY(-2px);
+}
+#tradingview_widget {
+    width: 100%;
+    height: 480px; /* تحديد ارتفاع واضح وثابت لمنطقة الشارت */
+    background-color: #181a20;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}

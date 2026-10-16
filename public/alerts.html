@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<script>
+(function(){try{var s=JSON.parse(localStorage.getItem('skygo_session')||'null');if(!s||!s.email){location.replace('login.html?next=alerts.html');}}catch(e){location.replace('login.html');}})();
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Apex — التنبيهات السعرية</title>
+<style>
+:root{--bg:#0b0e11;--panel:#141920;--panel2:#1c232c;--border:#252d38;--txt:#eef2f6;--muted:#8a94a3;--gold1:#f8d979;--gold2:#e0a615;--green:#0ecb81;--red:#f6465d}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{-webkit-text-size-adjust:100%}
+body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);color:var(--txt);max-width:480px;margin:0 auto;min-height:100vh;position:relative;overflow-x:hidden;padding-bottom:40px}
+input{font-size:16px}
+.hdr{display:flex;align-items:center;gap:10px;padding:calc(12px + env(safe-area-inset-top)) 14px 12px;background:linear-gradient(135deg,#1b1f24,#0f1216);position:sticky;top:0;z-index:20;border-bottom:1px solid var(--border)}
+.icobtn{width:38px;height:38px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:var(--panel2);border:1px solid var(--border);border-radius:11px;cursor:pointer;color:var(--txt)}
+.icobtn svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:2}
+.hdr h1{flex:1;font-size:17px;font-weight:900}
+.wrap{padding:16px 14px}
+.lbl{font-size:12px;font-weight:800;color:var(--muted);margin:16px 4px 8px}
+.coins{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}
+.coins::-webkit-scrollbar{display:none}
+.chip{flex:0 0 auto;display:flex;align-items:center;gap:7px;padding:9px 13px;border-radius:12px;background:var(--panel);border:1px solid var(--border);cursor:pointer;font-weight:800;font-size:13px}
+.chip img{width:20px;height:20px;border-radius:50%}
+.chip.sel{border-color:var(--gold2);background:rgba(224,166,21,.1)}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:16px;margin-top:8px}
+.seg{display:flex;background:var(--panel2);border:1px solid var(--border);border-radius:12px;padding:4px;gap:4px}
+.seg button{flex:1;background:none;border:0;color:var(--muted);font-family:inherit;font-weight:800;font-size:13px;padding:10px 0;border-radius:9px;cursor:pointer}
+.seg button.on.up{background:rgba(14,203,129,.15);color:var(--green)}
+.seg button.on.dn{background:rgba(246,70,93,.15);color:var(--red)}
+.amtbox{display:flex;align-items:center;gap:10px;background:var(--panel2);border:1px solid var(--border);border-radius:14px;padding:14px 15px;margin-top:10px}
+.amtbox input{flex:1;background:none;border:0;color:var(--txt);font-family:inherit;font-size:22px;font-weight:900;outline:none;min-width:0}
+.amtbox .cur{font-size:14px;font-weight:800;color:var(--muted)}
+.rowinfo{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);padding:8px 4px 0}
+.rowinfo b{color:#fff;font-weight:800}
+.btn{width:100%;border:0;border-radius:14px;font-family:inherit;font-size:16px;font-weight:900;padding:16px 0;margin-top:16px;cursor:pointer;background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#231a02}
+.btn:active{transform:scale(.98)}
+.btn.dis{opacity:.5;pointer-events:none}
+.perm{display:flex;align-items:center;gap:10px;background:rgba(224,166,21,.07);border:1px solid rgba(224,166,21,.25);border-radius:12px;padding:12px 13px;margin-top:14px;font-size:12px;color:#d9c48d;line-height:1.5}
+.perm button{margin-inline-start:auto;flex:0 0 auto;background:var(--gold2);color:#231a02;border:0;font-family:inherit;font-weight:800;font-size:12px;padding:8px 12px;border-radius:9px;cursor:pointer}
+.alert{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:13px 14px;margin-bottom:10px}
+.alert.tr{border-color:var(--gold2);background:rgba(224,166,21,.06)}
+.alert .ic{width:40px;height:40px;flex:0 0 auto;border-radius:50%;background:var(--panel2);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.alert .ic img{width:40px;height:40px}
+.alert .mid{flex:1;min-width:0}
+.alert .mid .t{font-size:14px;font-weight:800}
+.alert .mid .t .ar{font-size:12px}
+.alert .mid .t .ar.up{color:var(--green)}
+.alert .mid .t .ar.dn{color:var(--red)}
+.alert .mid .s{font-size:11px;color:var(--muted);margin-top:3px}
+.alert .st{font-size:10px;font-weight:800;padding:2px 8px;border-radius:6px}
+.alert .st.act{background:rgba(14,203,129,.14);color:var(--green)}
+.alert .st.done{background:rgba(224,166,21,.16);color:var(--gold2)}
+.alert .del{width:32px;height:32px;flex:0 0 auto;border-radius:9px;background:var(--panel2);border:1px solid var(--border);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.alert .del svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2}
+.empty{text-align:center;color:var(--muted);font-size:13px;padding:40px 20px;line-height:1.7}
+.toast{position:fixed;bottom:40px;left:50%;transform:translate(-50%,20px);background:#20272f;color:#fff;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;opacity:0;transition:.3s;z-index:99;pointer-events:none;border:1px solid var(--border);max-width:88%;text-align:center}
+.toast.show{transform:translate(-50%,0);opacity:1}
+.toast.err{border-color:var(--red);color:#ffd7dd}
+.toast.ok{border-color:var(--green);color:#c8f7e3}
+</style>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0b0e11">
+<link rel="apple-touch-icon" href="icon.svg">
+<script defer src="alerts-core.js"></script>
+</head>
+<body>
+<div class="hdr">
+  <div class="icobtn" onclick="location.href='wallet.html'"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
+  <h1>التنبيهات السعرية</h1>
+</div>
+<div class="wrap">
+  <div class="lbl">اختر العملة</div>
+  <div class="coins" id="coins"></div>
+
+  <div class="card">
+    <div class="seg">
+      <button id="segUp" class="on up" onclick="setCond('above')">يصعد إلى ≥</button>
+      <button id="segDn" class="dn" onclick="setCond('below')">ينزل إلى ≤</button>
+    </div>
+    <div class="amtbox">
+      <input id="target" type="text" inputmode="decimal" placeholder="0.00" oninput="onT()">
+      <span class="cur">USDT</span>
+    </div>
+    <div class="rowinfo"><span>السعر الحالي</span><b id="curPrice">--</b></div>
+    <button class="btn dis" id="addBtn" onclick="addAlert()">إضافة تنبيه</button>
+  </div>
+
+  <div class="perm" id="permBox" style="display:none">
+    <span>فعّل إشعارات المتصفح لتوصلك التنبيهات على جهازك حتى لو كنت بصفحة ثانية.</span>
+    <button onclick="askPerm()">تفعيل</button>
+  </div>
+
+  <div class="perm" id="soundBox">
+    <span>🔊 التنبيه الصوتي عند تحقق السعر</span>
+    <button onclick="testSnd()" style="background:var(--panel2);color:var(--gold2);border:1px solid var(--border)">تجربة</button>
+    <button id="sndToggle" onclick="toggleSnd()" style="margin-inline-start:8px">مفعّل</button>
+  </div>
+
+  <div class="lbl">تنبيهاتي</div>
+  <div id="list"></div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+//J
+const $=id=>document.getElementById(id);
+const fmt=(n,d=2)=>Number(n).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+function toast(m,t){var e=$('toast');e.textContent=m;e.className='toast show '+(t||'');setTimeout(function(){e.className='toast '+(t||'');},2600);}
+function icoUrl(b){return 'https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/128/color/'+String(b).toLowerCase()+'.png';}
+function pdec(p){return p>=1000?2:p>=1?2:p>=0.1?4:6;}
+const CATALOG=['BTC','ETH','BNB','SOL','XRP','ADA','DOGE','TRX','LTC','AVAX'];
+function loadWallet(){try{return JSON.parse(localStorage.getItem('skygo_wallet')||'{}');}catch(e){return {};}}
+function loadAlerts(){try{return JSON.parse(localStorage.getItem('skygo_alerts')||'[]');}catch(e){return [];}}
+function saveAlerts(a){localStorage.setItem('skygo_alerts',JSON.stringify(a));}
+function coinList(){var set={};CATALOG.forEach(function(b){set[b]=1;});var w=loadWallet();Object.keys(w).forEach(function(k){if(k!=='USDT'&&(w[k]||0)>0)set[k]=1;});if(sel&&sel!=='USDT')set[sel]=1;return Object.keys(set);}
+var priceMap={}, sel=coinList()[0]||'BTC', cond='above';
+var _pc=new URLSearchParams(location.search).get('coin');
+if(_pc){_pc=_pc.toUpperCase().replace(/[^A-Z0-9]/g,'');if(_pc&&_pc!=='USDT')sel=_pc;}
+function priceOf(b){return priceMap[b+'USDT']||0;}
+function renderCoins(){
+  $('coins').innerHTML=coinList().map(function(b){
+    return '<div class="chip'+(b===sel?' sel':'')+'" onclick="pick(\''+b+'\')">'+
+      '<img src="'+icoUrl(b)+'" onerror="this.style.display=\'none\'">'+b+'</div>';
+  }).join('');
+}
+function pick(b){sel=b;renderCoins();updCur();$('target').value='';onT();}
+function setCond(c){cond=c;$('segUp').className=(c==='above'?'on ':'')+'up';$('segDn').className=(c==='below'?'on ':'')+'dn';}
+function updCur(){var p=priceOf(sel);$('curPrice').textContent=p?('$'+fmt(p,pdec(p))):'جارٍ...';}
+function onT(){var v=parseFloat($('target').value)||0;$('addBtn').className='btn'+(v>0?'':' dis');}
+function addAlert(){
+  var v=parseFloat($('target').value)||0;
+  if(v<=0){toast('أدخل سعراً صحيحاً','err');return;}
+  var a=loadAlerts();
+  a.unshift({id:Date.now()+'-'+Math.random().toString(36).slice(2,6),coin:sel,cond:cond,target:v,active:true,created:Date.now()});
+  saveAlerts(a);
+  toast('تم إنشاء تنبيه '+sel,'ok');
+  $('target').value='';onT();renderList();
+  if('Notification' in window && Notification.permission==='default') $('permBox').style.display='flex';
+}
+function delAlert(id){saveAlerts(loadAlerts().filter(function(x){return x.id!==id;}));renderList();toast('تم الحذف');}
+function renderList(){
+  var a=loadAlerts();
+  if(!a.length){$('list').innerHTML='<div class="empty">لا توجد تنبيهات بعد.<br>أضف تنبيهاً لتصلك رسالة عند وصول السعر.</div>';return;}
+  $('list').innerHTML=a.map(function(x){
+    var p=priceOf(x.coin), up=x.cond==='above';
+    var stat=x.active?'<span class="st act">نشط</span>':'<span class="st done">تحقق ✓</span>';
+    var now=p?('الآن: $'+fmt(p,pdec(p))):'';
+    return '<div class="alert'+(x.active?'':' tr')+'">'+
+      '<div class="ic"><img src="'+icoUrl(x.coin)+'" onerror="this.style.display=\'none\'"></div>'+
+      '<div class="mid"><div class="t">'+x.coin+' <span class="ar '+(up?'up':'dn')+'">'+(up?'▲ ≥':'▼ ≤')+' $'+fmt(x.target,pdec(x.target))+'</span></div>'+
+      '<div class="s">'+now+'</div></div>'+stat+
+      '<button class="del" onclick="delAlert(\''+x.id+'\')"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg></button></div>';
+  }).join('');
+}
+function askPerm(){if('Notification' in window){Notification.requestPermission().then(function(p){$('permBox').style.display='none';if(p==='granted')toast('تم تفعيل الإشعارات','ok');});}if(window.ApexAlerts)ApexAlerts.testSound&&ApexAlerts.beep;}
+function testSnd(){if(window.ApexAlerts)ApexAlerts.testSound();else toast('جارٍ تحميل الصوت...');}
+function toggleSnd(){var on=!(localStorage.getItem('apex_alert_sound')!=='0');localStorage.setItem('apex_alert_sound',on?'1':'0');$('sndToggle').textContent=on?'مفعّل':'صامت';toast(on?'الصوت مفعّل':'الصوت صامت');}
+function initSnd(){$('sndToggle').textContent=(localStorage.getItem('apex_alert_sound')==='0')?'صامت':'مفعّل';}
+function notify(x,p){
+  var msg=x.coin+' وصل '+(x.cond==='above'?'أو تجاوز':'أو نزل تحت')+' $'+fmt(x.target,pdec(x.target))+' (الآن $'+fmt(p,pdec(p))+')';
+  toast('🔔 '+msg,'ok');
+  if('Notification' in window && Notification.permission==='granted'){try{new Notification('Apex — تنبيه سعري',{body:msg});}catch(e){}}
+}
+function checkAlerts(){
+  var a=loadAlerts(), changed=false;
+  a.forEach(function(x){
+    if(!x.active)return;
+    var p=priceOf(x.coin);if(!p)return;
+    if((x.cond==='above'&&p>=x.target)||(x.cond==='below'&&p<=x.target)){
+      x.active=false;x.triggered=Date.now();x.triggerPrice=p;changed=true;notify(x,p);
+    }
+  });
+  if(changed)saveAlerts(a);
+  return changed;
+}
+async function fetchBatch(syms){
+  try{
+    var r=await fetch('https://api.binance.com/api/v3/ticker/price?symbols='+encodeURIComponent(JSON.stringify(syms)));
+    if(!r.ok)throw 0;var arr=await r.json();if(!Array.isArray(arr))throw 0;
+    arr.forEach(function(d){priceMap[d.symbol]=parseFloat(d.price);});
+  }catch(e){
+    var res=await Promise.allSettled(syms.map(function(s){return fetch('https://api.binance.com/api/v3/ticker/price?symbol='+s).then(function(x){return x.ok?x.json():null;});}));
+    res.forEach(function(r){if(r.status==='fulfilled'&&r.value&&r.value.symbol)priceMap[r.value.symbol]=parseFloat(r.value.price);});
+  }
+}
+async function poll(){
+  var set={};coinList().forEach(function(b){set[b]=1;});
+  loadAlerts().forEach(function(x){set[x.coin]=1;});
+  var syms=Object.keys(set).map(function(b){return b+'USDT';});
+  if(syms.length)await fetchBatch(syms);
+  updCur();renderList();
+}
+if('Notification' in window && Notification.permission==='default') $('permBox').style.display='flex';
+window.addEventListener('apex-alerts-updated',renderList);
+renderCoins();renderList();initSnd();poll();setInterval(poll,5000);
+</script>
+</body>
+</html>
