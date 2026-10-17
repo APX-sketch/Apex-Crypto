@@ -111,7 +111,7 @@
     if(ent.pending)return;
     if(ent.bars&&(now-ent.t)<900)return;
     ent.pending=true;
-    fetch(API+'/api/apx/klines?interval='+interval+'&limit=300',{headers:{'Accept':'application/json'}})
+    fetch(API+'/api/apx/klines?interval='+interval+'&limit=1000',{headers:{'Accept':'application/json'}})
       .then(function(r){return r.ok?r.json():null;})
       .then(function(a){if(Array.isArray(a)&&a.length){ent.bars=a;ent.t=Date.now();}})
       .catch(function(){})
@@ -139,6 +139,8 @@
     if(ent&&ent.bars&&ent.bars.length){return ent.bars.slice(-limit).map(function(b){return b.slice();});}
     return _seedLocal(interval,limit);   // عرض مؤقت لحين وصول شموع السيرفر
   }
+  /* هل وصلت شموع السيرفر الحقيقية لهذا الفريم؟ (غير البذرة المحلية) */
+  function klinesReady(interval){var e=_klCache[interval];return !!(e&&e.bars&&e.bars.length);}
   function ticker(){
     var c=cfg();var p=live();var ch=chgNow();var a=Math.abs(ch)/100;
     return {symbol:SYM, lastPrice:p, priceChangePercent:ch,
@@ -181,7 +183,7 @@
     is:function(s){return String(s||'').toUpperCase()===SYM;},
     cfg:cfg, save:save, saveRemote:saveRemote, pull:pull, history:history, notify:notify, trade:trade,
     live:live, hold:hold, setHold:setHold, orders:orders, pullHold:_pullHold,
-    klines:klines, ticker:ticker, depth:depth,
+    klines:klines, klinesReady:klinesReady, ticker:ticker, depth:depth,
     onChange:onChange, serverReady:function(){return serverOk;}
   };
 

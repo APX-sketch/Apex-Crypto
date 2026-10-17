@@ -53,7 +53,7 @@ body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);col
 .sres-empty{padding:14px;text-align:center;color:var(--muted);font-size:12px}
 
 /* symbol tabs */
-.symtabs{display:flex;gap:8px;overflow-x:auto;padding:12px 14px 4px;scrollbar-width:none}
+.symtabs{display:none}
 .symtabs::-webkit-scrollbar{display:none}
 .symtab{flex:0 0 auto;padding:8px 15px;border-radius:11px;background:var(--panel);border:1px solid var(--border);
   font-size:13px;font-weight:800;cursor:pointer;color:var(--muted);transition:.2s;white-space:nowrap}
@@ -247,7 +247,7 @@ body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);col
 
 /* bottom nav */
 .bnav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;
-  display:grid;grid-template-columns:repeat(6,1fr);background:#0f1216;border-top:1px solid var(--border);
+  display:grid;grid-template-columns:repeat(5,1fr);background:#0f1216;border-top:1px solid var(--border);
   padding:8px 0 calc(8px + env(safe-area-inset-bottom));z-index:30}
 .bnav a{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--muted);text-decoration:none;font-size:10px;font-weight:700}
 .bnav a svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8}
@@ -378,7 +378,6 @@ body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);col
   <a href="markets.html"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M21 7v5h-5"/></svg><span data-i18n="navMarkets">الأسواق</span></a>
   <a href="trading.html"><svg viewBox="0 0 24 24"><path d="M7 8h13l-3-3M17 16H4l3 3"/></svg><span data-i18n="navTrading">التداول</span></a>
   <a href="futures.html" class="active"><svg viewBox="0 0 24 24"><path d="M3 3v18h18M8 14l3-3 3 3 4-5"/></svg><span data-i18n="navFutures">عقود آجلة</span></a>
-  <a href="mining.html"><svg viewBox="0 0 24 24"><path d="M14 3l7 7-4 4-7-7zM10 10l-7 7 4 4 7-7"/></svg><span data-i18n="navMining">التعدين</span></a>
   <a href="wallet.html"><svg viewBox="0 0 24 24"><path d="M3 7h16a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2zM16 13h.01"/></svg><span data-i18n="navWallet">المحفظة</span></a>
 </nav>
 
@@ -449,6 +448,7 @@ const INTERVALS=['1m','5m','15m','1h','4h','1d'];
 const LEVS=[1,2,5,10,20,50,100];
 
 let cur=SYMBOLS[0], iv='15m', lev=10, mark=0;
+let chartFit=true;   /* true = اضبط العرض تلقائياً مرة واحدة فقط؛ غير ذلك نحافظ على تكبير المستخدم */
 
 /* ===== المحفظة (السيرفر هو المصدر الموثوق، مع نسخة محلية لكل حساب) ===== */
 var FSESS=JSON.parse(localStorage.getItem('skygo_session')||'{}');
@@ -490,12 +490,12 @@ function reportFee(f,src){if(!FTOK||!(f>0))return;try{fetch('/api/wallet/fee',{m
 $('symtabs').innerHTML=SYMBOLS.map((c,i)=>'<div class="symtab'+(i===0?' on':'')+'" data-i="'+i+'">'+c.b+'<span style="opacity:.6;font-weight:600">/USDT</span></div>').join('');
 $('symtabs').querySelectorAll('.symtab').forEach(el=>el.addEventListener('click',()=>{
   $('symtabs').querySelectorAll('.symtab').forEach(x=>x.classList.remove('on'));
-  el.classList.add('on');cur=SYMBOLS[+el.dataset.i];lastCandle=null;$('chartLd').style.display='flex';refreshAll();updateSummary();
+  el.classList.add('on');cur=SYMBOLS[+el.dataset.i];lastCandle=null;chartFit=true;$('chartLd').style.display='flex';refreshAll();updateSummary();
 }));
 $('ivbar').innerHTML=INTERVALS.map((v,i)=>'<div class="iv'+(v===iv?' on':'')+'" data-v="'+v+'">'+v+'</div>').join('');
 $('ivbar').querySelectorAll('.iv').forEach(el=>el.addEventListener('click',()=>{
   $('ivbar').querySelectorAll('.iv').forEach(x=>x.classList.remove('on'));
-  el.classList.add('on');iv=el.dataset.v;lastCandle=null;$('chartLd').style.display='flex';loadKlines();
+  el.classList.add('on');iv=el.dataset.v;lastCandle=null;chartFit=true;$('chartLd').style.display='flex';loadKlines();
 }));
 $('levs').innerHTML=LEVS.map(v=>'<div class="lev'+(v===lev?' on':'')+'" data-v="'+v+'">'+v+'x</div>').join('');
 $('levs').querySelectorAll('.lev').forEach(el=>el.addEventListener('click',()=>{
@@ -526,7 +526,7 @@ function renderSearch(q){
   box.querySelectorAll('.sres-item').forEach(el=>el.addEventListener('click',()=>pickSearch(el.dataset.s,el.dataset.b)));
 }
 function pickSearch(s,b){
-  cur={s:s,b:b};lastCandle=null;
+  cur={s:s,b:b};lastCandle=null;chartFit=true;
   $('coinSearch').value='';$('sresults').classList.remove('on');$('sresults').innerHTML='';
   $('symtabs').querySelectorAll('.symtab').forEach(x=>x.classList.remove('on'));
   $('chartLd').style.display='flex';
@@ -613,26 +613,34 @@ function toggleChartMax(btn){
   setTimeout(function(){
     var el=$('chart');if(lwChart&&el)lwChart.applyOptions({width:el.clientWidth,height:(el.clientHeight||300)});
     var vp=$('volpane');if(volChart&&vp)volChart.applyOptions({width:vp.clientWidth});
-    if(lwChart)lwChart.timeScale().fitContent();
+    if(on&&lwChart)lwChart.timeScale().fitContent();
   },260);
 }
 window.toggleChartMax=toggleChartMax;
 function sma(arr,p){const o=[];for(let i=0;i<arr.length;i++){if(i<p-1)continue;let s=0;for(let j=i-p+1;j<=i;j++)s+=arr[j].close;o.push({time:arr[i].time,value:s/p});}return o;}
 async function loadKlines(){
   if(!candleSeries){setTimeout(loadKlines,600);return;}
+  var _apxPending=!!(window.APX&&APX.is(cur.s)&&typeof APX.klinesReady==='function'&&!APX.klinesReady(iv));
   try{
     let raw;
-    if(window.APX&&APX.is(cur.s)){raw=APX.klines(iv,300);}
-    else{const r=await fetch(API_BASE+'/api/klines?symbol='+cur.s+'&interval='+iv+'&limit=300',{headers:{'Accept':'application/json'}});
+    if(window.APX&&APX.is(cur.s)){raw=APX.klines(iv,1000);}
+    else{const r=await fetch(API_BASE+'/api/klines?symbol='+cur.s+'&interval='+iv+'&limit=1000',{headers:{'Accept':'application/json'}});
     if(!r.ok)throw 0;raw=await r.json();}
     if(!Array.isArray(raw)||!raw.length)throw 0;
     const data=raw.map(k=>({time:Math.floor(k[0]/1000),open:+k[1],high:+k[2],low:+k[3],close:+k[4]}));
     try{dayHi=Math.max.apply(null,data.map(c=>c.high));dayLo=Math.min.apply(null,data.map(c=>c.low));}catch(e){}
+    /* احفظ تكبير المستخدم الحالي قبل إعادة ضبط البيانات حتى لا يرجع الشارت لحجمه */
+    var _savedRange=null;
+    try{if(!chartFit&&lwChart)_savedRange=lwChart.timeScale().getVisibleLogicalRange();}catch(e){}
     candleSeries.setData(data);lastCandle=data[data.length-1];
     ma7.setData(sma(data,7));ma25.setData(sma(data,25));ma99.setData(sma(data,99));
     if(volSeries)volSeries.setData(raw.map(k=>({time:Math.floor(k[0]/1000),value:+k[5],color:(+k[4]>=+k[1])?'rgba(14,203,129,.5)':'rgba(246,70,93,.5)'})));
-    lwChart.timeScale().fitContent();
+    /* ثبّت التكبير: اضبط العرض مرة واحدة فقط، وبعدها حافظ على تكبير المستخدم */
+    if(chartFit){lwChart.timeScale().fitContent();chartFit=false;}
+    else if(_savedRange){try{lwChart.timeScale().setVisibleLogicalRange(_savedRange);}catch(e){}}
     $('chartLd').style.display='none';
+    /* أول فتح لـAPX: شموع السيرفر تصل غير متزامنة — أعد التحميل لحين وصولها */
+    if(_apxPending&&window.APX&&APX.is(cur.s)){chartFit=true;setTimeout(loadKlines,700);}
   }catch(e){setTimeout(loadKlines,4000);}
 }
 /* تحديث حي: حرّك الشمعة الأخيرة مع كل سعر جديد من سيرفرك */

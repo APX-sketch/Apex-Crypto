@@ -465,13 +465,13 @@ const _APX_IVS = ['1m', '5m', '15m', '30m', '1h', '2h', '4h', '1d'];
 async function _apxWarmBtcKl() {
   for (const iv of _APX_IVS) {
     try {
-      const a = await bproxy.get('/api/v3/klines', { symbol: 'BTCUSDT', interval: iv, limit: 300 }, 60000);
+      const a = await bproxy.get('/api/v3/klines', { symbol: 'BTCUSDT', interval: iv, limit: 1000 }, 60000);
       if (Array.isArray(a) && a.length) _apxBtcKl[iv] = a;
     } catch (e) { /* تجاهل — يُستخدم بديل تركيبي */ }
   }
 }
 _apxWarmBtcKl();
-setInterval(_apxWarmBtcKl, 10 * 60 * 1000).unref();
+setInterval(_apxWarmBtcKl, 2 * 60 * 1000).unref();
 const VALID_SYMBOL = /^[A-Z0-9]{4,20}$/;
 const VALID_INTERVAL = new Set([
   '1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h', '12h',
@@ -1633,7 +1633,7 @@ app.get('/api/apx/history', (req, res) => {
 // شموع APX المركزية (نفس الشموع لكل الحسابات، محفوظة على السيرفر)
 app.get('/api/apx/klines', (req, res) => {
   const interval = String(req.query.interval || '15m');
-  const limit = Math.min(Number(req.query.limit) || 300, 300);
+  const limit = Math.min(Number(req.query.limit) || 300, 1000);
   res.json(apx.klines(interval, limit));
 });
 // A logged-in user reports an APX buy; the server decides if it is "big"
