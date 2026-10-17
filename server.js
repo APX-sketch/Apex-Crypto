@@ -670,59 +670,28 @@ app.post('/api/auth/login', strictLimiter, async (req, res) => {
     }
 
     // 3. نجاح تسجيل الدخول وإعادة بيانات الحساب
+// نجاح تسجيل الدخول وإعادة بيانات الحساب والـ Token
+    const token = 'mock-jwt-token-' + user.id; // أو التوكن الحقيقي إذا كنت تستخدم JWT
+    
     res.json({
       ok: true,
+      token: token,
       user: {
         id: user.id,
+        uid: user.id,
         username: user.username,
-        email: user.email
+        name: user.username,
+        email: user.email,
+        status: 'approved'
       }
     });
-
-  } catch (err) {
-    console.error('Login Error:', err);
-    res.status(500).json({ error: 'Login failed' });
-  }
-});app.post('/api/auth/login', strictLimiter, async (req, res) => {
-  try {
-    const { email, password } = req.body || {};
-
-    if (!email || !password) {
-      return res.status(400).json({ error: 'invalid_credentials' });
-    }
-
-    // 1. البحث عن المستخدم في قاعدة بيانات MySQL
-    const [rows] = await pool.query(
-      'SELECT id, username, email, password FROM users WHERE email = ?',
-      [email]
-    );
-
-    if (rows.length === 0) {
-      return res.status(401).json({ error: 'invalid_credentials' });
-    }
-
-    const user = rows[0];
-
-    // 2. التحقق من مطابقة كلمة المرور
-    if (user.password !== password) {
-      return res.status(401).json({ error: 'invalid_credentials' });
-    }
-
-    // 3. نجاح تسجيل الدخول وإعادة بيانات الحساب
-    res.json({
-      ok: true,
-      user: {
-        id: user.id,
-        username: user.username,
-        email: user.email
-      }
-    });
-
+    
   } catch (err) {
     console.error('Login Error:', err);
     res.status(500).json({ error: 'Login failed' });
   }
 });
+
 
 // ---- Re-verify (user resubmits identity document after a rejection) ----
 // A logged-in user uploads a new document; their account goes back to

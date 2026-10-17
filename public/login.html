@@ -69,18 +69,17 @@ const sess = {
       username: d.user.username,
       name: d.user.username,
       email: d.user.email,
-      token: d.token || ''
+      token: d.token
     };
 
-    // حفظ الجلسة بجميع المفاتيح المستخدمة في مختلف صفحات المشروع
-    localStorage.setItem('apex_user', JSON.stringify(sess));
     localStorage.setItem('skygo_session', JSON.stringify(sess));
+    localStorage.setItem('apex_user', JSON.stringify(sess));
+    localStorage.setItem('apex_token', d.token);
     localStorage.setItem('currentUser', JSON.stringify(sess));
-    localStorage.setItem('apex_token', d.token || '');
-    localStorage.setItem('apex_kyr_status', (d.user && d.user.status) || 'approved');
-
+    
     location.replace(getNext());
-      }catch(e){showMsg('خطأ في الاتصال بالخادم','err');btn.disabled=false;btn.textContent='دخول';}
+  
+  }catch(e){showMsg('خطأ في الاتصال بالخادم','err');btn.disabled=false;btn.textContent='دخول';}
 }
 $('pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
 </script>
