@@ -61,7 +61,21 @@ const pool = mysql.createPool({
   ssl: { rejectUnauthorized: false }
   
 });
-// 2. إدخال بيانات المستخدم الجديد في جدول users
+app.post('/api/auth/register', strictLimiter, async (req, res) => {
+  try {
+    const { name, email, password, country, idDocType, idImage } = req.body || {};
+
+    if (!name || String(name).trim().length < 2) return res.status(400).json({ error: 'bad_name' });
+    if (!EMAIL_RE.test(String(email || ''))) return res.status(400).json({ error: 'bad_email' });
+    if (!password || String(password).length < 8) return res.status(400).json({ error: 'weak_password' });
+
+    // 1. التحقق من وجود البريد الإلكتروني في MySQL
+    const [existingUsers] = await pool.query('SELECT id FROM users WHERE email = ?', [email]);
+    if (existingUsers.length > 0) {
+      return res.status(409).json({ error: 'email_exists' });
+    }
+
+    // 2. إدخال بيانات المستخدم الجديد في جدول users
     const [result] = await pool.query(
       'INSERT INTO users (username, email, password) VALUES (?, ?, ?)',
       [name, email, password]
@@ -69,11 +83,22 @@ const pool = mysql.createPool({
 
     const userId = result.insertId;
 
-    // 3. إنشاء محفظة افتراضية للمستخدم الجديد برصيد صفر
+    // 3. إنشاء محفظة افتراضية للمستخدم الجديد برصيد 0
     await pool.query(
       'INSERT INTO wallets (user_id, currency, balance, locked_balance) VALUES (?, ?, ?, ?)',
       [userId, 'USDT', 0.00000000, 0.00000000]
     );
+
+    res.json({
+      ok: true,
+      status: REQUIRE_APPROVAL ? 'pending' : 'approved',
+      user: { id: userId, username: name, email }
+    });
+  } catch (err) {
+    console.error('MySQL Register Error:', err);
+    res.status(500).json({ error: 'Database insertion failed' });
+  }
+});
 // ---- Platform commission ledger (trading fees collected) ----
 // Server-authoritative accumulator for trading fees. Each executed trade on
 // the client reports its fee here; it is tracked SEPARATELY from user balances
