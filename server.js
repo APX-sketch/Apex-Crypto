@@ -644,25 +644,84 @@ function validIdImage(v) {
 // approved / rejected) is returned so the app can show the right state
 // ("under review" banner, verified badge, or a re-verify prompt). Only
 // BANNED accounts are refused entry.
-app.post('/api/auth/login', strictLimiter, (req, res) => {
-  const { email, password } = req.body || {};
-  const user = store.findUserByEmail(email);
-  if (!user || !Store.verify(password, user.passHash)) {
-    return res.status(401).json({ error: 'bad_credentials' });
+app.post('/api/auth/login', strictLimiter, async (req, res) => {
+  try {
+    const { email, password } = req.body || {};
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'invalid_credentials' });
+    }
+
+    // 1. البحث عن المستخدم في قاعدة بيانات MySQL
+    const [rows] = await pool.query(
+      'SELECT id, username, email, password FROM users WHERE email = ?',
+      [email]
+    );
+
+    if (rows.length === 0) {
+      return res.status(401).json({ error: 'invalid_credentials' });
+    }
+
+    const user = rows[0];
+
+    // 2. التحقق من مطابقة كلمة المرور
+    if (user.password !== password) {
+      return res.status(401).json({ error: 'invalid_credentials' });
+    }
+
+    // 3. نجاح تسجيل الدخول وإعادة بيانات الحساب
+    res.json({
+      ok: true,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email
+      }
+    });
+
+  } catch (err) {
+    console.error('Login Error:', err);
+    res.status(500).json({ error: 'Login failed' });
   }
-  if (user.status === 'banned') return res.status(403).json({ error: 'banned' });
-  const token = store.createSession(user.id);
-  res.json({ ok: true, token, user: publicUser(user) });
-});
+});app.post('/api/auth/login', strictLimiter, async (req, res) => {
+  try {
+    const { email, password } = req.body || {};
 
-// ---- Current user ----
-app.get('/api/auth/me', requireUser, (req, res) => {
-  res.json({ ok: true, user: publicUser(req.user) });
-});
+    if (!email || !password) {
+      return res.status(400).json({ error: 'invalid_credentials' });
+    }
 
-app.post('/api/auth/logout', requireUser, (req, res) => {
-  store.destroySession(bearer(req));
-  res.json({ ok: true });
+    // 1. البحث عن المستخدم في قاعدة بيانات MySQL
+    const [rows] = await pool.query(
+      'SELECT id, username, email, password FROM users WHERE email = ?',
+      [email]
+    );
+
+    if (rows.length === 0) {
+      return res.status(401).json({ error: 'invalid_credentials' });
+    }
+
+    const user = rows[0];
+
+    // 2. التحقق من مطابقة كلمة المرور
+    if (user.password !== password) {
+      return res.status(401).json({ error: 'invalid_credentials' });
+    }
+
+    // 3. نجاح تسجيل الدخول وإعادة بيانات الحساب
+    res.json({
+      ok: true,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email
+      }
+    });
+
+  } catch (err) {
+    console.error('Login Error:', err);
+    res.status(500).json({ error: 'Login failed' });
+  }
 });
 
 // ---- Re-verify (user resubmits identity document after a rejection) ----
