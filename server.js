@@ -59,8 +59,21 @@ const pool = mysql.createPool({
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
   ssl: { rejectUnauthorized: false }
+  
 });
+// 2. إدخال بيانات المستخدم الجديد في جدول users
+    const [result] = await pool.query(
+      'INSERT INTO users (username, email, password) VALUES (?, ?, ?)',
+      [name, email, password]
+    );
 
+    const userId = result.insertId;
+
+    // 3. إنشاء محفظة افتراضية للمستخدم الجديد برصيد صفر
+    await pool.query(
+      'INSERT INTO wallets (user_id, currency, balance, locked_balance) VALUES (?, ?, ?, ?)',
+      [userId, 'USDT', 0.00000000, 0.00000000]
+    );
 // ---- Platform commission ledger (trading fees collected) ----
 // Server-authoritative accumulator for trading fees. Each executed trade on
 // the client reports its fee here; it is tracked SEPARATELY from user balances
