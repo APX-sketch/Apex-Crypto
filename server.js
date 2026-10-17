@@ -397,44 +397,7 @@ app.use((req, res, next) => {
 app.use(cors({
   origin: ALLOWED_ORIGINS.includes('*') ? true : ALLOWED_ORIGINS,
 }));
-app.post('/api/auth/register', strictLimiter, async (req, res) => {
-  try {
-    const { name, email, password, country, idDocType, idImage } = req.body || {};
 
-    if (!name || String(name).trim().length < 2) return res.status(400).json({ error: 'bad_name' });
-    if (!EMAIL_RE.test(String(email || ''))) return res.status(400).json({ error: 'bad_email' });
-    if (!password || String(password).length < 8) return res.status(400).json({ error: 'weak_password' });
-
-    // التحقق من وجود الإيميل مسبقاً في قاعدة البيانات
-    const [existingUsers] = await pool.query('SELECT id FROM users WHERE email = ?', [email]);
-    if (existingUsers.length > 0) {
-      return res.status(409).json({ error: 'email_exists' });
-    }
-
-    // إدخال بيانات المستخدم في جدول users
-    const [result] = await pool.query(
-      'INSERT INTO users (username, email, password) VALUES (?, ?, ?)',
-      [name, email, password]
-    );
-
-    const userId = result.insertId;
-
-    // إنشاء محفظة افتراضية للمستخدم الجديد برصيد 0 في جدول wallets
-    await pool.query(
-      'INSERT INTO wallets (user_id, currency, balance, locked_balance) VALUES (?, ?, ?, ?)',
-      [userId, 'USDT', 0.00000000, 0.00000000]
-    );
-
-    res.json({
-      ok: true,
-      status: REQUIRE_APPROVAL ? 'pending' : 'approved',
-      user: { id: userId, username: name, email }
-    });
-  } catch (err) {
-    console.error('MySQL Register Error:', err);
-    res.status(500).json({ error: 'Database insertion failed' });
-  }
-});
 
 // ---- Rate limiting (anti API-abuse) ----
 // Global limiter for the whole API.
@@ -1729,4 +1692,42 @@ app.use(express.static(join(__dirname, 'public')));
 
 app.listen(3000, '0.0.0.0', () => {
     console.log('Server is running');
+});
+app.post('/api/auth/register', strictLimiter, async (req, res) => {
+  try {
+    const { name, email, password, country, idDocType, idImage } = req.body || {};
+
+    if (!name || String(name).trim().length < 2) return res.status(400).json({ error: 'bad_name' });
+    if (!EMAIL_RE.test(String(email || ''))) return res.status(400).json({ error: 'bad_email' });
+    if (!password || String(password).length < 8) return res.status(400).json({ error: 'weak_password' });
+
+    // التحقق من وجود الإيميل مسبقاً في قاعدة البيانات
+    const [existingUsers] = await pool.query('SELECT id FROM users WHERE email = ?', [email]);
+    if (existingUsers.length > 0) {
+      return res.status(409).json({ error: 'email_exists' });
+    }
+
+    // إدخال بيانات المستخدم في جدول users
+    const [result] = await pool.query(
+      'INSERT INTO users (username, email, password) VALUES (?, ?, ?)',
+      [name, email, password]
+    );
+
+    const userId = result.insertId;
+
+    // إنشاء محفظة افتراضية للمستخدم الجديد برصيد 0 في جدول wallets
+    await pool.query(
+      'INSERT INTO wallets (user_id, currency, balance, locked_balance) VALUES (?, ?, ?, ?)',
+      [userId, 'USDT', 0.00000000, 0.00000000]
+    );
+
+    res.json({
+      ok: true,
+      status: REQUIRE_APPROVAL ? 'pending' : 'approved',
+      user: { id: userId, username: name, email }
+    });
+  } catch (err) {
+    console.error('MySQL Register Error:', err);
+    res.status(500).json({ error: 'Database insertion failed' });
+  }
 });
