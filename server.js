@@ -1731,3 +1731,49 @@ app.post('/api/auth/register', strictLimiter, async (req, res) => {
     res.status(500).json({ error: 'Database insertion failed' });
   }
 });
+app.post('/api/wallet/withdraw', async (req, res) => {
+  const connection = await pool.getConnection();
+  try {
+    const userId = req.user?.id;
+    const { amount } = req.body;
+
+    if (!amount || amount <= 0) {
+      connection.release();
+      return res.status(400).json({ error: 'invalid_amount' });
+    }
+
+    // 1. بدء المعاملة المالية
+    await connection.beginTransaction();
+
+    // 2. قفل صف المحفظة مؤقتاً لمنع التلاعب المزدوج
+    const [wallets] = await connection.query(
+      'SELECT balance FROM wallets WHERE user_id = ? FOR UPDATE',
+      [userId]
+    );
+
+    if (wallets.length === 0 || wallets[0].balance < amount) {
+      await connection.rollback();
+      connection.release();
+      return res.status(400).json({ error: 'insufficient_balance' });
+    }
+
+    // 3. خصم المبلغ من رصيد محفظة المستخدم
+    await connection.query(
+      'UPDATE wallets SET balance = balance - ? WHERE user_id = ?',
+      [amount, userId]
+    );
+
+    // 4. اعتماد المعاملة نهائياً
+    await connection.commit();
+    connection.release();
+
+    res.json({ ok: true, message: 'Withdrawal successful' });
+
+  } catch (err) {
+    // 5. التراجع عن التغييرات في حال حدوث أي خطأ
+    await connection.rollback();
+    connection.release();
+    console.error('Transaction Error:', err);
+    res.status(500).json({ error: 'Transaction failed' });
+  }
+});
