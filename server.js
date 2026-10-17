@@ -50,6 +50,16 @@ const apx = new ApxStore(join(__dirname, 'data', 'apex-apx.json'), {
   bigOrder: Number(process.env.APX_BIG_ORDER || 5000),
   btcKlines: (iv) => _apxBtcKl[iv] || null,
 });
+const mysql = require('mysql2/promise');
+
+const pool = mysql.createPool({
+  host: process.env.DB_HOST,
+  port: process.env.DB_PORT,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  ssl: { rejectUnauthorized: false }
+});
 
 // ---- Platform commission ledger (trading fees collected) ----
 // Server-authoritative accumulator for trading fees. Each executed trade on
@@ -627,19 +637,37 @@ function validIdImage(v) {
 }
 
 // ---- Registration: creates a PENDING request for admin review ----
-app.post('/api/auth/register', strictLimiter, (req, res) => {
-  const { name, email, password, country, idDocType, idImage } = req.body || {};
-  if (!name || String(name).trim().length < 2) return res.status(400).json({ error: 'bad_name' });
-  if (!EMAIL_RE.test(String(email || ''))) return res.status(400).json({ error: 'bad_email' });
-  if (!password || String(password).length < 8) return res.status(400).json({ error: 'weak_password' });
-  if (!ID_DOC_TYPES.has(String(idDocType || ''))) return res.status(400).json({ error: 'bad_id_type' });
-  const img = validIdImage(idImage);
-  if (!img) return res.status(400).json({ error: 'bad_id_image' });
-  if (store.findUserByEmail(email)) return res.status(409).json({ error: 'email_exists' });
-  const user = store.createUser({ name, email, password, country, idDocType, idImage: img });
-  // If approval not required, auto-approve.
-  if (!REQUIRE_APPROVAL) store.setUserStatus(user.id, 'approved');
-  res.json({ ok: true, status: REQUIRE_APPROVAL ? 'pending' : 'approved', user: publicUser(store.findUserById(user.id)) });
+app.post('/api/auth/register', strictLimiter, async (req, res) => {
+  try {
+    const { name, email, password, country, idDocType, idImage } = req.body || {};
+
+    // التحقق من صحة المدخلات
+    if (!name || String(name).trim().length < 2) return res.status(400).json({ error: 'bad_name' });
+    if (!EMAIL_RE.test(String(email || ''))) return res.status(400).json({ error: 'bad_email' });
+    if (!password || String(password).length < 8) return res.status(400).json({ error: 'weak_password' });
+
+    // 1. التحقق مما إذا كان البريد الإلكتروني مستخدماً مسبقاً في MySQL
+    const [existingUsers] = await pool.query('SELECT id FROM users WHERE email = ?', [email]);
+    if (existingUsers.length > 0) {
+      return res.status(409).json({ error: 'email_exists' });
+    }
+
+    // 2. إدخال بيانات المستخدم الجديد في جدول users
+    const [result] = await pool.query(
+      'INSERT INTO users (username, email, password) VALUES (?, ?, ?)',
+      [name, email, password]
+    );
+
+    // 3. إرجاع استجابة النجاح
+    res.json({
+      ok: true,
+      status: REQUIRE_APPROVAL ? 'pending' : 'approved',
+      user: { id: result.insertId, username: name, email }
+    });
+  } catch (err) {
+    console.error('MySQL Register Error:', err);
+    res.status(500).json({ error: 'Database insertion failed' });
+  }
 });
 
 // ---- Login ----
