@@ -50,7 +50,7 @@ const apx = new ApxStore(join(__dirname, 'data', 'apex-apx.json'), {
   bigOrder: Number(process.env.APX_BIG_ORDER || 5000),
   btcKlines: (iv) => _apxBtcKl[iv] || null,
 });
-const mysql = require('mysql2/promise');
+import mysql from 'mysql2/promise';
 
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
