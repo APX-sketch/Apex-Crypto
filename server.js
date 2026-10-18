@@ -1331,13 +1331,37 @@ app.get('/api/admin/stats', requireAdmin, (req, res) => {
 
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   try {
-    const [users] = await pool.query('SELECT id, username, email, status, created_at FROM users');
+    const status = req.query.status ? String(req.query.status) : '';
+    
+    let query = 'SELECT id, username, email, status, created_at FROM users';
+    let queryParams = [];
+
+    if (status) {
+      query += ' WHERE status = ?';
+      queryParams.push(status);
+    }
+
+    const [rows] = await pool.query(query, queryParams);
+
+    // تحويل البيانات لتوافق الحقول التي تقرأها واجهة admin.html
+    const users = rows.map(u => ({
+      id: u.id,
+      uid: u.id,
+      name: u.username || u.email,
+      username: u.username,
+      email: u.email,
+      status: u.status || 'approved',
+      doc: null,
+      kycType: 'حساب مسجل'
+    }));
+
     res.json({ ok: true, users });
   } catch (err) {
-    console.error('Error fetching users for admin:', err);
+    console.error('Error fetching admin users:', err);
     res.status(500).json({ error: 'Failed to fetch users' });
   }
 });
+
 // Admin: fetch one user's identity document (base64 image) for review.
 app.get('/api/admin/users/:id/id-doc', requireAdmin, (req, res) => {
   const doc = store.getIdDoc(String(req.params.id));
