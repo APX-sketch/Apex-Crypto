@@ -1331,26 +1331,16 @@ app.get('/api/admin/stats', requireAdmin, (req, res) => {
 
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   try {
-    const status = req.query.status ? String(req.query.status) : '';
-    
-    let query = 'SELECT id, username, email, status, created_at FROM users';
-    let queryParams = [];
+    const [rows] = await pool.query('SELECT id, username, email, created_at FROM users');
 
-    if (status) {
-      query += ' WHERE status = ?';
-      queryParams.push(status);
-    }
-
-    const [rows] = await pool.query(query, queryParams);
-
-    // تحويل البيانات لتوافق الحقول التي تقرأها واجهة admin.html
     const users = rows.map(u => ({
       id: u.id,
       uid: u.id,
       name: u.username || u.email,
       username: u.username,
       email: u.email,
-      status: u.status || 'approved',
+      status: 'approved',
+      created_at: u.created_at,
       doc: null,
       kycType: 'حساب مسجل'
     }));
