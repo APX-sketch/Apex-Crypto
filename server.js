@@ -1331,26 +1331,42 @@ app.get('/api/admin/stats', requireAdmin, (req, res) => {
 
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT id, username, email, created_at FROM users');
+    const status = req.query.status ? String(req.query.status) : '';
+    
+    let query = 'SELECT id, username, email, created_at FROM users';
+    let queryParams = [];
 
-    const users = rows.map(u => ({
-      id: u.id,
-      uid: u.id,
-      name: u.username || u.email,
-      username: u.username,
-      email: u.email,
-      status: 'approved',
-      created_at: u.created_at,
-      doc: null,
-      kycType: 'حساب مسجل'
-    }));
+    if (status) {
+      query += ' WHERE status = ?';
+      queryParams.push(status);
+    }
+
+    const [rows] = await pool.query(query, queryParams);
+
+    const users = rows.map(u => {
+      // إحضار الوثيقة إن وجدت في الـ store
+      const docData = store.getIdDoc ? store.getIdDoc(String(u.id)) : null;
+
+      return {
+        id: u.id,
+        uid: u.id,
+        name: u.username || u.email,
+        username: u.username,
+        email: u.email,
+        status: u.status || 'pending',
+        createdAt: u.created_at ? new Date(u.created_at).toISOString() : new Date().toISOString(),
+        created_at: u.created_at ? new Date(u.created_at).toISOString() : new Date().toISOString(),
+        doc: docData ? docData.image : null,
+        kycType: docData ? (docData.type || 'بطاقة هوية') : 'لا توجد وثيقة'
+      };
+    });
 
     res.json({ ok: true, users });
   } catch (err) {
     console.error('Error fetching admin users:', err);
     res.status(500).json({ error: 'Failed to fetch users' });
   }
-});
+});    res.json({ ok: true, users });
 
 // Admin: fetch one user's identity document (base64 image) for review.
 app.get('/api/admin/users/:id/id-doc', requireAdmin, (req, res) => {
