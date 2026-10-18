@@ -79,13 +79,48 @@ const pool = mysql.createPool({
 // fresh deploy without the env var still keeps sessions stable across
 // restarts on the same disk.
 const SESSION_SECRET = (() => {
-  if (process.env.SESSION_SECRET) return String(process.env.SESSION_SECRET);
+  const isProd = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
+  const MIN_LEN = 32; // 256-bit minimum for an HMAC signing key
+
+  // 1) Preferred: an explicit env var (survives restarts & redeploys).
+  if (process.env.SESSION_SECRET) {
+    const s = String(process.env.SESSION_SECRET);
+    if (s.length < MIN_LEN) {
+      // A short secret critically weakens token signing. Refuse to boot in
+      // production; warn loudly in dev so it gets fixed before shipping.
+      const msg = '[SESSION_SECRET] too short (' + s.length + ' chars). Use >= ' + MIN_LEN +
+        ' random chars, e.g. `openssl rand -hex 32`.';
+      if (isProd) { console.error(msg + ' Refusing to start in production.'); process.exit(1); }
+      console.warn(msg + ' (continuing in non-production)');
+    }
+    const weak = new Set(['secret', 'changeme', 'password', 'session', 'dev', 'test']);
+    if (weak.has(s.toLowerCase()) && isProd) {
+      console.error('[SESSION_SECRET] a common/guessable value is set. Refusing to start in production.');
+      process.exit(1);
+    }
+    return s;
+  }
+
+  // 2) Production MUST set the env var explicitly — never silently invent one.
+  if (isProd) {
+    console.error('[SESSION_SECRET] not set. In production you MUST provide SESSION_SECRET ' +
+      '(e.g. `export SESSION_SECRET=$(openssl rand -hex 32)`). Refusing to start.');
+    process.exit(1);
+  }
+
+  // 3) Dev/local fallback: persist a strong random secret to data/ so sessions
+  //    stay valid across restarts on the same machine. Lock down file perms.
   try {
     const f = join(__dirname, 'data', 'session-secret.txt');
-    if (existsSync(f)) return readFileSync(f, 'utf8').trim();
+    if (existsSync(f)) {
+      const s = readFileSync(f, 'utf8').trim();
+      if (s.length >= MIN_LEN) return s;
+    }
     mkdirSync(dirname(f), { recursive: true });
     const s = randomBytes(48).toString('hex');
-    writeFileSync(f, s);
+    writeFileSync(f, s, { mode: 0o600 });
+    console.warn('[SESSION_SECRET] using a persisted random dev secret (data/session-secret.txt). ' +
+      'Set SESSION_SECRET via env for production.');
     return s;
   } catch (e) { return randomBytes(48).toString('hex'); }
 })();
@@ -372,6 +407,70 @@ function logSecurity(req, opts) {
     ...opts,
   });
 }
+
+// ---- Operations log: withdrawals + KYC/verification lifecycle ----
+// A business-level audit trail, SEPARATE from the money-safety security log and
+// the admin action log. It records user-facing operations the operator cares
+// about day to day: withdrawal requests (ok / rejected) and identity
+// verification events (submitted at registration, resubmitted, approved,
+// rejected, banned). Persisted in its own JSON file and exposed to the admin
+// via GET /api/admin/ops-log.
+const OPS_FILE = join(__dirname, 'data', 'apex-ops.json');
+function loadOps() {
+  try {
+    if (existsSync(OPS_FILE)) {
+      const d = JSON.parse(readFileSync(OPS_FILE, 'utf8'));
+      return { count: Number(d.count) || 0, entries: Array.isArray(d.entries) ? d.entries : [] };
+    }
+  } catch (e) { /* ignore corrupt / missing file */ }
+  return { count: 0, entries: [] };
+}
+const opsLog = loadOps();
+function saveOps() {
+  try {
+    mkdirSync(dirname(OPS_FILE), { recursive: true });
+    writeFileSync(OPS_FILE, JSON.stringify(opsLog));
+  } catch (e) { console.warn('[ops] save failed:', e.message); }
+}
+// Core writer. category: 'withdraw' | 'kyc' | 'info'. status: 'ok' | 'rejected'
+// | 'pending' | 'info'.
+function logOpsEvent({ user = null, ip = '', ua = '', path = '', category = 'info', kind = '',
+                       status = 'info', amount = null, currency = '', detail = '', meta = null }) {
+  const entry = {
+    id: 'O' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    at: Date.now(),
+    category: String(category || 'info').slice(0, 20),
+    kind: String(kind || '').slice(0, 40),
+    status: String(status || 'info').slice(0, 16),
+    amount: (amount === undefined || amount === null) ? null : (Number(amount) || 0),
+    currency: currency ? String(currency).toUpperCase().slice(0, 12) : '',
+    detail: String(detail || '').slice(0, 300),
+    userId: user ? String(user.id || user.uid || '') : '',
+    uid: user ? (user.uid || '') : '',
+    userName: user ? (user.name || '') : '',
+    userEmail: user ? (user.email || '') : '',
+    ip: ip || '', ua: String(ua || '').slice(0, 180), path: String(path || '').slice(0, 80),
+    meta: (meta && typeof meta === 'object') ? meta : null,
+  };
+  opsLog.entries.unshift(entry);
+  opsLog.count += 1;
+  if (opsLog.entries.length > 2000) opsLog.entries.length = 2000; // cap stored history
+  saveOps();
+  const money = entry.currency ? (entry.amount + ' ' + entry.currency) : '';
+  console.log(`[ops] ${entry.category}/${entry.kind} status=${entry.status} user=${entry.userEmail || entry.userId || '-'} ${money} ${entry.detail}`);
+  return entry;
+}
+// Convenience wrapper off an Express req (uses req.user when present; callers
+// without an authenticated req — e.g. register / admin actions — pass `user`).
+function logOps(req, opts) {
+  return logOpsEvent(Object.assign({
+    user: (req && req.user) ? req.user : null,
+    ip: clientIp(req),
+    ua: (req && req.headers && req.headers['user-agent']) || '',
+    path: req ? (req.method + ' ' + (req.originalUrl || req.url || '')).slice(0, 80) : '',
+  }, opts || {}));
+}
+
 // Scan a client-sent deltas object for tamper signatures (NaN / Infinity).
 function inspectDeltas(deltas) {
   const bad = [];
@@ -775,8 +874,14 @@ async function requireUser(req, res, next) {
     const dbu = await dbGetUserById(uid);
     if (!dbu) return res.status(401).json({ error: 'unauthorized' });
     if (dbu.status === 'banned') return res.status(403).json({ error: 'banned' });
+    // وحّد دفتر الأرصدة: اضمن وجود سجل store مُفتاح بمعرّف MySQL (مصدر واحد للرصيد)
     let su = null;
-    try { su = store.findUserById(String(dbu.id)); } catch (e) { /* store may not have this user */ }
+    try {
+      su = store.ensureUser(String(dbu.id), {
+        uid: dbu.id, name: dbu.name || dbu.username || dbu.email,
+        email: dbu.email, country: dbu.country || '', status: dbu.status || 'approved',
+      });
+    } catch (e) { /* store may be unavailable */ }
     req.user = {
       id: String(dbu.id), uid: dbu.id,
       name: dbu.name || dbu.username || dbu.email,
@@ -877,6 +982,11 @@ app.post('/api/auth/reverify', strictLimiter, requireUser, async (req, res) => {
       [req.user.uid, String(idDocType), img]);
     await pool.query('UPDATE users SET status = ?, reject_reason = NULL WHERE id = ?', ['pending', req.user.uid]);
     try { store.setIdDoc(req.user.id, idDocType, img); } catch (e) {}
+    try {
+      logOps(req, { category: 'kyc', kind: 'kyc_resubmitted', status: 'pending',
+        detail: 'إعادة رفع وثيقة هوية (' + String(idDocType) + ') — بانتظار المراجعة',
+        meta: { idDocType: String(idDocType) } });
+    } catch (e) {}
     const u = await dbGetUserById(req.user.uid);
     res.json({ ok: true, status: 'pending', user: dbPublicUser(u) });
   } catch (err) {
@@ -1589,7 +1699,7 @@ app.get('/api/admin/users/:id/id-doc', requireAdmin, async (req, res) => {
 });
 
 // Admin: change a user's KYC/approval status in MySQL (source of truth).
-async function adminSetStatus(id, status, reason, action, res) {
+async function adminSetStatus(id, status, reason, action, res, req) {
   try {
     const [r] = await pool.query(
       'UPDATE users SET status = ?, reject_reason = ? WHERE id = ?',
@@ -1597,6 +1707,19 @@ async function adminSetStatus(id, status, reason, action, res) {
     if (!r.affectedRows) return res.status(404).json({ error: 'not_found' });
     const u = await dbGetUserById(id);
     try { store.logAdmin && store.logAdmin({ admin: 'admin', action: action || status, targetId: String(id), targetEmail: u && u.email, targetName: u && (u.name || u.username) }); } catch (e) {}
+    // سجل العمليات: قرار التوثيق / الحظر
+    try {
+      const kindMap = { approve: 'kyc_approved', reject: 'kyc_rejected', ban: 'account_banned', unban: 'account_unbanned' };
+      const statusMap = { approve: 'ok', reject: 'rejected', ban: 'rejected', unban: 'ok' };
+      logOps(req, {
+        user: u ? { id: String(id), uid: u.id, name: u.name || u.username || u.email, email: u.email } : { id: String(id) },
+        category: 'kyc',
+        kind: kindMap[action] || ('status_' + status),
+        status: statusMap[action] || 'info',
+        detail: 'قرار الأدمن: ' + (action || status) + (reason ? (' — ' + reason) : ''),
+        meta: { status, reason: reason || '' },
+      });
+    } catch (e) {}
     res.json({ ok: true, user: dbPublicUser(u) });
   } catch (err) {
     console.error('adminSetStatus error:', err);
@@ -1605,18 +1728,18 @@ async function adminSetStatus(id, status, reason, action, res) {
 }
 
 app.post('/api/admin/users/:id/approve', requireAdmin, (req, res) =>
-  adminSetStatus(req.params.id, 'approved', null, 'approve', res));
+  adminSetStatus(req.params.id, 'approved', null, 'approve', res, req));
 
 app.post('/api/admin/users/:id/reject', requireAdmin, (req, res) => {
   const reason = String((req.body || {}).reason || '').slice(0, 300);
-  adminSetStatus(req.params.id, 'rejected', reason, 'reject', res);
+  adminSetStatus(req.params.id, 'rejected', reason, 'reject', res, req);
 });
 
 app.post('/api/admin/users/:id/ban', requireAdmin, (req, res) =>
-  adminSetStatus(req.params.id, 'banned', null, 'ban', res));
+  adminSetStatus(req.params.id, 'banned', null, 'ban', res, req));
 
 app.post('/api/admin/users/:id/unban', requireAdmin, (req, res) =>
-  adminSetStatus(req.params.id, 'approved', null, 'unban', res));
+  adminSetStatus(req.params.id, 'approved', null, 'unban', res, req));
 
 app.delete('/api/admin/users/:id', requireAdmin, async (req, res) => {
   try {
@@ -1638,8 +1761,14 @@ app.delete('/api/admin/users/:id', requireAdmin, async (req, res) => {
 async function adminResolveUser(id) {
   const dbu = await dbGetUserById(id);
   if (!dbu) return null;
+  // نفس التوحيد: اضمن وجود سجل الدفتر الموحّد بمعرّف MySQL
   let su = null;
-  try { su = store.findUserById(String(dbu.id)); } catch (e) {}
+  try {
+    su = store.ensureUser(String(dbu.id), {
+      uid: dbu.id, name: dbu.name || dbu.username || dbu.email,
+      email: dbu.email, country: dbu.country || '', status: dbu.status || 'approved',
+    });
+  } catch (e) {}
   return {
     id: String(dbu.id), uid: dbu.id,
     name: dbu.name || dbu.username || dbu.email,
@@ -1765,6 +1894,29 @@ app.get('/api/admin/security-logs', requireAdmin, (req, res) => {
   if (sev === 'critical' || sev === 'warning' || sev === 'info') logs = entries.filter((e) => e.severity === sev);
   res.json({ ok: true, summary, logs: logs.slice(0, 200) });
 });
+// ---- Admin: OPERATIONS log (withdrawals + KYC/verification lifecycle) ----
+// Returns the business audit trail with a quick summary. Filters:
+//   ?category=withdraw|kyc   ?status=ok|rejected|pending   ?userId=<id>
+app.get('/api/admin/ops-log', requireAdmin, (req, res) => {
+  const entries = opsLog.entries;
+  const dayAgo = Date.now() - 86400000;
+  const summary = {
+    total: opsLog.count,
+    stored: entries.length,
+    withdraw: entries.filter((e) => e.category === 'withdraw').length,
+    kyc: entries.filter((e) => e.category === 'kyc').length,
+    rejected: entries.filter((e) => e.status === 'rejected').length,
+    last24h: entries.filter((e) => e.at >= dayAgo).length,
+  };
+  const cat = String(req.query.category || '').trim();
+  const st = String(req.query.status || '').trim();
+  const uid = String(req.query.userId || '').trim();
+  let logs = entries;
+  if (cat) logs = logs.filter((e) => e.category === cat);
+  if (st) logs = logs.filter((e) => e.status === st);
+  if (uid) logs = logs.filter((e) => String(e.userId) === uid || String(e.uid) === uid);
+  res.json({ ok: true, summary, logs: logs.slice(0, 300) });
+});
 // ---- Admin: live order book (all pending + recent executed orders) ----
 // Lets the admin monitor every account's server-side orders in real time:
 // open (pending) limit orders plus the most recent filled/canceled ones,
@@ -1837,14 +1989,17 @@ app.get('/api/admin/liquidity', requireAdmin, async (req, res) => {
     }
     const rows = users.map((u) => {
       const uid = String(u.id);
-      // ادمج أرصدة جدول wallets مع أي أرصدة في دفتر store (إن وجدت)
-      const balances = Object.assign({}, byUser[uid] || {});
+      // الدفتر الموحّد (store) هو المصدر الرسمي للرصيد. نستخدم أرصدته
+      // إن وجدت، ونستخدم جدول wallets كاحتياطي فقط لتجنّب العدّ المزدوج.
+      let balances;
       try {
         const su = store.findUserById(uid);
-        if (su && su.balances) for (const k in su.balances) {
-          balances[k] = (Number(balances[k]) || 0) + Number(su.balances[k] || 0);
+        if (su && su.balances && Object.keys(su.balances).length) {
+          balances = Object.assign({}, su.balances);
+        } else {
+          balances = Object.assign({}, byUser[uid] || {});
         }
-      } catch (e) { /* ignore */ }
+      } catch (e) { balances = Object.assign({}, byUser[uid] || {}); }
       const balanceUsd = valueUsd(balances);
       return {
         id: uid, uid: u.id,
@@ -2065,6 +2220,23 @@ app.post('/api/auth/register', strictLimiter, async (req, res) => {
       [userId, 'USDT', 0.00000000, 0.00000000]
     );
 
+    // أنشئ سجل الدفتر الموحّد (store) بنفس معرّف MySQL لتوحيد الأرصدة
+    try { store.ensureUser(String(userId), { uid: userId, name: cleanName, email: emailNorm, country: cleanCountry, status }); } catch (e) {}
+
+    // سجل العمليات: إنشاء حساب + حالة التوثيق
+    try {
+      logOps(req, {
+        user: { id: String(userId), uid: userId, name: cleanName, email: emailNorm },
+        category: 'kyc',
+        kind: (img && docType) ? 'kyc_submitted' : 'account_created',
+        status: (status === 'approved') ? 'ok' : 'pending',
+        detail: (img && docType)
+          ? ('تسجيل حساب مع رفع وثيقة (' + docType + ') — بانتظار المراجعة')
+          : 'تسجيل حساب جديد',
+        meta: { status, hasDoc: !!(img && docType) },
+      });
+    } catch (e) {}
+
     // أصدر توكناً حتى يستطيع المستخدم دخول واجهة الانتظار (تحت المراجعة)
     const token = signUserToken(userId);
     res.json({
@@ -2078,53 +2250,70 @@ app.post('/api/auth/register', strictLimiter, async (req, res) => {
     res.status(500).json({ error: 'Database insertion failed' });
   }
 });
-app.post('/api/wallet/withdraw', requireUser, async (req, res) => {
-  const connection = await pool.getConnection();
-  try {
-    const userId = req.user.uid;
-    const amount = Number((req.body || {}).amount);
+// ---- Withdraw (UNIFIED balance ledger) ----
+// Money safety + unification: spot balances now live in ONE place — the `store`
+// ledger keyed by the MySQL id string (same balance the trading pages spend).
+// Earlier this route checked a SEPARATE MySQL `wallets` row that was always 0
+// for new users, so every withdrawal failed with insufficient_balance even
+// when the user clearly had funds. We now debit the unified ledger atomically
+// (store.debitBalance rejects any below-zero result), respect funds locked by
+// open orders, record a user transaction, mirror the new balance into the
+// MySQL wallets table for the admin liquidity view, and write an ops-log entry.
+app.post('/api/wallet/withdraw', strictLimiter, requireUser, async (req, res) => {
+  const body = req.body || {};
+  const amount = Number(body.amount);
+  const currency = String(body.currency || 'USDT').toUpperCase().slice(0, 12);
+  const address = String(body.address || body.toAddress || '').trim().slice(0, 120);
 
-    if (!userId) {
-      connection.release();
-      return res.status(401).json({ error: 'unauthorized' });
-    }
-    if (!amount || !isFinite(amount) || amount <= 0) {
-      connection.release();
-      return res.status(400).json({ error: 'invalid_amount' });
-    }
-
-    // 1. بدء المعاملة المالية
-    await connection.beginTransaction();
-
-    // 2. قفل صف المحفظة مؤقتاً لمنع التلاعب المزدوج
-    const [wallets] = await connection.query(
-      'SELECT balance FROM wallets WHERE user_id = ? FOR UPDATE',
-      [userId]
-    );
-
-    if (wallets.length === 0 || wallets[0].balance < amount) {
-      await connection.rollback();
-      connection.release();
-      return res.status(400).json({ error: 'insufficient_balance' });
-    }
-
-    // 3. خصم المبلغ من رصيد محفظة المستخدم
-    await connection.query(
-      'UPDATE wallets SET balance = balance - ? WHERE user_id = ?',
-      [amount, userId]
-    );
-
-    // 4. اعتماد المعاملة نهائياً
-    await connection.commit();
-    connection.release();
-
-    res.json({ ok: true, message: 'Withdrawal successful' });
-
-  } catch (err) {
-    // 5. التراجع عن التغييرات في حال حدوث أي خطأ
-    await connection.rollback();
-    connection.release();
-    console.error('Transaction Error:', err);
-    res.status(500).json({ error: 'Transaction failed' });
+  if (!/^[A-Z0-9]{2,12}$/.test(currency)) {
+    return res.status(400).json({ error: 'bad_currency' });
   }
+  if (!amount || !isFinite(amount) || amount <= 0) {
+    return res.status(400).json({ error: 'invalid_amount' });
+  }
+
+  // المتاح = الرصيد الموحّد − المبالغ المحجوزة لأوامر مفتوحة
+  const lockedForCcy = Number((lockedBalances(req.user.id) || {})[currency]) || 0;
+  const current = Number((req.user.balances || {})[currency]) || 0;
+  const spendable = current - lockedForCcy;
+  if (spendable + 1e-9 < amount) {
+    logSecurity(req, { kind: 'withdraw_insufficient', severity: 'warning',
+      detail: 'محاولة سحب تتجاوز الرصيد المتاح (رُفضت)',
+      meta: { currency, amount, current, locked: lockedForCcy } });
+    logOps(req, { category: 'withdraw', kind: 'withdraw_rejected', status: 'rejected',
+      amount, currency, detail: 'رصيد غير كافٍ', meta: { address, current, locked: lockedForCcy } });
+    return res.status(400).json({ error: 'insufficient_balance' });
+  }
+
+  // اخصم من الدفتر الموحّد ذرّياً (يرفض أي رصيد سالب)
+  const u = store.debitBalance(req.user.id, currency, amount);
+  if (!u) {
+    logSecurity(req, { kind: 'withdraw_insufficient', severity: 'critical',
+      detail: 'خصم سحب تجاوز الرصيد (خلق مال — رُفض)', meta: { currency, amount } });
+    logOps(req, { category: 'withdraw', kind: 'withdraw_rejected', status: 'rejected',
+      amount, currency, detail: 'فشل الخصم الذرّي', meta: { address } });
+    return res.status(400).json({ error: 'insufficient_balance' });
+  }
+
+  // سجّل الحركة في دفتر معاملات المستخدم للمراجعة
+  try {
+    store.addTransaction(req.user.id, {
+      type: 'transfer_out', amount, currency,
+      counterparty: address || 'سحب خارجي', note: 'طلب سحب',
+    });
+  } catch (e) {}
+
+  // زامن جدول wallets في MySQL مع الدفتر الموحّد (لعرض سيولة الأدمن)
+  const newBal = Number((u.balances || {})[currency]) || 0;
+  try {
+    await pool.query(
+      'INSERT INTO wallets (user_id, currency, balance, locked_balance) VALUES (?, ?, ?, 0) ' +
+      'ON DUPLICATE KEY UPDATE balance = VALUES(balance)',
+      [req.user.uid, currency, newBal]);
+  } catch (e) { console.warn('[withdraw] wallet mirror failed:', e.message); }
+
+  logOps(req, { category: 'withdraw', kind: 'withdraw_ok', status: 'ok',
+    amount, currency, detail: 'سحب ناجح', meta: { address, newBalance: newBal } });
+
+  res.json({ ok: true, message: 'Withdrawal successful', currency, amount, balance: newBal, balances: u.balances || {} });
 });
