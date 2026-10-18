@@ -1329,11 +1329,15 @@ app.get('/api/admin/stats', requireAdmin, (req, res) => {
   res.json({ ok: true, stats: store.stats() });
 });
 
-app.get('/api/admin/users', requireAdmin, (req, res) => {
-  const status = req.query.status ? String(req.query.status) : '';
-  res.json({ ok: true, users: store.listUsers(status).map(publicUser) });
+app.get('/api/admin/users', requireAdmin, async (req, res) => {
+  try {
+    const [users] = await pool.query('SELECT id, username, email, status, created_at FROM users');
+    res.json({ ok: true, users });
+  } catch (err) {
+    console.error('Error fetching users for admin:', err);
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
 });
-
 // Admin: fetch one user's identity document (base64 image) for review.
 app.get('/api/admin/users/:id/id-doc', requireAdmin, (req, res) => {
   const doc = store.getIdDoc(String(req.params.id));
