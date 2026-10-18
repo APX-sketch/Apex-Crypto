@@ -1344,8 +1344,7 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
     const [rows] = await pool.query(query, queryParams);
 
     const users = rows.map(u => {
-      // إحضار الوثيقة إن وجدت في الـ store
-      const docData = store.getIdDoc ? store.getIdDoc(String(u.id)) : null;
+      const docData = (typeof store !== 'undefined' && store.getIdDoc) ? store.getIdDoc(String(u.id)) : null;
 
       return {
         id: u.id,
@@ -1366,7 +1365,7 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
     console.error('Error fetching admin users:', err);
     res.status(500).json({ error: 'Failed to fetch users' });
   }
-});    res.json({ ok: true, users });
+});
 
 // Admin: fetch one user's identity document (base64 image) for review.
 app.get('/api/admin/users/:id/id-doc', requireAdmin, (req, res) => {
