@@ -10,7 +10,7 @@ import rateLimit from 'express-rate-limit';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual, scryptSync } from 'node:crypto';
 
 import { PriceCache } from './lib/priceCache.js';
 import { PortfolioStore } from './lib/portfolio.js';
@@ -61,6 +61,161 @@ const pool = mysql.createPool({
   ssl: { rejectUnauthorized: false }
   
 });
+
+// ============================================================
+//  MySQL USER LAYER (identity + status + KYC) — source of truth
+// ------------------------------------------------------------
+//  The users table in MySQL is the single source of truth for a user's
+//  identity and KYC/approval status. The JSON `store` stays as the ledger
+//  for balances / orders / notifications / transactions, keyed by the SAME
+//  user id (as a string). This block adds: idempotent schema bootstrap,
+//  password hashing (scrypt) with a legacy-plaintext upgrade path, and
+//  stateless signed session tokens so login issues a token that the user
+//  routes actually accept.
+// ============================================================
+
+// Stable secret for signing user session tokens. Prefer an env var so tokens
+// survive restarts; fall back to a persisted random secret in data/ so a
+// fresh deploy without the env var still keeps sessions stable across
+// restarts on the same disk.
+const SESSION_SECRET = (() => {
+  if (process.env.SESSION_SECRET) return String(process.env.SESSION_SECRET);
+  try {
+    const f = join(__dirname, 'data', 'session-secret.txt');
+    if (existsSync(f)) return readFileSync(f, 'utf8').trim();
+    mkdirSync(dirname(f), { recursive: true });
+    const s = randomBytes(48).toString('hex');
+    writeFileSync(f, s);
+    return s;
+  } catch (e) { return randomBytes(48).toString('hex'); }
+})();
+const TOKEN_TTL_MS = Number(process.env.SESSION_TTL_MS || 30 * 24 * 60 * 60 * 1000); // 30 days
+
+function b64url(buf) {
+  return Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+// Hash a password with scrypt. Format: s2$<saltHex>$<hashHex>
+function hashPassword(plain) {
+  const salt = randomBytes(16);
+  const hash = scryptSync(String(plain), salt, 64);
+  return 's2$' + salt.toString('hex') + '$' + hash.toString('hex');
+}
+// Verify a password. Returns { ok, legacy } — `legacy:true` means the stored
+// value was plaintext (pre-hashing) and matched, so the caller should re-hash
+// and persist the upgraded value.
+function verifyPassword(plain, stored) {
+  const s = String(stored == null ? '' : stored);
+  if (s.startsWith('s2$')) {
+    const parts = s.split('$');
+    if (parts.length !== 3) return { ok: false, legacy: false };
+    try {
+      const salt = Buffer.from(parts[1], 'hex');
+      const expected = Buffer.from(parts[2], 'hex');
+      const got = scryptSync(String(plain), salt, expected.length);
+      return { ok: expected.length === got.length && timingSafeEqual(expected, got), legacy: false };
+    } catch (e) { return { ok: false, legacy: false }; }
+  }
+  // Legacy plaintext comparison (constant-time-ish).
+  const a = Buffer.from(String(plain));
+  const b = Buffer.from(s);
+  const ok = a.length === b.length && timingSafeEqual(a, b);
+  return { ok, legacy: ok };
+}
+// Issue a stateless signed session token for a user id.
+function signUserToken(userId) {
+  const payload = String(userId) + '.' + (Date.now() + TOKEN_TTL_MS);
+  const sig = createHmac('sha256', SESSION_SECRET).update(payload).digest();
+  return b64url(payload) + '.' + b64url(sig);
+}
+// Verify a user token; returns the user id string or null.
+function verifyUserToken(token) {
+  try {
+    const t = String(token || '');
+    const dot = t.lastIndexOf('.');
+    if (dot <= 0) return null;
+    const payloadB64 = t.slice(0, dot);
+    const sigB64 = t.slice(dot + 1);
+    const payload = Buffer.from(payloadB64.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+    const expected = createHmac('sha256', SESSION_SECRET).update(payload).digest();
+    const got = Buffer.from(sigB64.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+    if (expected.length !== got.length || !timingSafeEqual(expected, got)) return null;
+    const [id, exp] = payload.split('.');
+    if (!id || Number(exp) < Date.now()) return null;
+    return String(id);
+  } catch (e) { return null; }
+}
+
+// Read a single user row (identity + status) by id / email.
+async function dbGetUserById(id) {
+  const [rows] = await pool.query(
+    'SELECT id, username, name, email, password, status, country, reject_reason, created_at, last_seen FROM users WHERE id = ? LIMIT 1',
+    [id]);
+  return rows[0] || null;
+}
+async function dbGetUserByEmail(email) {
+  const [rows] = await pool.query(
+    'SELECT id, username, name, email, password, status, country, reject_reason, created_at, last_seen FROM users WHERE email = ? LIMIT 1',
+    [String(email).trim().toLowerCase()]);
+  return rows[0] || null;
+}
+// Shape a DB user row into the public object the frontend/admin expect.
+function dbPublicUser(u) {
+  if (!u) return null;
+  return {
+    id: String(u.id), uid: u.id,
+    name: u.name || u.username || u.email,
+    username: u.username || u.name || u.email,
+    email: u.email,
+    country: u.country || '',
+    status: u.status || 'pending',
+    rejectReason: u.reject_reason || '',
+    createdAt: u.created_at ? new Date(u.created_at).toISOString() : null,
+  };
+}
+
+// Idempotent schema bootstrap: add the columns / tables the app needs if they
+// are missing. Safe to run on every startup (checks information_schema first,
+// so it never errors on an already-migrated DB).
+async function ensureColumn(table, column, ddl) {
+  const [rows] = await pool.query(
+    'SELECT COUNT(*) AS n FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?',
+    [table, column]);
+  if (rows[0] && rows[0].n === 0) {
+    await pool.query('ALTER TABLE `' + table + '` ADD COLUMN ' + ddl);
+    console.log('[schema] added ' + table + '.' + column);
+  }
+}
+async function ensureSchema() {
+  // users: identity columns already exist (id, username, email, password).
+  await ensureColumn('users', 'name', '`name` VARCHAR(120) NULL');
+  await ensureColumn('users', 'status', "`status` VARCHAR(20) NOT NULL DEFAULT 'pending'");
+  await ensureColumn('users', 'country', '`country` VARCHAR(80) NULL');
+  await ensureColumn('users', 'reject_reason', '`reject_reason` VARCHAR(400) NULL');
+  await ensureColumn('users', 'created_at', '`created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP');
+  await ensureColumn('users', 'last_seen', '`last_seen` BIGINT NOT NULL DEFAULT 0');
+  // identity documents (KYC): one row per user, holds the base64 image.
+  await pool.query(
+    'CREATE TABLE IF NOT EXISTS id_documents (' +
+    ' user_id INT NOT NULL PRIMARY KEY,' +
+    ' doc_type VARCHAR(40) NULL,' +
+    ' image LONGTEXT NULL,' +
+    ' created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP' +
+    ')');
+  // wallets (balance ledger) — register already inserts into this.
+  await pool.query(
+    'CREATE TABLE IF NOT EXISTS wallets (' +
+    ' id INT AUTO_INCREMENT PRIMARY KEY,' +
+    ' user_id INT NOT NULL,' +
+    ' currency VARCHAR(12) NOT NULL DEFAULT "USDT",' +
+    ' balance DECIMAL(30,8) NOT NULL DEFAULT 0,' +
+    ' locked_balance DECIMAL(30,8) NOT NULL DEFAULT 0,' +
+    ' UNIQUE KEY uq_user_cur (user_id, currency)' +
+    ')');
+}
+ensureSchema()
+  .then(() => console.log('[schema] ensured OK'))
+  .catch((e) => console.error('[schema] ensure FAILED:', e.message));
+
 // ---- Platform commission ledger (trading fees collected) ----
 // Server-authoritative accumulator for trading fees. Each executed trade on
 // the client reports its fee here; it is tracked SEPARATELY from user balances
@@ -610,15 +765,36 @@ function bearer(req) {
   return h.startsWith('Bearer ') ? h.slice(7).trim() : '';
 }
 
-// User auth guard
-function requireUser(req, res, next) {
-  const uid = store.userIdForToken(bearer(req));
-  if (!uid) return res.status(401).json({ error: 'unauthorized' });
-  const user = store.findUserById(uid);
-  if (!user) return res.status(401).json({ error: 'unauthorized' });
-  if (user.status === 'banned') return res.status(403).json({ error: 'banned' });
-  req.user = user;
-  next();
+// User auth guard — verifies the signed session token and loads the user
+// from MySQL (source of truth for identity + status). Balances / deposits are
+// merged from the JSON store ledger, keyed by the SAME user id (as a string).
+async function requireUser(req, res, next) {
+  try {
+    const uid = verifyUserToken(bearer(req));
+    if (!uid) return res.status(401).json({ error: 'unauthorized' });
+    const dbu = await dbGetUserById(uid);
+    if (!dbu) return res.status(401).json({ error: 'unauthorized' });
+    if (dbu.status === 'banned') return res.status(403).json({ error: 'banned' });
+    let su = null;
+    try { su = store.findUserById(String(dbu.id)); } catch (e) { /* store may not have this user */ }
+    req.user = {
+      id: String(dbu.id), uid: dbu.id,
+      name: dbu.name || dbu.username || dbu.email,
+      username: dbu.username || dbu.name || dbu.email,
+      email: dbu.email,
+      status: dbu.status || 'pending',
+      country: dbu.country || '',
+      balances: (su && su.balances) ? su.balances : {},
+      depositAddress: (su && su.depositAddress) ? su.depositAddress : '',
+      lastSeen: (su && su.lastSeen) ? su.lastSeen : 0,
+    };
+    // keep the "last active" marker fresh for the admin online indicator
+    try { pool.query('UPDATE users SET last_seen = ? WHERE id = ?', [Date.now(), dbu.id]); } catch (e) {}
+    next();
+  } catch (e) {
+    console.error('requireUser error:', e.message);
+    res.status(500).json({ error: 'auth_failed' });
+  }
 }
 
 // Admin auth guard
@@ -647,45 +823,36 @@ function validIdImage(v) {
 app.post('/api/auth/login', strictLimiter, async (req, res) => {
   try {
     const { email, password } = req.body || {};
-
     if (!email || !password) {
       return res.status(400).json({ error: 'invalid_credentials' });
     }
 
-    // 1. البحث عن المستخدم في قاعدة بيانات MySQL
-    const [rows] = await pool.query(
-      'SELECT id, username, email, password FROM users WHERE email = ?',
-      [email]
-    );
-
-    if (rows.length === 0) {
+    // 1. البحث عن المستخدم في MySQL (مصدر الحقيقة للهوية والحالة)
+    const user = await dbGetUserByEmail(email);
+    if (!user) {
       return res.status(401).json({ error: 'invalid_credentials' });
     }
 
-    const user = rows[0];
-
-    // 2. التحقق من مطابقة كلمة المرور
-    if (user.password !== password) {
+    // 2. التحقق من كلمة المرور (مع ترقية الكلمات القديمة غير المشفّرة)
+    const vr = verifyPassword(password, user.password);
+    if (!vr.ok) {
       return res.status(401).json({ error: 'invalid_credentials' });
     }
+    if (vr.legacy) {
+      try { await pool.query('UPDATE users SET password = ? WHERE id = ?', [hashPassword(password), user.id]); }
+      catch (e) { console.warn('[login] password upgrade failed:', e.message); }
+    }
 
-    // 3. نجاح تسجيل الدخول وإعادة بيانات الحساب
-// نجاح تسجيل الدخول وإعادة بيانات الحساب والـ Token
-    const token = 'mock-jwt-token-' + user.id; // أو التوكن الحقيقي إذا كنت تستخدم JWT
-    
-    res.json({
-      ok: true,
-      token: token,
-      user: {
-        id: user.id,
-        uid: user.id,
-        username: user.username,
-        name: user.username,
-        email: user.email,
-        status: 'approved'
-      }
-    });
-    
+    // 3. الحسابات المحظورة ممنوعة من الدخول
+    if (user.status === 'banned') {
+      return res.status(403).json({ error: 'banned' });
+    }
+
+    // 4. نجاح الدخول: أصدر توكناً موقّعاً حقيقياً، وأعد الحالة الفعلية
+    //    من قاعدة البيانات (لا توثيق تلقائي بعد الآن).
+    try { await pool.query('UPDATE users SET last_seen = ? WHERE id = ?', [Date.now(), user.id]); } catch (e) {}
+    const token = signUserToken(user.id);
+    res.json({ ok: true, token, status: user.status || 'pending', user: dbPublicUser(user) });
   } catch (err) {
     console.error('Login Error:', err);
     res.status(500).json({ error: 'Login failed' });
@@ -697,14 +864,25 @@ app.post('/api/auth/login', strictLimiter, async (req, res) => {
 // A logged-in user uploads a new document; their account goes back to
 // 'pending' for another admin review. Carries a base64 image, so this route
 // also gets the larger JSON body limit (see the body-parser switch above).
-app.post('/api/auth/reverify', strictLimiter, requireUser, (req, res) => {
-  const { idDocType, idImage } = req.body || {};
-  if (!ID_DOC_TYPES.has(String(idDocType || ''))) return res.status(400).json({ error: 'bad_id_type' });
-  const img = validIdImage(idImage);
-  if (!img) return res.status(400).json({ error: 'bad_id_image' });
-  store.setIdDoc(req.user.id, idDocType, img);
-  const u = store.setUserStatus(req.user.id, 'pending', '');
-  res.json({ ok: true, status: 'pending', user: publicUser(u) });
+app.post('/api/auth/reverify', strictLimiter, requireUser, async (req, res) => {
+  try {
+    const { idDocType, idImage } = req.body || {};
+    if (!ID_DOC_TYPES.has(String(idDocType || ''))) return res.status(400).json({ error: 'bad_id_type' });
+    const img = validIdImage(idImage);
+    if (!img) return res.status(400).json({ error: 'bad_id_image' });
+    // احفظ الوثيقة الجديدة وأعد الحساب لـ pending لمراجعة الأدمن
+    await pool.query(
+      'INSERT INTO id_documents (user_id, doc_type, image) VALUES (?, ?, ?) ' +
+      'ON DUPLICATE KEY UPDATE doc_type = VALUES(doc_type), image = VALUES(image), created_at = CURRENT_TIMESTAMP',
+      [req.user.uid, String(idDocType), img]);
+    await pool.query('UPDATE users SET status = ?, reject_reason = NULL WHERE id = ?', ['pending', req.user.uid]);
+    try { store.setIdDoc(req.user.id, idDocType, img); } catch (e) {}
+    const u = await dbGetUserById(req.user.uid);
+    res.json({ ok: true, status: 'pending', user: dbPublicUser(u) });
+  } catch (err) {
+    console.error('Reverify Error:', err);
+    res.status(500).json({ error: 'reverify_failed' });
+  }
 });
 
 // ---- Live presence heartbeat (user side) ----
@@ -1325,40 +1503,63 @@ app.post('/api/admin/2fa/disable', requireAdmin, (req, res) => {
   res.json({ ok: true, enabled: false });
 });
 
-app.get('/api/admin/stats', requireAdmin, (req, res) => {
-  res.json({ ok: true, stats: store.stats() });
+app.get('/api/admin/stats', requireAdmin, async (req, res) => {
+  try {
+    const [[tot]] = await pool.query('SELECT COUNT(*) AS n FROM users');
+    const [byStatus] = await pool.query('SELECT status, COUNT(*) AS n FROM users GROUP BY status');
+    const counts = { pending: 0, approved: 0, rejected: 0, banned: 0 };
+    for (const r of byStatus) counts[r.status || 'pending'] = Number(r.n) || 0;
+    const base = (store.stats && store.stats()) || {};
+    res.json({ ok: true, stats: Object.assign({}, base, {
+      users: Number(tot.n) || 0,
+      totalUsers: Number(tot.n) || 0,
+      total: Number(tot.n) || 0,
+      pending: counts.pending,
+      approved: counts.approved,
+      rejected: counts.rejected,
+      banned: counts.banned,
+    }) });
+  } catch (err) {
+    console.error('stats error:', err);
+    try { return res.json({ ok: true, stats: (store.stats && store.stats()) || {} }); } catch (e) {}
+    res.status(500).json({ error: 'stats_failed' });
+  }
 });
 
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   try {
     const status = req.query.status ? String(req.query.status) : '';
-    
-    let query = 'SELECT id, username, email, created_at FROM users';
-    let queryParams = [];
+    const params = [];
+    let where = '';
+    if (status) { where = ' WHERE u.status = ?'; params.push(status); }
 
-    if (status) {
-      query += ' WHERE status = ?';
-      queryParams.push(status);
-    }
+    const [rows] = await pool.query(
+      'SELECT u.id, u.username, u.name, u.email, u.status, u.country, u.reject_reason, u.created_at, u.last_seen, ' +
+      ' d.doc_type AS doc_type, (d.image IS NOT NULL) AS has_doc ' +
+      'FROM users u LEFT JOIN id_documents d ON d.user_id = u.id' + where +
+      ' ORDER BY u.created_at DESC',
+      params);
 
-    const [rows] = await pool.query(query, queryParams);
-
-    const users = rows.map(u => {
-      const docData = (typeof store !== 'undefined' && store.getIdDoc) ? store.getIdDoc(String(u.id)) : null;
-
-      return {
-        id: u.id,
-        uid: u.id,
-        name: u.username || u.email,
-        username: u.username,
-        email: u.email,
-        status: u.status || 'pending',
-        createdAt: u.created_at ? new Date(u.created_at).toISOString() : new Date().toISOString(),
-        created_at: u.created_at ? new Date(u.created_at).toISOString() : new Date().toISOString(),
-        doc: docData ? docData.image : null,
-        kycType: docData ? (docData.type || 'بطاقة هوية') : 'لا توجد وثيقة'
-      };
-    });
+    const ONLINE_MS = 90 * 1000;
+    const now = Date.now();
+    const users = rows.map(u => ({
+      id: String(u.id),
+      uid: u.id,
+      name: u.name || u.username || u.email,
+      username: u.username || u.name || u.email,
+      email: u.email,
+      country: u.country || '',
+      status: u.status || 'pending',
+      rejectReason: u.reject_reason || '',
+      createdAt: u.created_at ? new Date(u.created_at).toISOString() : new Date().toISOString(),
+      created_at: u.created_at ? new Date(u.created_at).toISOString() : new Date().toISOString(),
+      hasDoc: !!u.has_doc,
+      hasIdDoc: !!u.has_doc,
+      idDocType: u.doc_type || '',
+      kycType: u.doc_type || (u.has_doc ? 'وثيقة هوية' : 'لا توجد وثيقة'),
+      lastSeen: Number(u.last_seen) || 0,
+      online: !!u.last_seen && (now - Number(u.last_seen)) < ONLINE_MS,
+    }));
 
     res.json({ ok: true, users });
   } catch (err) {
@@ -1368,51 +1569,91 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
 });
 
 // Admin: fetch one user's identity document (base64 image) for review.
-app.get('/api/admin/users/:id/id-doc', requireAdmin, (req, res) => {
-  const doc = store.getIdDoc(String(req.params.id));
-  if (!doc || !doc.image) return res.status(404).json({ error: 'no_doc' });
-  res.json({ ok: true, type: doc.type || '', image: doc.image, at: doc.at || 0 });
+app.get('/api/admin/users/:id/id-doc', requireAdmin, async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      'SELECT doc_type, image, created_at FROM id_documents WHERE user_id = ? LIMIT 1',
+      [req.params.id]);
+    const d = rows[0];
+    if (!d || !d.image) {
+      // fallback to the JSON store (older documents)
+      const legacy = (store && store.getIdDoc) ? store.getIdDoc(String(req.params.id)) : null;
+      if (legacy && legacy.image) return res.json({ ok: true, type: legacy.type || '', image: legacy.image, at: legacy.at || 0 });
+      return res.status(404).json({ error: 'no_doc' });
+    }
+    res.json({ ok: true, type: d.doc_type || '', image: d.image, at: d.created_at ? new Date(d.created_at).getTime() : 0 });
+  } catch (err) {
+    console.error('id-doc error:', err);
+    res.status(500).json({ error: 'doc_failed' });
+  }
 });
 
-app.post('/api/admin/users/:id/approve', requireAdmin, (req, res) => {
-  const u = store.setUserStatus(String(req.params.id), 'approved');
-  if (!u) return res.status(404).json({ error: 'not_found' });
-  res.json({ ok: true, user: publicUser(u) });
-});
+// Admin: change a user's KYC/approval status in MySQL (source of truth).
+async function adminSetStatus(id, status, reason, action, res) {
+  try {
+    const [r] = await pool.query(
+      'UPDATE users SET status = ?, reject_reason = ? WHERE id = ?',
+      [status, reason || null, id]);
+    if (!r.affectedRows) return res.status(404).json({ error: 'not_found' });
+    const u = await dbGetUserById(id);
+    try { store.logAdmin && store.logAdmin({ admin: 'admin', action: action || status, targetId: String(id), targetEmail: u && u.email, targetName: u && (u.name || u.username) }); } catch (e) {}
+    res.json({ ok: true, user: dbPublicUser(u) });
+  } catch (err) {
+    console.error('adminSetStatus error:', err);
+    res.status(500).json({ error: 'status_failed' });
+  }
+}
+
+app.post('/api/admin/users/:id/approve', requireAdmin, (req, res) =>
+  adminSetStatus(req.params.id, 'approved', null, 'approve', res));
 
 app.post('/api/admin/users/:id/reject', requireAdmin, (req, res) => {
   const reason = String((req.body || {}).reason || '').slice(0, 300);
-  const u = store.setUserStatus(String(req.params.id), 'rejected', reason);
-  if (!u) return res.status(404).json({ error: 'not_found' });
-  res.json({ ok: true, user: publicUser(u) });
+  adminSetStatus(req.params.id, 'rejected', reason, 'reject', res);
 });
 
-app.post('/api/admin/users/:id/ban', requireAdmin, (req, res) => {
-  const u = store.setUserStatus(String(req.params.id), 'banned');
-  if (!u) return res.status(404).json({ error: 'not_found' });
-  store.logAdmin({ admin: 'admin', action: 'ban', targetId: u.id, targetEmail: u.email, targetName: u.name });
-  res.json({ ok: true, user: publicUser(u) });
-});
+app.post('/api/admin/users/:id/ban', requireAdmin, (req, res) =>
+  adminSetStatus(req.params.id, 'banned', null, 'ban', res));
 
-app.post('/api/admin/users/:id/unban', requireAdmin, (req, res) => {
-  const u = store.setUserStatus(String(req.params.id), 'approved');
-  if (!u) return res.status(404).json({ error: 'not_found' });
-  store.logAdmin({ admin: 'admin', action: 'unban', targetId: u.id, targetEmail: u.email, targetName: u.name });
-  res.json({ ok: true, user: publicUser(u) });
-});
+app.post('/api/admin/users/:id/unban', requireAdmin, (req, res) =>
+  adminSetStatus(req.params.id, 'approved', null, 'unban', res));
 
-app.delete('/api/admin/users/:id', requireAdmin, (req, res) => {
-  const ok = store.deleteUser(String(req.params.id));
-  res.json({ ok });
+app.delete('/api/admin/users/:id', requireAdmin, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM id_documents WHERE user_id = ?', [req.params.id]);
+    await pool.query('DELETE FROM wallets WHERE user_id = ?', [req.params.id]);
+    const [r] = await pool.query('DELETE FROM users WHERE id = ?', [req.params.id]);
+    try { store.deleteUser && store.deleteUser(String(req.params.id)); } catch (e) {}
+    res.json({ ok: !!r.affectedRows });
+  } catch (err) {
+    console.error('delete user error:', err);
+    res.status(500).json({ error: 'delete_failed' });
+  }
 });
 
 // ---- Admin: send a notification to one user ----
-app.post('/api/admin/users/:id/notify', requireAdmin, (req, res) => {
+// Resolve a user by id from MySQL (source of truth), returning a store-shaped
+// object so the existing ledger helpers (addDeposit / applyDeltas / balances)
+// keep working, keyed by the SAME id string.
+async function adminResolveUser(id) {
+  const dbu = await dbGetUserById(id);
+  if (!dbu) return null;
+  let su = null;
+  try { su = store.findUserById(String(dbu.id)); } catch (e) {}
+  return {
+    id: String(dbu.id), uid: dbu.id,
+    name: dbu.name || dbu.username || dbu.email,
+    email: dbu.email,
+    balances: (su && su.balances) ? su.balances : {},
+  };
+}
+
+app.post('/api/admin/users/:id/notify', requireAdmin, async (req, res) => {
   const { title, body } = req.body || {};
   const t = String(title || '').trim();
   const b = String(body || '').trim();
   if (!t && !b) return res.status(400).json({ error: 'empty' });
-  const u = store.findUserById(String(req.params.id));
+  const u = await adminResolveUser(req.params.id);
   if (!u) return res.status(404).json({ error: 'not_found' });
   const n = store.addNotification(u.id, { title: t, body: b, kind: 'admin' });
   store.logAdmin({ admin: 'admin', action: 'notify', targetId: u.id, targetEmail: u.email, targetName: u.name, note: (t || b).slice(0, 200) });
@@ -1420,13 +1661,13 @@ app.post('/api/admin/users/:id/notify', requireAdmin, (req, res) => {
 });
 
 // ---- Admin: credit an account (records a deposit + notifies the user) ----
-app.post('/api/admin/users/:id/credit', requireAdmin, (req, res) => {
+app.post('/api/admin/users/:id/credit', requireAdmin, async (req, res) => {
   const { amount, currency, note } = req.body || {};
   const cur = String(currency || 'USDT').toUpperCase();
   const amt = Number(amount);
   if (!/^[A-Z0-9]{2,12}$/.test(cur)) return res.status(400).json({ error: 'bad_currency' });
   if (!(amt > 0) || !isFinite(amt)) return res.status(400).json({ error: 'bad_amount' });
-  const u = store.findUserById(String(req.params.id));
+  const u = await adminResolveUser(req.params.id);
   if (!u) return res.status(404).json({ error: 'not_found' });
   const dep = store.addDeposit(u.id, {
     amount: amt, currency: cur, kind: 'admin', from: 'ADMIN', fromName: 'الإدارة',
@@ -1448,8 +1689,8 @@ app.post('/api/admin/users/:id/credit', requireAdmin, (req, res) => {
 });
 
 // ---- Admin: read ONE user's full per-currency balances (أرصدة وعملات المستخدم) ----
-app.get('/api/admin/users/:id/balances', requireAdmin, (req, res) => {
-  const u = store.findUserById(String(req.params.id));
+app.get('/api/admin/users/:id/balances', requireAdmin, async (req, res) => {
+  const u = await adminResolveUser(req.params.id);
   if (!u) return res.status(404).json({ error: 'not_found' });
   res.json({ ok: true, id: u.id, uid: u.uid, name: u.name || '', email: u.email || '', balances: u.balances || {} });
 });
@@ -1458,13 +1699,13 @@ app.get('/api/admin/users/:id/balances', requireAdmin, (req, res) => {
 // body: { currency, amount, mode: 'add' | 'sub' | 'set' }. Every change is
 // written to the admin activity log (action: 'balance_adjust') so edits are
 // auditable, plus a user transaction + notification.
-app.post('/api/admin/users/:id/balance', requireAdmin, (req, res) => {
+app.post('/api/admin/users/:id/balance', requireAdmin, async (req, res) => {
   const b = req.body || {};
   const cur = String(b.currency || '').toUpperCase();
   if (!/^[A-Z0-9]{2,12}$/.test(cur)) return res.status(400).json({ error: 'bad_currency' });
   const amt = Number(b.amount);
   if (!isFinite(amt)) return res.status(400).json({ error: 'bad_amount' });
-  const u0 = store.findUserById(String(req.params.id));
+  const u0 = await adminResolveUser(req.params.id);
   if (!u0) return res.status(404).json({ error: 'not_found' });
   const mode = (b.mode === 'add' || b.mode === 'sub') ? b.mode : 'set';
   const curBal = Number((u0.balances || {})[cur]) || 0;
@@ -1580,26 +1821,48 @@ function valueUsd(balances) {
   return total;
 }
 
-app.get('/api/admin/liquidity', requireAdmin, (req, res) => {
-  const ONLINE_MS = 90 * 1000;
-  const now = Date.now();
-  const rows = store.listUsers().map((u) => {
-    const balanceUsd = valueUsd(u.balances);
-    return {
-      id: u.id,
-      uid: u.uid,
-      name: u.name,
-      email: u.email,
-      status: u.status,
-      balanceUsd,
-      balances: u.balances || {},
-      lastSeen: u.lastSeen || 0,
-      online: !!u.lastSeen && (now - u.lastSeen) < ONLINE_MS,
-    };
-  }).sort((a, b) => b.balanceUsd - a.balanceUsd);
-  const totalLiquidity = rows.reduce((s, r) => s + r.balanceUsd, 0);
-  const online = rows.filter((r) => r.online).length;
-  res.json({ ok: true, rows, totalLiquidity, online, count: rows.length });
+app.get('/api/admin/liquidity', requireAdmin, async (req, res) => {
+  try {
+    const ONLINE_MS = 90 * 1000;
+    const now = Date.now();
+    const [users] = await pool.query(
+      'SELECT id, username, name, email, status, last_seen FROM users ORDER BY created_at DESC');
+    const [wals] = await pool.query('SELECT user_id, currency, balance FROM wallets');
+    const byUser = {};
+    for (const w of wals) {
+      const uid = String(w.user_id);
+      const cur = String(w.currency || 'USDT').toUpperCase();
+      byUser[uid] = byUser[uid] || {};
+      byUser[uid][cur] = (Number(byUser[uid][cur]) || 0) + Number(w.balance || 0);
+    }
+    const rows = users.map((u) => {
+      const uid = String(u.id);
+      // ادمج أرصدة جدول wallets مع أي أرصدة في دفتر store (إن وجدت)
+      const balances = Object.assign({}, byUser[uid] || {});
+      try {
+        const su = store.findUserById(uid);
+        if (su && su.balances) for (const k in su.balances) {
+          balances[k] = (Number(balances[k]) || 0) + Number(su.balances[k] || 0);
+        }
+      } catch (e) { /* ignore */ }
+      const balanceUsd = valueUsd(balances);
+      return {
+        id: uid, uid: u.id,
+        name: u.name || u.username || u.email,
+        email: u.email,
+        status: u.status || 'pending',
+        balanceUsd, balances,
+        lastSeen: Number(u.last_seen) || 0,
+        online: !!u.last_seen && (now - Number(u.last_seen)) < ONLINE_MS,
+      };
+    }).sort((a, b) => b.balanceUsd - a.balanceUsd);
+    const totalLiquidity = rows.reduce((s, r) => s + r.balanceUsd, 0);
+    const online = rows.filter((r) => r.online).length;
+    res.json({ ok: true, rows, totalLiquidity, online, count: rows.length });
+  } catch (err) {
+    console.error('liquidity error:', err);
+    res.status(500).json({ error: 'liquidity_failed' });
+  }
 });
 
 // ---- Admin: platform commission (trading fees collected) ----
@@ -1762,43 +2025,70 @@ app.post('/api/auth/register', strictLimiter, async (req, res) => {
     if (!EMAIL_RE.test(String(email || ''))) return res.status(400).json({ error: 'bad_email' });
     if (!password || String(password).length < 8) return res.status(400).json({ error: 'weak_password' });
 
-    // التحقق من وجود الإيميل مسبقاً في قاعدة البيانات
-    const [existingUsers] = await pool.query('SELECT id FROM users WHERE email = ?', [email]);
+    const emailNorm = String(email).trim().toLowerCase();
+    const cleanName = String(name).trim().slice(0, 120);
+    const cleanCountry = String(country || '').trim().slice(0, 80);
+    const img = validIdImage(idImage);
+    const docType = ID_DOC_TYPES.has(String(idDocType || '')) ? String(idDocType) : null;
+
+    // التحقق من وجود الإيميل مسبقاً
+    const [existingUsers] = await pool.query('SELECT id FROM users WHERE email = ?', [emailNorm]);
     if (existingUsers.length > 0) {
       return res.status(409).json({ error: 'email_exists' });
     }
 
-    // إدخال بيانات المستخدم في جدول users
-    const [result] = await pool.query(
-      'INSERT INTO users (username, email, password) VALUES (?, ?, ?)',
-      [name, email, password]
-    );
+    // حالة الحساب: pending إذا كان التوثيق يتطلّب موافقة الأدمن (الافتراضي)
+    const status = REQUIRE_APPROVAL ? 'pending' : 'approved';
 
+    // إدخال المستخدم مع كلمة مرور مشفّرة والحالة
+    const [result] = await pool.query(
+      'INSERT INTO users (username, name, email, password, status, country) VALUES (?, ?, ?, ?, ?, ?)',
+      [cleanName, cleanName, emailNorm, hashPassword(password), status, cleanCountry]
+    );
     const userId = result.insertId;
 
-    // إنشاء محفظة افتراضية للمستخدم الجديد برصيد 0 في جدول wallets
+    // حفظ وثيقة الهوية (KYC) إن وجدت
+    if (img && docType) {
+      try {
+        await pool.query(
+          'INSERT INTO id_documents (user_id, doc_type, image) VALUES (?, ?, ?) ' +
+          'ON DUPLICATE KEY UPDATE doc_type = VALUES(doc_type), image = VALUES(image)',
+          [userId, docType, img]);
+        try { store.setIdDoc(String(userId), docType, img); } catch (e) {}
+      } catch (e) { console.warn('[register] id-doc save failed:', e.message); }
+    }
+
+    // إنشاء محفظة افتراضية برصيد 0
     await pool.query(
-      'INSERT INTO wallets (user_id, currency, balance, locked_balance) VALUES (?, ?, ?, ?)',
+      'INSERT INTO wallets (user_id, currency, balance, locked_balance) VALUES (?, ?, ?, ?) ' +
+      'ON DUPLICATE KEY UPDATE balance = balance',
       [userId, 'USDT', 0.00000000, 0.00000000]
     );
 
+    // أصدر توكناً حتى يستطيع المستخدم دخول واجهة الانتظار (تحت المراجعة)
+    const token = signUserToken(userId);
     res.json({
       ok: true,
-      status: REQUIRE_APPROVAL ? 'pending' : 'approved',
-      user: { id: userId, username: name, email }
+      token,
+      status,
+      user: { id: String(userId), uid: userId, username: cleanName, name: cleanName, email: emailNorm, status }
     });
   } catch (err) {
     console.error('MySQL Register Error:', err);
     res.status(500).json({ error: 'Database insertion failed' });
   }
 });
-app.post('/api/wallet/withdraw', async (req, res) => {
+app.post('/api/wallet/withdraw', requireUser, async (req, res) => {
   const connection = await pool.getConnection();
   try {
-    const userId = req.user?.id;
-    const { amount } = req.body;
+    const userId = req.user.uid;
+    const amount = Number((req.body || {}).amount);
 
-    if (!amount || amount <= 0) {
+    if (!userId) {
+      connection.release();
+      return res.status(401).json({ error: 'unauthorized' });
+    }
+    if (!amount || !isFinite(amount) || amount <= 0) {
       connection.release();
       return res.status(400).json({ error: 'invalid_amount' });
     }
