@@ -245,6 +245,18 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
 .scan-ov.ok .scan-frame{border-color:#16c784;box-shadow:0 0 0 100vmax rgba(0,0,0,.5),0 0 28px rgba(22,199,132,.9)}
 .scan-hint{position:absolute;bottom:34px;left:0;right:0;text-align:center;color:#fff;font-size:13px;font-weight:700;padding:0 24px;text-shadow:0 1px 4px rgba(0,0,0,.8)}
 .scan-actions{padding:16px 16px calc(20px + env(safe-area-inset-bottom))}
+/* نتيجة المسح: يظهر العنوان فوراً ويسمح بإدخال المبلغ والإرسال */
+.scan-result{flex:1;padding:18px 16px calc(22px + env(safe-area-inset-bottom));background:var(--bg);overflow-y:auto}
+.scan-result .sr-ok{color:#16c784;font-weight:800;font-size:14px;text-align:center;margin-bottom:14px}
+.scan-result .sr-lbl{display:block;font-size:12px;font-weight:700;color:var(--muted);margin:0 2px 6px}
+.scan-result .sr-addr{background:var(--panel2);border:1px solid var(--border);border-radius:12px;color:var(--txt);font-size:13px;font-weight:700;padding:13px 14px;direction:ltr;word-break:break-all;margin-bottom:14px}
+.scan-result .sr-row{display:flex;gap:10px}
+.scan-result .sr-fld{margin-bottom:14px}
+.scan-result .sr-fld.sr-cur{flex:0 0 38%}
+.scan-result .sr-fld.sr-amt{flex:1}
+.scan-result input{width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:12px;color:var(--txt);font-family:inherit;font-size:15px;padding:13px 14px;direction:ltr}
+.scan-result input:focus{outline:0;border-color:var(--gold2)}
+.scan-result .sr-rescan{width:100%;margin-top:10px;background:none;border:1px solid var(--border);border-radius:12px;color:var(--muted);font-family:inherit;font-weight:700;font-size:13px;padding:12px 0;cursor:pointer}
 </style>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0b0e11">
@@ -330,13 +342,22 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
     <div class="bk" onclick="closeScan()">›</div>
     <b>مسح رمز QR</b>
   </div>
-  <div class="scan-stage">
+  <div class="scan-stage" id="scanStage">
     <video id="scanVid" playsinline muted></video>
     <div class="scan-frame"></div>
-    <p class="scan-hint">وجّه الكاميرا نحو رمز QR لعنوان السحب — ستنتقل تلقائياً عند التقاطه</p>
+    <p class="scan-hint">وجّه الكاميرا نحو رمز QR لعنوان السحب — سيظهر العنوان فور التقاطه</p>
   </div>
-  <div class="scan-actions">
-    <button class="pbtn" onclick="goWithdraw('')">المتابعة إلى السحب</button>
+  <!-- بعد المسح: يظهر العنوان فوراً مع إدخال المبلغ والإرسال -->
+  <div class="scan-result" id="scanResult" style="display:none">
+    <div class="sr-ok">✓ تمّ مسح العنوان بنجاح</div>
+    <label class="sr-lbl">عنوان السحب</label>
+    <div class="sr-addr" id="srAddr">—</div>
+    <div class="sr-row">
+      <div class="sr-fld sr-cur"><label class="sr-lbl">العملة</label><input id="srCur" value="USDT" maxlength="12" /></div>
+      <div class="sr-fld sr-amt"><label class="sr-lbl">المبلغ</label><input id="srAmt" type="number" inputmode="decimal" placeholder="0.00" /></div>
+    </div>
+    <button class="pbtn" id="srSend" onclick="scanSend()">إرسال</button>
+    <button class="sr-rescan" onclick="scanRescan()">إعادة المسح</button>
   </div>
 </div>
 
@@ -346,7 +367,7 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
   <div class="dhead">
     <div class="av" id="dAv">A</div>
     <div class="di">
-      <div class="nm"><span id="dName">مستخدم</span><span class="vf" id="vfBadge" data-i18n="statusVerified">✓ موثّق</span></div>
+      <div class="nm"><span id="dName">مستخدم</span><span class="vf pending" id="vfBadge" data-i18n="statusPending">قيد المراجعة</span></div>
       <div class="uid">UID: <span id="dUid">--</span><span class="cp" onclick="copyUid()" data-i18n="copy">نسخ</span></div>
     </div>
   </div>
@@ -398,12 +419,12 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
   <div class="sh-body">
     <div class="kyc-badge">
       <div class="shield"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg></div>
-      <h3 id="kycTitle" data-i18n="kycVerified">حساب موثّق</h3>
-      <p id="kycDesc" data-i18n="kycDesc">تم التحقق من هويتك بنجاح. حسابك يتمتع بكامل الصلاحيات.</p>
+      <h3 id="kycTitle" data-i18n="kycPendingTitle">الحساب قيد المراجعة</h3>
+      <p id="kycDesc" data-i18n="kycPendingDesc">تم استلام وثيقتك وهي قيد المراجعة.</p>
     </div>
     <div class="grp">
       <div class="row" style="cursor:default"><div class="tx"><b data-i18n="docType">نوع الوثيقة</b></div><span class="val ok" id="kycDoc">--</span></div>
-      <div class="row" style="cursor:default"><div class="tx"><b data-i18n="status">الحالة</b></div><span class="val ok" id="kycStatusVal">✓ موثّق</span></div>
+      <div class="row" style="cursor:default"><div class="tx"><b data-i18n="status">الحالة</b></div><span class="val warn" id="kycStatusVal">قيد المراجعة</span></div>
       <div class="row" style="cursor:default"><div class="tx"><b data-i18n="level">مستوى التوثيق</b></div><span class="val ok">Level 2</span></div>
     </div>
   </div>
@@ -866,14 +887,19 @@ I18N.id={security:'Keamanan & Perlindungan',kyc:'Verifikasi Identitas (KYC)',set
 I18N.ja={security:'セキュリティと保護',kyc:'本人確認 (KYC)',settings:'設定と言語',help:'ヘルプとサポート',logout:'ログアウト',changePass:'パスワード変更',changePassSub:'定期的にパスワードを更新',twofa:'2段階認証 (2FA)',twofaSub:'ログイン時の追加保護',biometric:'指紋 / 顔認証',biometricSub:'素早いログイン',antiTitle:'アンチフィッシングコード',save:'保存',lastLogin:'最終ログイン',curPass:'現在のパスワード',newPass:'新しいパスワード',confPass:'パスワード確認',saveNewPass:'パスワードを保存',kycVerified:'認証済みアカウント',kycDesc:'本人確認が完了しました。フルアクセス可能。',docType:'書類の種類',status:'ステータス',verified2:'✓ 認証済み',level:'認証レベル',language:'言語',faq1q:'入金方法は？',faq1a:'ホーム画面の「入金」をタップし手順に従います。',faq2q:'アカウントを守るには？',faq2a:'セキュリティで 2FA とアンチフィッシングコードを有効化。',faq3q:'このプラットフォームは本物？',faq3a:'これは実際の市場価格を使う練習プラットフォーム（ペーパートレード）です。',liveChat:'ライブチャット',liveChatSub:'24時間サポート',email:'メール',searchPh:'通貨を検索 (BTC, ETH)...',totalAssets:'総資産 (USDT)',deposit:'入金',withdraw:'出金',transfer:'送金',more:'もっと',liveMarkets:'人気マーケット',viewAll:'すべて見る ›',copy:'コピー',supportMsg:'サポートチームがまもなくご連絡します',kycId:'身分証',kycPass:'パスポート',kycLic:'運転免許証',langChanged:'言語を変更しました',msgSaved:'保存しました',msg2faOn:'2FA 有効',msg2faOff:'2FA 無効',msgBioOn:'生体認証 有効',msgBioOff:'生体認証 無効',msgAntiEmpty:'コードを入力してください',msgNoUser:'ユーザーが見つかりません',msgPassWrong:'現在のパスワードが違います',msgPassShort:'パスワードが短すぎます（最少8文字）',msgPassMismatch:'パスワードが一致しません',msgPassChanged:'パスワードを変更しました'};
 I18N.ko={security:'보안 및 보호',kyc:'신원 인증 (KYC)',settings:'설정 및 언어',help:'도움말 및 지원',logout:'로그아웃',changePass:'비밀번호 변경',changePassSub:'정기적으로 비밀번호를 업데이트',twofa:'2단계 인증 (2FA)',twofaSub:'로그인 시 추가 보호',biometric:'지문 / 얼굴',biometricSub:'빠른 로그인',antiTitle:'피싱 방지 코드',save:'저장',lastLogin:'마지막 로그인',curPass:'현재 비밀번호',newPass:'새 비밀번호',confPass:'비밀번호 확인',saveNewPass:'비밀번호 저장',kycVerified:'인증된 계정',kycDesc:'신원이 성공적으로 인증되었습니다. 전체 액세스 가능.',docType:'서류 유형',status:'상태',verified2:'✓ 인증됨',level:'인증 단계',language:'언어',faq1q:'자금을 어떻게 입금하나요?',faq1a:'홈 화면에서 "입금" 버튼을 누르고 단계를 따르세요.',faq2q:'계정을 어떻게 보호하나요?',faq2a:'보안 섹션에서 2FA와 피싱 방지 코드를 활성화하세요.',faq3q:'이 플랫폼은 실제인가요?',faq3a:'실제 시장 가격을 사용하는 연습 플랫폼(모의 거래)입니다.',liveChat:'라이브 채팅',liveChatSub:'24/7 지원',email:'이메일',searchPh:'코인 검색 (BTC, ETH)...',totalAssets:'총 자산 (USDT)',deposit:'입금',withdraw:'출금',transfer:'이체',more:'더보기',liveMarkets:'인기 실시간 시장',viewAll:'전체 보기 ›',copy:'복사',supportMsg:'지원팀이 곳 연락드리겠습니다',kycId:'신분증',kycPass:'여권',kycLic:'운전면허증',langChanged:'언어가 변경됨',msgSaved:'저장됨',msg2faOn:'2FA 활성화',msg2faOff:'2FA 비활성화',msgBioOn:'생체인증 활성화',msgBioOff:'생체인증 비활성화',msgAntiEmpty:'코드를 입력하세요',msgNoUser:'사용자를 찾을 수 없음',msgPassWrong:'현재 비밀번호가 틀렸습니다',msgPassShort:'비밀번호가 너무 짧음 (최소 8자)',msgPassMismatch:'비밀번호가 일치하지 않음',msgPassChanged:'비밀번호가 변경됨'};
 
-/* ===== الماسح الضوئي (QR) — اختصار لصفحة السحب ===== */
-var _scanStream=null,_scanRAF=null,_scanDet=null,_scanDone=false;
-function openScan(){var ov=document.getElementById('scanOv');if(!ov)return;ov.classList.add('show');startScan();}
-function closeScan(){var ov=document.getElementById('scanOv');if(ov)ov.classList.remove('show');stopScan();}
+/* ===== الماسح الضوئي (QR) — ملء الشاشة: بعد المسح يظهر العنوان فوراً ويسمح بإدخال المبلغ والإرسال ===== */
+var _scanStream=null,_scanRAF=null,_scanDet=null,_scanDone=false,_scanAddr='';
+var SCAN_TOKEN=(sess&&sess.token)||localStorage.getItem('apex_token')||'';
+function _showStage(){var s=document.getElementById('scanStage'),r=document.getElementById('scanResult');if(s)s.style.display='';if(r)r.style.display='none';}
+function _showResult(){var s=document.getElementById('scanStage'),r=document.getElementById('scanResult');if(s)s.style.display='none';if(r)r.style.display='block';}
+function openScan(){var ov=document.getElementById('scanOv');if(!ov)return;ov.classList.remove('ok');_showStage();ov.classList.add('show');startScan();}
+function closeScan(){var ov=document.getElementById('scanOv');if(ov){ov.classList.remove('show','ok');}stopScan();_showStage();}
 async function startScan(){
   _scanDone=false;var v=document.getElementById('scanVid');
   try{_scanStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});v.srcObject=_scanStream;await v.play();}
-  catch(e){try{toast('تعذّر فتح الكاميرا — تابع يدوياً');}catch(_){} return;}
+  catch(e){try{toast('تعذّر فتح الكاميرا — أدخل العنوان يدوياً');}catch(_){}
+    // حتى لو تعذّرت الكاميرا، أظهر لوحة الإدخال اليدوية لإدخال العنوان والمبلغ
+    showScanResult('');return;}
   if('BarcodeDetector' in window){try{_scanDet=new window.BarcodeDetector({formats:['qr_code']});}catch(e){_scanDet=null;}}
   loopScan();
 }
@@ -883,16 +909,44 @@ async function loopScan(){
   _scanRAF=requestAnimationFrame(loopScan);
 }
 function onScanResult(val){if(_scanDone)return;_scanDone=true;stopScan();
-  var addr=String(val||'').trim();
-  try{toast('✓ تمّ مسح الرمز بنجاح'+(addr?(' · '+(addr.length>18?addr.slice(0,10)+'…'+addr.slice(-6):addr)):'')+' — جارٍ فتح صفحة السحب');}catch(e){}
   var ov=document.getElementById('scanOv');if(ov)ov.classList.add('ok');
-  setTimeout(function(){goWithdraw(addr);},750);
-}
-function goWithdraw(val){
   var addr=String(val||'').trim();
-  try{if(addr)localStorage.setItem('apex_scan_addr',addr);}catch(e){}
-  var q=addr?('?addr='+encodeURIComponent(addr)):'';
-  location.href='withdraw.html'+q;
+  try{toast('✓ تمّ مسح الرمز بنجاح');}catch(e){}
+  // أظهر العنوان فوراً داخل الشاشة (بدون الانتقال لصفحة أخرى)
+  setTimeout(function(){showScanResult(addr);},450);
+}
+function showScanResult(addr){
+  _scanAddr=String(addr||'').trim();
+  var a=document.getElementById('srAddr');if(a)a.textContent=_scanAddr||'— (أدخل العنوان يدوياً)';
+  if(!_scanAddr){var a2=document.getElementById('srAddr');if(a2){a2.contentEditable='true';a2.style.borderColor='var(--gold2)';}}
+  _showResult();
+  var amt=document.getElementById('srAmt');if(amt){try{amt.focus();}catch(e){}}
+}
+function scanRescan(){var ov=document.getElementById('scanOv');if(ov)ov.classList.remove('ok');_scanAddr='';_showStage();startScan();}
+async function scanSend(){
+  var addrEl=document.getElementById('srAddr');
+  var addr=(_scanAddr|| (addrEl?String(addrEl.textContent||'').trim():'') ).replace(/^—.*$/,'').trim();
+  var cur=(document.getElementById('srCur').value||'USDT').trim().toUpperCase();
+  var amt=parseFloat(document.getElementById('srAmt').value);
+  if(!addr){toast('أدخل عنوان السحب');return;}
+  if(!/^[A-Z0-9]{2,12}$/.test(cur)){toast('رمز عملة غير صالح');return;}
+  if(!(amt>0)){toast('أدخل مبلغاً صحيحاً');return;}
+  var btn=document.getElementById('srSend');if(btn){btn.disabled=true;btn.textContent='جارٍ الإرسال…';}
+  try{
+    var r=await fetch('/api/wallet/withdraw',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+SCAN_TOKEN},body:JSON.stringify({amount:amt,currency:cur,address:addr})});
+    var d={};try{d=await r.json();}catch(e){}
+    if(r.ok&&d&&d.ok){
+      toast('✓ تمّ إرسال '+amt+' '+cur+' بنجاح');
+      setTimeout(function(){closeScan();},900);
+    }else{
+      var er=(d&&d.error)||'';
+      var msg=er==='account_not_approved'?'حسابك قيد المراجعة — السحب متاح بعد توثيق الإدارة':
+              (er==='insufficient_balance'?'الرصيد غير كافٍ':
+              (er==='banned'?'الحساب محظور':'تعذّر الإرسال'));
+      toast(msg);
+    }
+  }catch(e){toast('تعذّر الاتصال بالسيرفر');}
+  if(btn){btn.disabled=false;btn.textContent='إرسال';}
 }
 function stopScan(){
   if(_scanRAF){cancelAnimationFrame(_scanRAF);_scanRAF=null;}

@@ -825,7 +825,7 @@ app.get('/api/health', (req, res) => {
 // NOTE: These demo endpoints have NO authentication. Do NOT expose them to real
 // users as-is. In production, put them behind login + per-user authorization,
 // move storage to a real database, and add an audit log.
-app.get('/api/wallet/:userId', (req, res, next) => {
+app.get('/api/wallet/:userId', requireUser, (req, res, next) => {
   // 'me' and 'futures' are served by the AUTHENTICATED routes defined further
   // below. This ':userId' route is registered first, so without this guard it
   // would capture GET /api/wallet/me and GET /api/wallet/futures (userId ===
@@ -833,14 +833,18 @@ app.get('/api/wallet/:userId', (req, res, next) => {
   // exactly why the futures balance flashed after a transfer then reset to
   // zero (the money was safe on the server, but this route shadowed the read).
   if (req.params.userId === 'me' || req.params.userId === 'futures') return next();
-  const userId = String(req.params.userId);
+  // SESSION ISOLATION (server-side): never trust a client-supplied userId. A
+  // logged-in caller may only read THEIR OWN demo portfolio, derived from the
+  // verified session token — so one account can never probe another's data.
+  const userId = String(req.user.id);
   portfolios.createAccount(userId); // new accounts start at zero balance
   res.json(portfolios.summary(userId));
 });
 
 // Demo helper to simulate a real buy (holding with a real cost basis).
-app.post('/api/wallet/:userId/buy', strictLimiter, (req, res) => {
-  const userId = String(req.params.userId);
+app.post('/api/wallet/:userId/buy', strictLimiter, requireUser, (req, res) => {
+  // SESSION ISOLATION: force the authenticated user's own id; ignore the param.
+  const userId = String(req.user.id);
   const { symbol, amount, unitCost } = req.body || {};
   if (!symbol || !(amount > 0) || !(unitCost > 0)) {
     return res.status(400).json({ error: 'bad_request' });
@@ -879,7 +883,7 @@ async function requireUser(req, res, next) {
     try {
       su = store.ensureUser(String(dbu.id), {
         uid: dbu.id, name: dbu.name || dbu.username || dbu.email,
-        email: dbu.email, country: dbu.country || '', status: dbu.status || 'approved',
+        email: dbu.email, country: dbu.country || '', status: dbu.status || 'pending',
       });
     } catch (e) { /* store may be unavailable */ }
     req.user = {
@@ -977,6 +981,23 @@ app.post('/api/auth/login', strictLimiter, async (req, res) => {
   } catch (err) {
     console.error('Login Error:', err);
     res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// ---- Who am I: return the CURRENT identity + approval status from the DB ----
+// The client polls this to render the KYC badge. Without this route the front
+// end fell through to static files, got HTML instead of JSON, silently failed,
+// and kept showing the hard-coded "verified" badge — i.e. a brand-new account
+// looked self-verified. Now it always reflects the real server-side status
+// (defaulting to 'pending'), so no account appears verified without the admin.
+app.get('/api/auth/me', requireUser, async (req, res) => {
+  try {
+    const dbu = await dbGetUserById(req.user.uid);
+    if (!dbu) return res.status(401).json({ error: 'unauthorized' });
+    res.json({ ok: true, status: dbu.status || 'pending', user: dbPublicUser(dbu) });
+  } catch (err) {
+    console.error('auth/me error:', err.message);
+    res.status(500).json({ error: 'me_failed' });
   }
 });
 
@@ -1840,7 +1861,7 @@ async function adminResolveUser(id) {
   try {
     su = store.ensureUser(String(dbu.id), {
       uid: dbu.id, name: dbu.name || dbu.username || dbu.email,
-      email: dbu.email, country: dbu.country || '', status: dbu.status || 'approved',
+      email: dbu.email, country: dbu.country || '', status: dbu.status || 'pending',
     });
   } catch (e) {}
   return {
@@ -1895,7 +1916,17 @@ app.post('/api/admin/users/:id/credit', requireAdmin, async (req, res) => {
 app.get('/api/admin/users/:id/balances', requireAdmin, async (req, res) => {
   const u = await adminResolveUser(req.params.id);
   if (!u) return res.status(404).json({ error: 'not_found' });
-  res.json({ ok: true, id: u.id, uid: u.uid, name: u.name || '', email: u.email || '', balances: u.balances || {} });
+  // النظرة العامة = الرصيد الفوري (spot) + رصيد العقود (futures) معاً.
+  const spot = u.balances || {};
+  const futures = futuresBalances(u.id) || {};
+  // ادمج العملات في إجمالي واحد لكل عملة (overview)
+  const overview = {};
+  for (const k in spot) overview[k] = (Number(overview[k]) || 0) + (Number(spot[k]) || 0);
+  for (const k in futures) overview[k] = (Number(overview[k]) || 0) + (Number(futures[k]) || 0);
+  res.json({
+    ok: true, id: u.id, uid: u.uid, name: u.name || '', email: u.email || '',
+    balances: spot, spot, futures, overview,
+  });
 });
 
 // ---- Admin: manually adjust a user's balance for ANY coin (add / subtract / set) ----

@@ -478,12 +478,24 @@ async function renderBal(){
   if(!BAL_ID)return;
   try{
     var d=await api('/api/admin/users/'+BAL_ID+'/balances');
-    var bals=d.balances||{};
+    var spot=d.spot||d.balances||{};
+    var fut=d.futures||{};
+    var ov=d.overview||{};
     $('balUser').textContent=(d.name||BAL_NAME)+(d.email?(' · '+d.email):'');
-    var keys=Object.keys(bals).filter(function(k){return Number(bals[k])>0;}).sort();
-    if(!keys.length){$('balList').innerHTML='<div class="empty">لا يملك هذا المستخدم أي عملات بعد.</div>';return;}
-    $('balList').innerHTML='<table><thead><tr><th>العملة</th><th>الرصيد</th><th></th></tr></thead><tbody>'+
-      keys.map(function(k){return '<tr><td style="font-weight:800;direction:ltr">'+esc(k)+'</td><td style="direction:ltr;text-align:right">'+Number(bals[k]).toLocaleString('en-US',{maximumFractionDigits:8})+'</td><td style="text-align:left"><button class="btn ghost sm" onclick="pickCoin(\''+esc(k)+'\')">تعديل</button></td></tr>';}).join('')+'</tbody></table>';
+    var keys=Object.keys(ov).filter(function(k){return Number(ov[k])>0;}).sort();
+    if(!keys.length){$('balList').innerHTML='<div class="empty">لا يملك هذا المستخدم أي عملات بعد (فوري + عقود).</div>';return;}
+    var fmt=function(n){return Number(n||0).toLocaleString('en-US',{maximumFractionDigits:8});};
+    $('balList').innerHTML='<div class="mt" style="margin:0 0 8px">النظرة العامة = الرصيد الفوري + رصيد العقود</div>'+
+      '<table><thead><tr><th>العملة</th><th>فوري</th><th>عقود</th><th>الإجمالي</th><th></th></tr></thead><tbody>'+
+      keys.map(function(k){
+        return '<tr>'+
+          '<td style="font-weight:800;direction:ltr">'+esc(k)+'</td>'+
+          '<td style="direction:ltr;text-align:right;color:var(--muted)">'+fmt(spot[k])+'</td>'+
+          '<td style="direction:ltr;text-align:right;color:var(--muted)">'+fmt(fut[k])+'</td>'+
+          '<td style="direction:ltr;text-align:right;font-weight:800">'+fmt(ov[k])+'</td>'+
+          '<td style="text-align:left"><button class="btn ghost sm" onclick="pickCoin(\''+esc(k)+'\')">تعديل</button></td>'+
+        '</tr>';
+      }).join('')+'</tbody></table>';
   }catch(e){$('balList').innerHTML='<div class="empty">تعذّر تحميل الأرصدة</div>';}
 }
 function pickCoin(c){$('bCur').value=c;var e=$('bAmt');if(e)e.focus();}
