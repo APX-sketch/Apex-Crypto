@@ -908,6 +908,22 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+// Approval gate: money-OUT operations (withdraw / transfer to another account)
+// require an account that the ADMIN has verified (status === 'approved').
+// Verification is admin-only; a pending/rejected account can browse and trade
+// on paper but cannot move money out. Chain AFTER requireUser so req.user is set.
+function requireApproved(req, res, next) {
+  if (!req.user) return res.status(401).json({ error: 'unauthorized' });
+  if (req.user.status === 'banned') return res.status(403).json({ error: 'banned' });
+  if (req.user.status !== 'approved') {
+    logSecurity(req, { kind: 'blocked_unapproved', severity: 'warning',
+      detail: 'عملية إخراج أموال من حساب غير موثّق (رُفضت — التوثيق بيد الإدارة فقط)',
+      meta: { status: req.user.status } });
+    return res.status(403).json({ error: 'account_not_approved' });
+  }
+  next();
+}
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ID_DOC_TYPES = new Set(['national_id', 'passport', 'driver_license']);
 // Accepts a base64 image data URL (jpeg/png/webp). Returns it if valid & small.
@@ -1407,6 +1423,64 @@ app.get('/api/wallet/transactions', requireUser, (req, res) => {
   res.json({ ok: true, transactions: rows });
 });
 
+// ---- Convert one currency to another (server-computed, money-safe) ----
+// The server prices BOTH sides from ITS OWN live market cache, computes the
+// received amount itself, then debits the source and credits the destination
+// atomically (rollback on failure). The client NEVER dictates the credited
+// amount, so a tampered request can't mint balance out of thin air. This swap
+// stays inside ONE user's own wallet, so no money crosses between accounts.
+const CONVERT_CUR = /^[A-Z0-9]{2,12}$/;
+app.post('/api/wallet/convert', strictLimiter, requireUser, (req, res) => {
+  const body = req.body || {};
+  const from = String(body.from || '').toUpperCase();
+  const to = String(body.to || '').toUpperCase();
+  const amt = Number(body.amount);
+  if (!CONVERT_CUR.test(from) || !CONVERT_CUR.test(to)) return res.status(400).json({ error: 'bad_currency' });
+  if (from === to) return res.status(400).json({ error: 'same_currency' });
+  if (!(amt > 0) || !isFinite(amt)) return res.status(400).json({ error: 'bad_amount' });
+
+  // السعر من كاش السيرفر فقط (لا ثقة بأي سعر مُرسَل من المتصفح)
+  const pxFrom = (from === 'USDT') ? 1 : priceOf(from + 'USDT');
+  const pxTo = (to === 'USDT') ? 1 : priceOf(to + 'USDT');
+  if (!pxFrom || !pxTo || !isFinite(pxFrom) || !isFinite(pxTo)) {
+    return res.status(503).json({ error: 'price_unavailable' });
+  }
+  const recv = amt * pxFrom / pxTo;
+  if (!(recv > 0) || !isFinite(recv)) return res.status(400).json({ error: 'bad_amount' });
+
+  // احترم المبالغ المحجوزة لأوامر مفتوحة على العملة المصدر
+  const lockedForFrom = Number((lockedBalances(req.user.id) || {})[from]) || 0;
+  const curFrom = Number((req.user.balances || {})[from]) || 0;
+  if (curFrom - lockedForFrom + 1e-9 < amt) {
+    logSecurity(req, { kind: 'convert_insufficient', severity: 'warning',
+      detail: 'محاولة تحويل عملة تتجاوز الرصيد المتاح (رُفضت)',
+      meta: { from, to, amount: amt, current: curFrom, locked: lockedForFrom } });
+    return res.status(400).json({ error: 'insufficient_balance' });
+  }
+
+  // اخصم المصدر ذرّياً (يرفض أي رصيد سالب = لا خلق مال)
+  const debited = store.debitBalance(req.user.id, from, amt);
+  if (!debited) {
+    logSecurity(req, { kind: 'convert_insufficient', severity: 'critical',
+      detail: 'خصم تحويل تجاوز الرصيد (خلق مال — رُفض)', meta: { from, to, amount: amt } });
+    return res.status(400).json({ error: 'insufficient_balance' });
+  }
+  // أضف للوجهة؛ وإن فشل أعد المبلغ المخصوم (لا ضياع ولا خلق)
+  const credited = store.applyDeltas(req.user.id, { [to]: recv });
+  if (!credited) {
+    store.applyDeltas(req.user.id, { [from]: amt });
+    return res.status(500).json({ error: 'convert_failed' });
+  }
+  try {
+    store.addTransaction(req.user.id, {
+      type: 'convert', amount: amt, currency: from,
+      counterparty: to, note: 'تحويل ' + from + ' إلى ' + to,
+      meta: { from, to, fromAmount: amt, toAmount: recv, rate: pxFrom / pxTo },
+    });
+  } catch (e) {}
+  res.json({ ok: true, from, to, fromAmount: amt, toAmount: recv, rate: pxFrom / pxTo, balances: credited.balances || {} });
+});
+
 // ---- Internal transfer between Spot and Futures wallets ----
 // Moves one currency between the user's own Spot balance (server-authoritative,
 // store.applyDeltas / debitBalance) and their Futures wallet (futuresApply).
@@ -1464,7 +1538,7 @@ app.post('/api/wallet/transfer-internal', strictLimiter, requireUser, (req, res)
 // notification. Money can only be sent to an address that maps to a real,
 // non-banned account. Self-transfers are rejected.
 const TRANSFER_CUR = /^[A-Z0-9]{2,12}$/;
-app.post('/api/wallet/transfer', strictLimiter, requireUser, (req, res) => {
+app.post('/api/wallet/transfer', strictLimiter, requireUser, requireApproved, (req, res) => {
   const { toAddress, amount, currency } = req.body || {};
   const addr = String(toAddress || '').trim();
   const cur = String(currency || 'USDT').toUpperCase();
@@ -2259,7 +2333,7 @@ app.post('/api/auth/register', strictLimiter, async (req, res) => {
 // (store.debitBalance rejects any below-zero result), respect funds locked by
 // open orders, record a user transaction, mirror the new balance into the
 // MySQL wallets table for the admin liquidity view, and write an ops-log entry.
-app.post('/api/wallet/withdraw', strictLimiter, requireUser, async (req, res) => {
+app.post('/api/wallet/withdraw', strictLimiter, requireUser, requireApproved, async (req, res) => {
   const body = req.body || {};
   const amount = Number(body.amount);
   const currency = String(body.currency || 'USDT').toUpperCase().slice(0, 12);
