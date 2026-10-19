@@ -9,6 +9,10 @@
   }catch(e){location.replace('login.html');}
 })();
 </script>
+<script>
+/* عزل الحسابات: عند تبديل الحساب على نفس المتصفح نمسح أي حالة محلية قديمة (صفقات/سجل/أوامر/عمولات/توثيق) حتى يبدأ كل حساب من الصفر ولا تتسرّب بيانات بين الحسابات */
+(function(){try{var s=JSON.parse(localStorage.getItem('skygo_session')||'null')||{};var tok=(s&&s.token)||localStorage.getItem('apex_token')||'';var owner=(((s&&s.email)||'')+'').toLowerCase()||tok||'';if(!owner)return;var prev=localStorage.getItem('apex_acct_owner')||'';if(prev!==owner){['skygo_futures_pos','skygo_futures_hist','skygo_futures_ord','apex_fees_collected','apex_kyc_status'].forEach(function(k){try{localStorage.removeItem(k);}catch(e){}});localStorage.setItem('apex_acct_owner',owner);}}catch(e){}})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>Apex — الرئيسية</title>

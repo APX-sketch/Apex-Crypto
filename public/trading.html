@@ -8,6 +8,10 @@
 // حماية الجلسة (مشتركة مع باقي الصفحات)
 var s=JSON.parse(localStorage.getItem('skygo_session')||'null');
 </script>
+<script>
+/* عزل الحسابات: عند تبديل الحساب نمسح أي حالة محلية قديمة (صفقات/سجل/أوامر/عمولات/توثيق) حتى يبدأ كل حساب من الصفر ولا تتسرّب بيانات بين الحسابات */
+(function(){try{var ss=JSON.parse(localStorage.getItem('skygo_session')||'null')||{};var tok=(ss&&ss.token)||localStorage.getItem('apex_token')||'';var owner=(((ss&&ss.email)||'')+'').toLowerCase()||tok||'';if(!owner)return;var prev=localStorage.getItem('apex_acct_owner')||'';if(prev!==owner){['skygo_futures_pos','skygo_futures_hist','skygo_futures_ord','apex_fees_collected','apex_kyc_status'].forEach(function(k){try{localStorage.removeItem(k);}catch(e){}});localStorage.setItem('apex_acct_owner',owner);}}catch(e){}})();
+</script>
 <style>
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 :root{--bg:#0b0e11;--card:#12161c;--card2:#161b22;--line:#1f2731;--txt:#eaecef;--mut:#848e9c;

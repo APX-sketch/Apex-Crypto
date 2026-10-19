@@ -1,7 +1,15 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
+    <script>
+    (function(){try{var s=JSON.parse(localStorage.getItem('skygo_session')||'null');var t=(s&&s.token)||localStorage.getItem('apex_token')||'';if(!t){location.replace('login.html?next=assets.html');}}catch(e){location.replace('login.html?next=assets.html');}})();
+    </script>
+    <script>
+    /* عزل الحسابات: عند تبديل الحساب نمسح أي حالة محلية قديمة حتى يبدأ كل حساب من الصفر */
+    (function(){try{var ss=JSON.parse(localStorage.getItem('skygo_session')||'null')||{};var tok=(ss&&ss.token)||localStorage.getItem('apex_token')||'';var owner=(((ss&&ss.email)||'')+'').toLowerCase()||tok||'';if(!owner)return;var prev=localStorage.getItem('apex_acct_owner')||'';if(prev!==owner){['skygo_futures_pos','skygo_futures_hist','skygo_futures_ord','apex_fees_collected','apex_kyc_status'].forEach(function(k){try{localStorage.removeItem(k);}catch(e){}});localStorage.setItem('apex_acct_owner',owner);}}catch(e){}})();
+    </script>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
     <title>CryptoSphere Pro - محفظة الأصول</title>
     <style>
         :root {
@@ -14,7 +22,6 @@
             --text-main: #f8fafc;
             --text-muted: #94a3b8;
         }
-
         body {
             background-color: var(--bg-deep);
             color: var(--text-main);
@@ -26,7 +33,6 @@
             height: 100vh;
             overflow: hidden;
         }
-
         .phone-frame {
             width: 390px;
             height: 780px;
@@ -40,7 +46,6 @@
             position: relative;
             overflow: hidden;
         }
-
         .app-content {
             position: relative;
             z-index: 1;
@@ -51,13 +56,18 @@
             flex-direction: column;
             gap: 14px;
         }
-
         .section-title { font-size: 16px; font-weight: bold; color: #f3f4f6; }
         .glass-card { background: var(--glass-bg); backdrop-filter: blur(16px); border: 1px solid var(--glass-border); border-radius: 20px; padding: 16px; }
-        
-        .history-list { display: flex; flex-direction: column; gap: 8px; max-height: 280px; overflow-y: auto; }
+        .asset-row { display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid rgba(255,255,255,.05); }
+        .asset-row:last-child{border-bottom:0}
+        .asset-left{display:flex;align-items:center;gap:9px}
+        .asset-left img{width:26px;height:26px;border-radius:50%}
+        .asset-sym{font-weight:800;font-size:13px}
+        .asset-amt{font-weight:800;font-size:13px}
+        .asset-usd{font-size:10px;color:var(--text-muted)}
+        .history-list { display: flex; flex-direction: column; gap: 8px; max-height: 230px; overflow-y: auto; }
         .history-item { display: flex; justify-content: space-between; align-items: center; background: var(--glass-bg); padding: 10px 12px; border-radius: 12px; border: 1px solid var(--glass-border); font-size: 12px; }
-
+        .empty{color:var(--text-muted);font-size:12px;text-align:center;padding:14px}
         .bottom-nav { background: rgba(11, 15, 25, 0.85); backdrop-filter: blur(20px); border-top: 1px solid var(--glass-border); display: flex; justify-content: space-around; padding: 12px 0; z-index: 10; }
         .nav-item { background: none; border: none; color: var(--text-muted); font-size: 10px; cursor: pointer; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 4px; text-decoration: none; transition: 0.3s; }
         .nav-item.active { color: #60a5fa; text-shadow: 0 0 10px rgba(96, 165, 250, 0.6); }
@@ -70,12 +80,15 @@
             <div class="section-title">إدارة الأصول والمحفظة 💰</div>
 
             <div class="glass-card">
-                <div style="font-size: 11px; color: var(--text-muted);">إجمالي الأصول المتاحة</div>
-                <div style="font-size: 26px; font-weight: 800; color: #34d399; margin: 4px 0;" id="walletBalance">$3,450.00</div>
+                <div style="font-size: 11px; color: var(--text-muted);">إجمالي الأصول المتاحة (من رصيد السيرفر)</div>
+                <div style="font-size: 26px; font-weight: 800; color: #34d399; margin: 4px 0;" id="walletBalance">$0.00</div>
             </div>
 
-            <div style="font-size: 13px; font-weight: bold; color: #cbd5e1; margin-top: 4px;">سجل المعاملات والأرباح</div>
-            <div class="history-list" id="historyList"></div>
+            <div style="font-size: 13px; font-weight: bold; color: #cbd5e1;">أرصدتي</div>
+            <div class="glass-card" id="assetsCard"><div class="empty">جارٍ التحميل...</div></div>
+
+            <div style="font-size: 13px; font-weight: bold; color: #cbd5e1; margin-top: 4px;">سجل المعاملات</div>
+            <div class="history-list" id="historyList"><div class="empty">جارٍ التحميل...</div></div>
         </div>
 
         <div class="bottom-nav">
@@ -88,29 +101,81 @@
     </div>
 
     <script>
-        let balance = parseFloat(localStorage.getItem('walletBalance')) || 3450.00;
-        let historyData = JSON.parse(localStorage.getItem('txHistory')) || [
-            { type: "إيداع USDT", amount: "+$1,000.00", date: "2026-09-15", color: "#34d399" },
-            { type: "سحب أرباح", amount: "-$250.00", date: "2026-09-14", color: "#f43f5e" }
-        ];
+    /* === كل شيء يُقرأ من رصيد السيرفر — لا أرصدة وهمية بـ localStorage === */
+    const $=id=>document.getElementById(id);
+    const SESS=(function(){try{return JSON.parse(localStorage.getItem('skygo_session')||'null')||{};}catch(e){return {};}})();
+    const TOKEN=(SESS&&SESS.token)||localStorage.getItem('apex_token')||'';
+    function authHeaders(){return {'Authorization':'Bearer '+TOKEN};}
+    function logout(){location.replace('login.html?next=assets.html');}
+    function icoUrl(b){return 'https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/128/color/'+String(b).toLowerCase()+'.png';}
+    const fmt=(n,d=2)=>Number(n||0).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
 
-        function updateUI() {
-            document.getElementById('walletBalance').innerText = `$${balance.toFixed(2)}`;
+    var priceMap={}, wallet={};
+    function priceOf(b){b=String(b).toUpperCase();return b==='USDT'?1:(priceMap[b+'USDT']||0);}
 
-            const listEl = document.getElementById('historyList');
-            let html = '';
-            historyData.forEach(tx => {
-                html += `
-                    <div class="history-item">
-                        <div><div style="font-weight: bold;">${tx.type}</div><div style="font-size: 10px; color: var(--text-muted);">${tx.date}</div></div>
-                        <div style="font-weight: bold; color: ${tx.color};">${tx.amount}</div>
-                    </div>
-                `;
-            });
-            listEl.innerHTML = html;
-        }
+    function escapeHtml(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'})[c];});}
 
-        updateUI();
+    function renderAssets(){
+        var keys=Object.keys(wallet).filter(function(k){return (Number(wallet[k])||0)>0;});
+        keys.sort(function(a,b){return (Number(wallet[b])*priceOf(b))-(Number(wallet[a])*priceOf(a));});
+        var total=0;
+        var html=keys.map(function(k){
+            var amt=Number(wallet[k])||0; var usd=amt*priceOf(k); total+=usd;
+            return '<div class="asset-row"><div class="asset-left"><img src="'+icoUrl(k)+'" onerror="this.style.display=\'none\'"><div><div class="asset-sym">'+escapeHtml(k)+'</div><div class="asset-usd">≈ $'+fmt(usd,2)+'</div></div></div><div class="asset-amt">'+fmt(amt,amt>=1?4:6)+'</div></div>';
+        }).join('');
+        $('assetsCard').innerHTML = keys.length ? html : '<div class="empty">لا توجد أصول بعد</div>';
+        $('walletBalance').innerText = '$'+fmt(total,2);
+    }
+
+    async function loadWallet(){
+        if(!TOKEN){logout();return;}
+        try{
+            var r=await fetch('/api/wallet/me',{headers:authHeaders()});
+            if(r.status===401||r.status===403){logout();return;}
+            if(!r.ok)return;
+            var d=await r.json();
+            wallet={};var b=d.balances||{};for(var k in b){wallet[String(k).toUpperCase()]=Number(b[k])||0;}
+            renderAssets();
+        }catch(e){}
+    }
+
+    const TXLBL={admin_credit:'شحن من الإدارة',deposit:'إيداع',withdraw:'سحب',transfer_in:'تحويل وارد',transfer_out:'تحويل صادر',convert:'تحويل عملة',trade:'صفقة تداول'};
+    async function loadHistory(){
+        if(!TOKEN){logout();return;}
+        try{
+            var r=await fetch('/api/wallet/transactions',{headers:authHeaders()});
+            if(r.status===401||r.status===403){logout();return;}
+            if(!r.ok)return;
+            var d=await r.json();
+            var rows=(d.transactions||[]);
+            var listEl=$('historyList');
+            if(!rows.length){listEl.innerHTML='<div class="empty">لا توجد معاملات بعد</div>';return;}
+            listEl.innerHTML=rows.map(function(tx){
+                var amt=Number(tx.amount)||0;
+                var pos=amt>=0;
+                var sign=pos?'+':'-';
+                var color=pos?'#34d399':'#f43f5e';
+                var label=TXLBL[tx.type]||escapeHtml(tx.type||'معاملة');
+                var cur=escapeHtml(tx.currency||'USDT');
+                var date=new Date(tx.at||Date.now()).toLocaleString('en-GB',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+                var note=tx.note?('<div style="font-size:10px;color:var(--text-muted)">'+escapeHtml(tx.note)+'</div>'):'';
+                return '<div class="history-item"><div><div style="font-weight:bold;">'+label+'</div><div style="font-size:10px;color:var(--text-muted);">'+date+'</div>'+note+'</div><div style="font-weight:bold;color:'+color+';">'+sign+fmt(Math.abs(amt),Math.abs(amt)>=1?2:6)+' '+cur+'</div></div>';
+            }).join('');
+        }catch(e){}
+    }
+
+    async function loadPrices(){
+        try{
+            var r=await fetch('/api/markets',{headers:{'Accept':'application/json'}});
+            if(!r.ok)return;
+            var arr=await r.json();
+            if(Array.isArray(arr)){arr.forEach(function(d){if(d&&d.symbol){priceMap[d.symbol]=parseFloat(d.lastPrice!=null?d.lastPrice:d.price);}});}
+            renderAssets();
+        }catch(e){}
+    }
+
+    loadPrices(); loadWallet(); loadHistory();
+    setInterval(loadWallet,8000); setInterval(loadHistory,12000); setInterval(loadPrices,10000);
     </script>
 </body>
 </html>

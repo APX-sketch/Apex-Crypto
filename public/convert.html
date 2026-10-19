@@ -2,7 +2,11 @@
 <html lang="ar" dir="rtl">
 <head>
 <script>
-(function(){try{var s=JSON.parse(localStorage.getItem('skygo_session')||'null');if(!s||!s.email){location.replace('login.html?next=convert.html');}}catch(e){location.replace('login.html');}})();
+(function(){try{var s=JSON.parse(localStorage.getItem('skygo_session')||'null');var t=(s&&s.token)||localStorage.getItem('apex_token')||'';if(!t){location.replace('login.html?next=convert.html');}}catch(e){location.replace('login.html?next=convert.html');}})();
+</script>
+<script>
+/* عزل الحسابات: عند تبديل الحساب نمسح أي حالة محلية قديمة حتى يبدأ كل حساب من الصفر */
+(function(){try{var ss=JSON.parse(localStorage.getItem('skygo_session')||'null')||{};var tok=(ss&&ss.token)||localStorage.getItem('apex_token')||'';var owner=(((ss&&ss.email)||'')+'').toLowerCase()||tok||'';if(!owner)return;var prev=localStorage.getItem('apex_acct_owner')||'';if(prev!==owner){['skygo_futures_pos','skygo_futures_hist','skygo_futures_ord','apex_fees_collected','apex_kyc_status'].forEach(function(k){try{localStorage.removeItem(k);}catch(e){}});localStorage.setItem('apex_acct_owner',owner);}}catch(e){}})();
 </script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
@@ -39,8 +43,6 @@ input{font-size:16px}
 .rowinfo b{color:var(--txt);font-weight:800}
 .note{display:flex;gap:9px;background:rgba(224,166,21,.07);border:1px solid rgba(224,166,21,.25);border-radius:12px;padding:12px 13px;margin-top:14px;font-size:12px;color:#d9c48d;line-height:1.6}
 .note svg{width:17px;height:17px;flex:0 0 auto;stroke:var(--gold2);fill:none;stroke-width:2;margin-top:1px}
-.addr{display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px dashed var(--border);border-radius:12px;padding:12px 13px;margin-top:8px;font-size:12px;word-break:break-all;font-family:monospace}
-.addr .cp{margin-inline-start:auto;color:var(--gold2);font-weight:800;cursor:pointer;flex:0 0 auto;font-family:inherit}
 .btn{width:100%;border:0;border-radius:14px;font-family:inherit;font-size:16px;font-weight:900;padding:16px 0;margin-top:22px;cursor:pointer;background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#231a02}
 .btn:active{transform:scale(.98)}
 .btn.dis{opacity:.5;pointer-events:none}
@@ -55,7 +57,6 @@ input{font-size:16px}
 <script defer src="alerts-core.js"></script>
 </head>
 <body>
-<!--B-->
 <div class="hdr">
   <div class="icobtn" onclick="location.href='wallet.html'"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
   <h1>تحويل (تحويل عملة)</h1>
@@ -79,7 +80,7 @@ input{font-size:16px}
       <button onclick="setPct(.25)">25%</button>
       <button onclick="setPct(.5)">50%</button>
       <button onclick="setPct(.75)">75%</button>
-      <button onclick="setPct(99.8)">100%</button>
+      <button onclick="setPct(1)">100%</button>
     </div>
     <div class="rowinfo"><span>رصيد <span id="fromLbl">USDT</span></span><b id="curBal">0.00</b></div>
     <div class="rowinfo"><span>سعر التحويل</span><b id="rateLbl">--</b></div>
@@ -95,33 +96,33 @@ input{font-size:16px}
   </div>
 
   <div class="note"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
-    </div>
+    <span>التحويل يُنفّذ على السيرفر بسعره اللحظي — يُخصم من رصيدك ويُضاف للعملة الأخرى داخل نفس الحساب.</span></div>
 
   <button class="btn dis" id="submitBtn" onclick="doConvert()">تأكيد التحويل</button>
 </div>
 <div class="toast" id="toast"></div>
 <script>
-//J
 const $=id=>document.getElementById(id);
 const fmt=(n,d=2)=>Number(n).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
 function toast(m,t){var e=$('toast');e.textContent=m;e.className='toast show '+(t||'');setTimeout(function(){e.className='toast '+(t||'');},2400);}
 function icoUrl(b){return 'https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/128/color/'+b.toLowerCase()+'.png';}
-function pdec(p){return p>=1000?2:p>=1?2:p>=0.1?4:6;}
+
+/* === الرصيد والأسعار والتحويل كلها عبر السيرفر — لا localStorage وهمي، ولا باينانس مباشر === */
+const SESS=(function(){try{return JSON.parse(localStorage.getItem('skygo_session')||'null')||{};}catch(e){return {};}})();
+const TOKEN=(SESS&&SESS.token)||localStorage.getItem('apex_token')||'';
+function authHeaders(extra){var h=extra||{};h['Authorization']='Bearer '+TOKEN;return h;}
+function logout(){location.replace('login.html?next=convert.html');}
 
 const CATALOG=['USDT','BTC','ETH','BNB','SOL','XRP','ADA','DOGE','TRX','LTC'];
-function loadWallet(){var w=localStorage.getItem('skygo_wallet');if(w)return JSON.parse(w);var init={USDT:3737.73,ETH:0,BTC:0,BNB:0,SOL:0,XRP:0};localStorage.setItem('skygo_wallet',JSON.stringify(init));return init;}
-function saveWallet(w){localStorage.setItem('skygo_wallet',JSON.stringify(w));}
-function loadHist(){return JSON.parse(localStorage.getItem('skygo_hist')||'[]');}
-function saveHist(h){localStorage.setItem('skygo_hist',JSON.stringify(h));}
-var wallet=loadWallet(), priceMap={}, fromC='USDT', toC='BTC';
+var wallet={}, locked={}, priceMap={}, fromC='USDT', toC='BTC';
 
-// أظهر كل العملات مع أولوية لما يملكه المستخدم
 function coinList(){
   var set={};CATALOG.forEach(function(b){set[b]=1;});
   Object.keys(wallet).forEach(function(k){if((wallet[k]||0)>0)set[k]=1;});
   return Object.keys(set);
 }
 function priceOf(b){return b==='USDT'?1:(priceMap[b+'USDT']||0);}
+function avail(b){return Math.max(0,(Number(wallet[b])||0)-(Number(locked[b])||0));}
 
 function renderCoins(){
   var list=coinList();
@@ -130,27 +131,26 @@ function renderCoins(){
       '<img src="'+icoUrl(b)+'" onerror="this.style.display=\'none\'">'+b+'</div>';
   }).join('');
   $('toCoins').innerHTML=list.map(function(b){
-    return '<div class="chip'+(b===toC?' sel':'')+(b===fromC?' dis':'')+'" onclick="pickTo(\''+b+'\')" style="'+(b===fromC?'opacity:.35;pointer-events:none':'')+'">'+
+    return '<div class="chip'+(b===toC?' sel':'')+'" onclick="pickTo(\''+b+'\')" style="'+(b===fromC?'opacity:.35;pointer-events:none':'')+'">'+
       '<img src="'+icoUrl(b)+'" onerror="this.style.display=\'none\'">'+b+'</div>';
   }).join('');
 }
-function pickFrom(b){fromC=b;if(toC===b){var l=coinList();toC=l.find(function(x){return x!==b;})||'USDT';}
-  refresh();}
+function pickFrom(b){fromC=b;if(toC===b){var l=coinList();toC=l.find(function(x){return x!==b;})||'USDT';}refresh();}
 function pickTo(b){if(b===fromC)return;toC=b;refresh();}
 function refresh(){
   renderCoins();
   $('curLbl').textContent=fromC;$('fromLbl').textContent=fromC;$('recvLbl').textContent=toC;
-  var bal=wallet[fromC]||0;
+  var bal=avail(fromC);
   $('curBal').textContent=fmt(bal,bal>=1?4:6);
   var pf=priceOf(fromC),pt=priceOf(toC);
   $('rateLbl').textContent=(pf&&pt)?('1 '+fromC+' ≈ '+fmt(pf/pt,(pf/pt)>=1?4:6)+' '+toC):'--';
-  $('amt').value='';onAmt();
+  onAmt();
 }
-function setMax(){$('amt').value=(wallet[fromC]||0);onAmt();}
-function setPct(p){var bal=wallet[fromC]||0;var v=bal*p;$('amt').value=p===1?bal:parseFloat(v.toFixed(bal>=1?6:8));onAmt();}
+function setMax(){$('amt').value=avail(fromC);onAmt();}
+function setPct(p){var bal=avail(fromC);var v=bal*p;$('amt').value=p===1?bal:parseFloat(v.toFixed(bal>=1?6:8));onAmt();}
 function onAmt(){
   var v=parseFloat($('amt').value)||0;
-  var bal=wallet[fromC]||0;
+  var bal=avail(fromC);
   var pf=priceOf(fromC),pt=priceOf(toC);
   var recv=(pf&&pt)?v*pf/pt:0;
   $('recv').value=fmt(recv,recv>=1?6:8);
@@ -158,49 +158,56 @@ function onAmt(){
   var ok=v>0 && v<=bal && fromC!==toC && pf>0 && pt>0;
   $('submitBtn').className='btn'+(ok?'':' dis');
 }
-function doConvert(){
+
+async function refreshWallet(){
+  if(!TOKEN){logout();return;}
+  try{
+    var r=await fetch('/api/wallet/me',{headers:authHeaders()});
+    if(r.status===401||r.status===403){logout();return;}
+    if(!r.ok)return;
+    var d=await r.json();
+    wallet={};var b=d.balances||{};for(var k in b){wallet[String(k).toUpperCase()]=Number(b[k])||0;}
+    locked={};var l=d.locked||{};for(var k2 in l){locked[String(k2).toUpperCase()]=Number(l[k2])||0;}
+    refresh();
+  }catch(e){}
+}
+
+async function doConvert(){
   var v=parseFloat($('amt').value)||0;
-  var bal=wallet[fromC]||0;
+  var bal=avail(fromC);
   var pf=priceOf(fromC),pt=priceOf(toC);
   if(v<=0){toast('أدخل مبلغاً صحيحاً','err');return;}
   if(v>bal){toast('الرصيد غير كافٍ','err');return;}
   if(fromC===toC){toast('اختر عملتين مختلفتين','err');return;}
   if(!pf||!pt){toast('جارٍ تحديث الأسعار...','err');return;}
-  var recv=v*pf/pt;
-  wallet[fromC]=bal-v;
-  wallet[toC]=(wallet[toC]||0)+recv;
-  saveWallet(wallet);
-  var h=loadHist();
-  h.unshift({id:Date.now()+'-'+Math.random().toString(36).slice(2,7),kind:'convert',from:fromC,to:toC,fromAmount:v,toAmount:recv,coin:toC,amount:recv,value:v*pf,time:Date.now(),status:'completed'});
-  saveHist(h);
-  toast('تم تحويل '+fmt(v,v>=1?4:6)+' '+fromC+' إلى '+fmt(recv,recv>=1?4:6)+' '+toC,'ok');
   $('submitBtn').className='btn dis';
-  setTimeout(function(){location.href='wallet.html';},1200);
+  try{
+    var r=await fetch('/api/wallet/convert',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({from:fromC,to:toC,amount:v})});
+    if(r.status===401){logout();return;}
+    var d=await r.json().catch(function(){return {};});
+    if(!r.ok){
+      var msg=d.error==='insufficient_balance'?'الرصيد غير كافٍ':(d.error==='price_unavailable'?'تعذّر جلب السعر — حاول لاحقاً':(d.error==='same_currency'?'اختر عملتين مختلفتين':'تعذّر تنفيذ التحويل'));
+      toast(msg,'err');onAmt();return;
+    }
+    if(d.balances){wallet={};for(var k in d.balances){wallet[String(k).toUpperCase()]=Number(d.balances[k])||0;}}
+    var recv=Number(d.toAmount)||0;
+    toast('تم تحويل '+fmt(v,v>=1?4:6)+' '+fromC+' إلى '+fmt(recv,recv>=1?4:6)+' '+toC,'ok');
+    setTimeout(function(){location.href='wallet.html';},1200);
+  }catch(e){toast('تعذّر الاتصال بالسيرفر','err');onAmt();}
 }
+
 async function loadPrices(){
   try{
-    var list=coinList().filter(function(b){return b!=='USDT';});
-    var syms=list.map(function(b){return b+'USDT';});
-    if(syms.length){
-      try{
-        var r=await fetch('https://api.binance.com/api/v3/ticker/price?symbols='+encodeURIComponent(JSON.stringify(syms)));
-        if(!r.ok)throw 0;
-        var arr=await r.json();
-        if(!Array.isArray(arr))throw 0;
-        arr.forEach(function(d){priceMap[d.symbol]=parseFloat(d.price);});
-      }catch(e){
-        var results=await Promise.allSettled(syms.map(function(s){
-          return fetch('https://api.binance.com/api/v3/ticker/price?symbol='+s).then(function(x){return x.ok?x.json():null;});
-        }));
-        results.forEach(function(res){
-          if(res.status==='fulfilled'&&res.value&&res.value.symbol){priceMap[res.value.symbol]=parseFloat(res.value.price);}
-        });
-      }
-    }
+    var r=await fetch('/api/markets',{headers:{'Accept':'application/json'}});
+    if(!r.ok)return;
+    var arr=await r.json();
+    if(Array.isArray(arr)){arr.forEach(function(d){if(d&&d.symbol){priceMap[d.symbol]=parseFloat(d.lastPrice!=null?d.lastPrice:d.price);}});}
     refresh();
   }catch(e){refresh();}
 }
-refresh(); loadPrices();
+
+refresh(); refreshWallet(); loadPrices();
+setInterval(refreshWallet,8000); setInterval(loadPrices,10000);
 </script>
 </body>
 </html>
