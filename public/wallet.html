@@ -11,7 +11,7 @@
 </script>
 <script>
 /* عزل الحسابات: عند تبديل الحساب على نفس المتصفح نمسح أي حالة محلية قديمة (صفقات/سجل/أوامر/عمولات/توثيق) حتى يبدأ كل حساب من الصفر ولا تتسرّب بيانات بين الحسابات */
-(function(){try{var s=JSON.parse(localStorage.getItem('skygo_session')||'null')||{};var tok=(s&&s.token)||localStorage.getItem('apex_token')||'';var owner=(((s&&s.email)||'')+'').toLowerCase()||tok||'';if(!owner)return;var prev=localStorage.getItem('apex_acct_owner')||'';if(prev!==owner){['skygo_futures_pos','skygo_futures_hist','skygo_futures_ord','apex_fees_collected','apex_kyc_status'].forEach(function(k){try{localStorage.removeItem(k);}catch(e){}});localStorage.setItem('apex_acct_owner',owner);}}catch(e){}})();
+(function(){try{var s=JSON.parse(localStorage.getItem('skygo_session')||'null')||{};var tok=(s&&s.token)||localStorage.getItem('apex_token')||'';var owner=(((s&&s.email)||'')+'').toLowerCase()||tok||'';if(!owner)return;var prev=localStorage.getItem('apex_acct_owner')||'';if(prev!==owner){var KEEP={'apex_lang':1,'apex_acct_owner':1,'apex_admin_token':1,'skygo_session':1,'apex_token':1,'apex_2fa':1,'apex_bio':1,'apex_hidebal':1,'apex_anti':1};var PFX=['skygo_wallet_','skygo_futures_','apex_apx','apex_fees_collected','apex_kyc_status','apex_favs_','apex_alerts_','apex_scan_addr','apex_sup_'];var kill=[];for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(!k||KEEP[k])continue;for(var j=0;j<PFX.length;j++){if(k.indexOf(PFX[j])===0){kill.push(k);break;}}}kill.forEach(function(k){try{localStorage.removeItem(k);}catch(e){}});localStorage.setItem('apex_acct_owner',owner);}}catch(e){}})();
 </script>
 <meta charset="UTF-8">
 <script src="i18n.js"></script>
@@ -233,6 +233,9 @@ body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);col
   <button class="icobtn" onclick="location.href='index.html'" aria-label="رجوع">
     <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
   <div class="ttl" data-i18n="walletTitle">المحفظة</div>
+  <button class="icobtn" onclick="openNotif()" aria-label="الإشعارات" title="الإشعارات" style="position:relative">
+    <svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0"/></svg>
+    <span id="notifBadge" style="position:absolute;top:-3px;left:-3px;min-width:16px;height:16px;padding:0 4px;background:var(--red,#f6465d);color:#fff;border-radius:999px;font-size:10px;font-weight:800;display:none;align-items:center;justify-content:center;line-height:1"></span></button>
   <button class="icobtn" onclick="openRecords()" aria-label="السجلات" title="السجلات">
     <svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6"/></svg></button>
 </div>
@@ -384,6 +387,23 @@ body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);col
   </div>
 </div>
 <div class="toast" id="toast"></div>
+<!-- ===== لوحة الإشعارات (جرس المحفظة) ===== -->
+<div id="notifSheet" style="position:fixed;inset:0;z-index:120;background:rgba(0,0,0,.55);display:none;justify-content:center;align-items:flex-start">
+  <div style="width:100%;max-width:480px;height:100%;background:var(--bg);display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;gap:10px;padding:calc(12px + env(safe-area-inset-top)) 14px 12px;border-bottom:1px solid var(--border)">
+      <button class="icobtn" onclick="closeNotif()" aria-label="رجوع"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
+      <b style="flex:1;font-size:16px">سجل الإشعارات</b>
+      <button class="icobtn" onclick="markAllNotif()" title="تعليم الكل كمقروء" aria-label="تعليم الكل كمقروء"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></button>
+    </div>
+    <div class="recfilters" style="padding:12px 14px 6px">
+      <button class="on" data-nf="all" onclick="notifFilter('all')">الكل</button>
+      <button data-nf="money" onclick="notifFilter('money')">الأموال</button>
+      <button data-nf="admin" onclick="notifFilter('admin')">النظام</button>
+      <button data-nf="unread" onclick="notifFilter('unread')">غير المقروءة</button>
+    </div>
+    <div id="notifBody" style="flex:1;overflow-y:auto;padding:4px 12px calc(16px + env(safe-area-inset-bottom))"><div style="text-align:center;color:var(--muted);padding:40px 0">—</div></div>
+  </div>
+</div>
 <script>
 const API_BASE='';const MARKETS_PATH='/api/markets';
 const $=id=>document.getElementById(id);
@@ -506,13 +526,70 @@ function saveWallet(){try{localStorage.setItem(WKEY,JSON.stringify(wallet));}cat
 function mirrorBalances(b){if(!b)return;for(var k in wallet){wallet[k]=0;}for(var k2 in b){wallet[String(k2).toUpperCase()]=Number(b[k2])||0;}injectApx();saveWallet();renderBalances();}
 async function pullWallet(){if(!TOK)return;try{var r=await fetch('/api/wallet/me',{headers:{'Authorization':'Bearer '+TOK}});if(!r.ok)return;var d=await r.json();mirrorBalances(d.balances||{});}catch(e){}}
 function syncSeen(){if(!TOK)return;try{fetch('/api/wallet/sync',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOK}}).then(function(r){return r.ok?r.json():null;}).then(function(d){if(d&&d.balances)mirrorBalances(d.balances);}).catch(function(){});}catch(e){}}
+/* ===== إشعارات المحفظة (الإيداعات/السحوبات/التحويلات) ===== */
+var NOTIFS=[], _notifLastAt=0, _notifFirst=true, NOTIF_FILTER='all';
+function notifTime(ts){try{return new Date(ts).toLocaleString('en-GB',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return '';}}
+function notifDay(ts){try{var d=new Date(ts);var now=new Date();var y=new Date(now);y.setDate(now.getDate()-1);
+  if(d.toDateString()===now.toDateString())return 'اليوم';
+  if(d.toDateString()===y.toDateString())return 'أمس';
+  return d.toLocaleDateString('en-GB',{year:'numeric',month:'2-digit',day:'2-digit'});}catch(e){return '';}}
+function notifFilter(f){NOTIF_FILTER=f;try{document.querySelectorAll('#notifSheet .recfilters button').forEach(function(b){b.classList.toggle('on',b.dataset.nf===f);});}catch(e){}renderNotif();}
+window.notifFilter=notifFilter;
+async function pullNotif(){
+  if(!TOK)return;
+  try{var r=await fetch('/api/notifications',{headers:{'Authorization':'Bearer '+TOK}});if(!r.ok)return;
+    var d=await r.json();NOTIFS=d.notifications||[];var unread=d.unread||0;
+    var b=document.getElementById('notifBadge');
+    if(b){if(unread>0){b.textContent=unread>99?'99+':String(unread);b.style.display='flex';}else{b.style.display='none';}}
+    /* تنبيه صوتي + toast عند وصول إشعار جديد (لا يعمل عند أول تحميل) */
+    var newest=NOTIFS.length?Math.max.apply(null,NOTIFS.map(function(n){return +n.at||0;})):0;
+    if(!_notifFirst && newest>_notifLastAt){
+      var fresh=NOTIFS.filter(function(n){return (+n.at||0)>_notifLastAt;});
+      if(fresh[0]){try{beep();}catch(e){}toast('🔔 '+(fresh[0].title||'إشعار جديد'));}
+    }
+    if(newest>_notifLastAt)_notifLastAt=newest;
+    _notifFirst=false;
+    if(document.getElementById('notifSheet').style.display==='flex')renderNotif();
+  }catch(e){}
+}
+function renderNotif(){
+  var el=document.getElementById('notifBody');if(!el)return;
+  var arr=NOTIFS.slice().sort(function(a,b){return (+b.at||0)-(+a.at||0);});
+  if(NOTIF_FILTER==='unread')arr=arr.filter(function(n){return !n.read;});
+  else if(NOTIF_FILTER!=='all')arr=arr.filter(function(n){return (n.kind||'admin')===NOTIF_FILTER;});
+  if(!arr.length){el.innerHTML='<div style="text-align:center;color:var(--muted);padding:40px 0">لا توجد إشعارات '+(NOTIF_FILTER==='all'?'بعد':'في هذا القسم')+'</div>';return;}
+  var html='',lastDay='';
+  arr.forEach(function(n){
+    var day=notifDay(n.at);
+    if(day!==lastDay){html+='<div style="color:var(--muted);font-size:11.5px;font-weight:800;margin:10px 4px 7px">'+day+'</div>';lastDay=day;}
+    var unread=!n.read;
+    var isMoney=(n.kind||'admin')==='money';
+    var tagTxt=isMoney?'مالي':'نظام';
+    html+='<div style="display:flex;gap:10px;background:'+(unread?'var(--panel2)':'var(--panel)')+';border:1px solid var(--border);border-radius:12px;padding:12px 13px;margin-bottom:9px">'+
+      '<div style="width:34px;height:34px;flex:0 0 auto;border-radius:10px;background:'+(unread?'#f0b90b22':'var(--panel2)')+';display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" style="width:17px;height:17px;stroke:'+(unread?'#f0b90b':'var(--muted)')+';fill:none;stroke-width:2"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0"/></svg></div>'+
+      '<div style="flex:1;min-width:0"><div style="font-weight:800;font-size:13.5px;display:flex;align-items:center;gap:6px">'+esc(n.title||'إشعار')+(unread?'<span style="width:7px;height:7px;border-radius:50%;background:var(--red,#f6465d);display:inline-block"></span>':'')+'<span style="margin-inline-start:auto;font-size:10px;font-weight:800;color:'+(isMoney?'var(--gold2)':'var(--muted)')+';background:'+(isMoney?'rgba(224,166,21,.12)':'var(--panel2)')+';border-radius:6px;padding:2px 7px">'+tagTxt+'</span></div>'+
+      '<div style="color:var(--muted);font-size:12.5px;margin-top:3px;line-height:1.6">'+esc(n.body||'')+'</div>'+
+      '<div style="color:var(--muted);font-size:11px;margin-top:5px">'+notifTime(n.at)+'</div></div></div>';
+  });
+  el.innerHTML=html;
+}
+async function markAllNotif(){
+  if(!TOK)return;
+  var unreadIds=NOTIFS.filter(function(n){return !n.read;}).map(function(n){return n.id;});
+  for(var i=0;i<unreadIds.length;i++){try{await fetch('/api/notifications/read',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOK},body:JSON.stringify({id:unreadIds[i]})});}catch(e){}}
+  NOTIFS.forEach(function(n){n.read=true;});
+  var b=document.getElementById('notifBadge');if(b)b.style.display='none';
+  renderNotif();
+}
+function openNotif(){var s=document.getElementById('notifSheet');if(!s)return;s.style.display='flex';renderNotif();pullNotif();}
+function closeNotif(){var s=document.getElementById('notifSheet');if(s)s.style.display='none';}
 /* للمستخدم المُسجّل: السيرفر هو المصدر الوحيد للرصيد، لذا لا نعرض أي رصيد مخزّن
    محلياً قديم (لتجنّب ظهوره ثم اختفائه)؛ ننتظر ردّ السيرفر. */
 if(TOK){for(var _k in wallet)wallet[_k]=0;}
 injectApx();renderBalances();renderFavs();poll();setInterval(poll,5000);
 /* تحديث APX لحظياً مع حركة الشارت + أي تغيير من الإدارة */
 if(window.APX){APX.onChange&&APX.onChange(function(){injectApx();renderBalances();});setInterval(function(){injectApx();renderBalances();},1000);}
-if(TOK){pullWallet();setInterval(pullWallet,8000);syncSeen();setInterval(syncSeen,20000);}
+if(TOK){pullWallet();setInterval(pullWallet,8000);syncSeen();setInterval(syncSeen,20000);pullNotif();setInterval(pullNotif,12000);}
 </script>
 <script>
 /* ===== محفظة العقود الآجلة (منفصلة عن الفوري) + التحويل الداخلي ===== */

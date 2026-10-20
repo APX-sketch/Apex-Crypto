@@ -116,15 +116,18 @@ export async function sendTransferAlert({ to, kind, amount, currency, counterpar
   return sendMail({ to, subject: 'Apex — ' + title, text, html: _wrap(title, lines) });
 }
 
-// إرسال رمز OTP لتأكيد السحب
-export async function sendOtp({ to, code, amount, currency } = {}) {
-  const title = 'رمز تأكيد السحب';
+// إرسال رمز OTP (تأكيد سحب أو تسجيل دخول)
+export async function sendOtp({ to, code, amount, currency, purpose } = {}) {
+  const isLogin = purpose === 'login' || (!amount && !currency);
+  const title = isLogin ? 'رمز تسجيل الدخول' : 'رمز تأكيد السحب';
+  const intro = isLogin ? 'رمز تأكيد تسجيل دخولك:' : 'رمز تأكيد طلب السحب الخاص بك:';
   const lines = [
-    'رمز تأكيد طلب السحب الخاص بك:',
+    intro,
     '<div style="font-size:30px;font-weight:900;letter-spacing:8px;color:#0b0e11;background:#f0b90b;border-radius:10px;padding:14px;text-align:center;margin:10px 0">' + code + '</div>',
     (amount ? ('المبلغ: <b>' + amount + ' ' + (currency || '') + '</b>') : ''),
     'صالح لمدة 5 دقائق. لا تشاركه مع أحد.',
   ].filter(Boolean);
-  const text = 'رمز تأكيد السحب: ' + code + ' (صالح 5 دقائق)';
-  return sendMail({ to, subject: 'Apex — رمز تأكيد السحب', text, html: _wrap(title, lines) });
+  const subject = 'Apex — ' + title;
+  const text = title + ': ' + code + ' (صالح 5 دقائق)';
+  return sendMail({ to, subject, text, html: _wrap(title, lines) });
 }

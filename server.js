@@ -20,8 +20,34 @@ import { getActiveSource } from './lib/binanceHosts.js';
 import { Store, publicUser } from './lib/store.js';
 import { ApxStore } from './lib/apxStore.js';
 import { initMailer, sendMail, sendTransferAlert, sendOtp } from './lib/mailer.js';
+import { OtpStore } from './lib/otp.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// ---- محمّل .env خفيف (دون اعتمادية dotenv) ----
+// يقرأ ملف .env من جذر المشروع إن وجد ويضع المتغيرات في process.env
+// (دون الكتابة فوق المتغيرات المضبوطة مسبقاً). مفيد لإعدادات SMTP وغيرها.
+(function loadDotEnv() {
+  try {
+    const p = join(__dirname, '.env');
+    if (!existsSync(p)) return;
+    const raw = readFileSync(p, 'utf8');
+    for (const line of raw.split(/\r?\n/)) {
+      const s = line.trim();
+      if (!s || s.startsWith('#')) continue;
+      const eq = s.indexOf('=');
+      if (eq < 0) continue;
+      const key = s.slice(0, eq).trim();
+      let val = s.slice(eq + 1).trim();
+      // ازالة علامات الاقتباس المحيطة
+      if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+        val = val.slice(1, -1);
+      }
+      if (key && process.env[key] === undefined) process.env[key] = val;
+    }
+    console.log('[env] تم تحميل .env');
+  } catch (e) { /* ignore */ }
+})();
 
 // ---- Config (env with sensible defaults) ----
 const PORT = Number(process.env.PORT || 3000);
@@ -977,14 +1003,70 @@ app.post('/api/auth/login', strictLimiter, async (req, res) => {
       return res.status(403).json({ error: 'banned' });
     }
 
-    // 4. نجاح الدخول: أصدر توكناً موقّعاً حقيقياً، وأعد الحالة الفعلية
-    //    من قاعدة البيانات (لا توثيق تلقائي بعد الآن).
+    // 4. خطوة OTP لتسجيل الدخول (تحقق ثنائي):
+    //    بعد نجاح كلمة المرور نُرسِل رمزاً للبريد ولا نُصدِر التوكن
+    //    إلا بعد التحقق من الرمز (/api/auth/login/verify-otp).
+    //    يُعطّل بضبط LOGIN_OTP=false.
+    if (String(process.env.LOGIN_OTP || 'true') !== 'false') {
+      const emailNorm = String(user.email || '').trim().toLowerCase();
+      const { code, expiresInSec } = loginOtps.issue(emailNorm, { uid: user.id });
+      try { await sendOtp({ to: user.email, code, purpose: 'login' }); } catch (e) {}
+      const devMode = !process.env.SMTP_HOST || process.env.OTP_DEBUG === 'true';
+      return res.json({ ok: true, otpRequired: true, email: user.email || '',
+        expiresInSec, devCode: devMode ? code : undefined });
+    }
+
+    // 5. (بدون OTP) نجاح الدخول: أصدر توكناً موقّعاً
     try { await pool.query('UPDATE users SET last_seen = ? WHERE id = ?', [Date.now(), user.id]); } catch (e) {}
     const token = signUserToken(user.id);
     res.json({ ok: true, token, status: user.status || 'pending', user: dbPublicUser(user) });
   } catch (err) {
     console.error('Login Error:', err);
     res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// ---- تأكيد دخول برمز OTP ----
+// الخطوة الثانية من تسجيل الدخول: يُرسِل العميل البريد + الرمز،
+// وبعد التحقق الناجح يُصدَر التوكن (نفس شكل رد /api/auth/login).
+app.post('/api/auth/login/verify-otp', strictLimiter, async (req, res) => {
+  try {
+    const email = String((req.body || {}).email || '').trim().toLowerCase();
+    const code = String((req.body || {}).code || '').trim();
+    if (!email) return res.status(400).json({ error: 'invalid_credentials' });
+    const vr = loginOtps.verify(email, code);
+    if (!vr.ok) return res.status(400).json({ error: vr.error });
+
+    const user = await dbGetUserByEmail(email);
+    if (!user) return res.status(401).json({ error: 'invalid_credentials' });
+    if (user.status === 'banned') return res.status(403).json({ error: 'banned' });
+
+    try { await pool.query('UPDATE users SET last_seen = ? WHERE id = ?', [Date.now(), user.id]); } catch (e) {}
+    const token = signUserToken(user.id);
+    res.json({ ok: true, token, status: user.status || 'pending', user: dbPublicUser(user) });
+  } catch (err) {
+    console.error('Login OTP verify error:', err);
+    res.status(500).json({ error: 'otp_verify_failed' });
+  }
+});
+
+// ---- إعادة إرسال رمز دخول جديد ----
+app.post('/api/auth/login/resend-otp', strictLimiter, async (req, res) => {
+  try {
+    const email = String((req.body || {}).email || '').trim().toLowerCase();
+    if (!email) return res.status(400).json({ error: 'invalid_credentials' });
+    // لا نكشف هل البريد مسجّل أم لا (حماية من التعداد): نردّ ok دائماً
+    const user = await dbGetUserByEmail(email);
+    const devMode = !process.env.SMTP_HOST || process.env.OTP_DEBUG === 'true';
+    if (!user || user.status === 'banned') {
+      return res.json({ ok: true, sent: true });
+    }
+    const { code, expiresInSec } = loginOtps.issue(email, { uid: user.id });
+    try { await sendOtp({ to: user.email, code, purpose: 'login' }); } catch (e) {}
+    res.json({ ok: true, sent: true, expiresInSec, devCode: devMode ? code : undefined });
+  } catch (err) {
+    console.error('Login OTP resend error:', err);
+    res.status(500).json({ error: 'otp_resend_failed' });
   }
 });
 
@@ -2408,25 +2490,10 @@ app.post('/api/auth/register', strictLimiter, async (req, res) => {
     res.status(500).json({ error: 'Database insertion failed' });
   }
 });
-// ---- OTP تأكيد السحب ----
-// رموز مؤقتة بالذاكرة: userId -> { code, exp, tries, amount, currency, address }
-const withdrawOtps = new Map();
-const OTP_TTL_MS = 5 * 60 * 1000;   // صالح 5 دقائق
-const OTP_MAX_TRIES = 5;
-
-function verifyWithdrawOtp(userId, code, ctx) {
-  const rec = withdrawOtps.get(userId);
-  if (!rec) return { ok: false, error: 'otp_required' };
-  if (Date.now() > rec.exp) { withdrawOtps.delete(userId); return { ok: false, error: 'otp_expired' }; }
-  if (rec.tries >= OTP_MAX_TRIES) { withdrawOtps.delete(userId); return { ok: false, error: 'otp_locked' }; }
-  if (!code || String(code).trim() !== rec.code) {
-    rec.tries += 1;
-    return { ok: false, error: 'otp_invalid' };
-  }
-  // نجح التحقق — استهلك الرمز (لمرة واحدة)
-  withdrawOtps.delete(userId);
-  return { ok: true };
-}
+// ---- OTP تأكيد السحب + تسجيل الدخول ----
+// مخزنان مستقلان (بالذاكرة): رمز 6 خانات، صالح 5 دقائق، 5 محاولات.
+const withdrawOtps = new OtpStore({ ttlMs: 5 * 60 * 1000, maxTries: 5 });
+const loginOtps = new OtpStore({ ttlMs: 5 * 60 * 1000, maxTries: 5 });
 
 // طلب رمز OTP لتأكيد السحب (يُرسل بالبريد + إشعار داخل التطبيق)
 app.post('/api/wallet/withdraw/request-otp', strictLimiter, requireUser, requireApproved, (req, res) => {
@@ -2437,9 +2504,8 @@ app.post('/api/wallet/withdraw/request-otp', strictLimiter, requireUser, require
   if (!/^[A-Z0-9]{2,12}$/.test(currency)) return res.status(400).json({ error: 'bad_currency' });
   if (!amount || !isFinite(amount) || amount <= 0) return res.status(400).json({ error: 'invalid_amount' });
 
-  const code = String(Math.floor(100000 + Math.random() * 900000)); // 6 خانات
-  const exp = Date.now() + OTP_TTL_MS;
-  withdrawOtps.set(req.user.id, { code, exp, tries: 0, amount, currency, address });
+  // أصدر رمزاً جديداً (6 خانات، صالح 5 دقائق) مرتبطاً بتفاصيل العملية
+  const { code, expiresInSec } = withdrawOtps.issue(req.user.id, { amount, currency, address });
 
   // أرسل الرمز بالبريد (best-effort)
   try { sendOtp({ to: req.user.email, code, amount, currency }); } catch (e) {}
@@ -2452,9 +2518,9 @@ app.post('/api/wallet/withdraw/request-otp', strictLimiter, requireUser, require
     });
   } catch (e) {}
 
-  // في بيئة العرض/الاختبار دون SMTP نعيد debugCode لتيسير التجربة.
+  // في بيئة العرض/الاختبار دون SMTP نعيد devCode لتيسير التجربة.
   const devMode = !process.env.SMTP_HOST || process.env.OTP_DEBUG === 'true';
-  res.json({ ok: true, sent: true, expiresInSec: Math.round(OTP_TTL_MS / 1000),
+  res.json({ ok: true, sent: true, expiresInSec,
     email: req.user.email || '', devCode: devMode ? code : undefined });
 });
 
@@ -2483,7 +2549,7 @@ app.post('/api/wallet/withdraw', strictLimiter, requireUser, requireApproved, as
   // ---- خطوة OTP: لازم رمز تأكيد صالح قبل تنفيذ السحب ----
   {
     const otp = String(body.otp || '').trim();
-    const vr = verifyWithdrawOtp(req.user.id, otp, { amount, currency, address });
+    const vr = withdrawOtps.verify(req.user.id, otp);
     if (!vr.ok) return res.status(400).json({ error: vr.error });
   }
 

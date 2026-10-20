@@ -30,12 +30,21 @@ h1{font-size:20px;margin:0 0 4px}
 .msg.ok{display:block;background:rgba(14,203,129,.12);color:#5be0a8;border:1px solid rgba(14,203,129,.3)}
 .adminlink{text-align:center;margin-top:22px;font-size:12px}
 .adminlink a{color:var(--muted);text-decoration:none}
+.otp-in{width:100%;text-align:center;letter-spacing:12px;font-size:26px;font-weight:900;padding:14px 0;border-radius:12px;border:1px solid var(--border);background:var(--panel2);color:var(--txt);direction:ltr;outline:none}
+.otp-in:focus{border-color:var(--gold2)}
+.otp-row{display:flex;justify-content:space-between;align-items:center;margin:12px 2px 0;font-size:13px}
+.linkbtn{background:none;border:0;color:var(--gold2);font-family:inherit;font-weight:700;cursor:pointer;font-size:13px;padding:0}
+.timer{color:var(--muted);font-size:12px}
+.devcode{display:none;margin:0 0 14px;font-size:13px;color:#8fd;text-align:center;background:rgba(14,203,129,.10);border-radius:10px;padding:8px}
+.backbtn{width:100%;margin-top:10px;background:none;border:0;color:var(--muted);font-family:inherit;font-size:14px;cursor:pointer}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="logo"><b>Apex</b><span>\\\\\\</span></div>
-  <div class="card">
+  <div class="logo"><b>Apex</b><span>Crypto</span></div>
+
+  <!-- الخطوة 1: بيانات الدخول -->
+  <div class="card" id="stepLogin">
     <h1 data-i18n="loginTitle">تسجيل الدخول</h1>
     <div class="sub" data-i18n="loginSub">أدخل بيانات حسابك للمتابعة</div>
     <div class="msg" id="msg"></div>
@@ -44,11 +53,40 @@ h1{font-size:20px;margin:0 0 4px}
     <button class="btn" id="submitBtn" onclick="doLogin()">دخول</button>
     <div class="alt">ليس لديك حساب؟ <a href="register.html">إنشاء حساب</a></div>
   </div>
+
+  <!-- الخطوة 2: رمز التحقق -->
+  <div class="card" id="stepOtp" style="display:none">
+    <h1>تأكيد الدخول</h1>
+    <div class="sub">أرسلنا رمزاً مكوّناً من 6 أرقام إلى بريدك</div>
+    <div class="msg" id="msg2"></div>
+    <div style="direction:ltr;text-align:center;color:var(--gold2);font-size:13px;margin-bottom:14px" id="otpEmail"></div>
+    <div class="devcode" id="otpDev"></div>
+    <div class="fld"><input id="otpCode" class="otp-in" type="text" inputmode="numeric" maxlength="6" placeholder="______" autocomplete="one-time-code"></div>
+    <div class="otp-row">
+      <button class="linkbtn" id="resendBtn" onclick="resendOtp()">إعادة الإرسال</button>
+      <span class="timer" id="otpTimer"></span>
+    </div>
+    <button class="btn" id="verifyBtn" onclick="verifyOtp()">تأكيد ودخول</button>
+    <button class="backbtn" onclick="backToLogin()">← رجوع</button>
+  </div>
 </div>
 <script>
 const $=id=>document.getElementById(id);
 function getNext(){const p=new URLSearchParams(location.search);const n=p.get('next')||'index.html';return /^[a-zA-Z0-9_\-]+\.html$/.test(n)?n:'index.html';}
 function showMsg(t,cls){const m=$('msg');m.textContent=t;m.className='msg '+(cls||'err');}
+function showMsg2(t,cls){const m=$('msg2');m.textContent=t;m.className='msg '+(cls||'err');}
+
+var _loginEmail='', _otpTimer=null;
+
+function saveSessionAndGo(d){
+  const sess={id:d.user.id,uid:d.user.id,username:d.user.username,name:d.user.username,email:d.user.email,token:d.token};
+  localStorage.setItem('skygo_session',JSON.stringify(sess));
+  localStorage.setItem('apex_user',JSON.stringify(sess));
+  localStorage.setItem('apex_token',d.token);
+  localStorage.setItem('currentUser',JSON.stringify(sess));
+  location.replace(getNext());
+}
+
 async function doLogin(){
   const email=$('email').value.trim(),pass=$('pass').value;
   if(!email||!pass)return showMsg('الرجاء إدخال البريد وكلمة المرور');
@@ -63,25 +101,81 @@ async function doLogin(){
       else showMsg('البريد أو كلمة المرور غير صحيحة','err');
       btn.disabled=false;btn.textContent='دخول';return;
     }
-const sess = {
-      id: d.user.id,
-      uid: d.user.id,
-      username: d.user.username,
-      name: d.user.username,
-      email: d.user.email,
-      token: d.token
-    };
-
-    localStorage.setItem('skygo_session', JSON.stringify(sess));
-    localStorage.setItem('apex_user', JSON.stringify(sess));
-    localStorage.setItem('apex_token', d.token);
-    localStorage.setItem('currentUser', JSON.stringify(sess));
-    
-    location.replace(getNext());
-  
+    // مطلوب تأكيد OTP → انتقل للخطوة الثانية
+    if(d.otpRequired){
+      _loginEmail=email;
+      goToOtp(d);
+      btn.disabled=false;btn.textContent='دخول';
+      return;
+    }
+    // دخول مباشر (OTP معطّل)
+    if(d.token){saveSessionAndGo(d);return;}
+    showMsg('تعذّر الدخول','err');btn.disabled=false;btn.textContent='دخول';
   }catch(e){showMsg('خطأ في الاتصال بالخادم','err');btn.disabled=false;btn.textContent='دخول';}
 }
+
+function goToOtp(d){
+  $('stepLogin').style.display='none';
+  $('stepOtp').style.display='block';
+  $('otpEmail').textContent=d.email||_loginEmail;
+  showMsg2('','');
+  $('otpCode').value='';
+  if(d.devCode){$('otpDev').style.display='block';$('otpDev').textContent='رمز الاختبار: '+d.devCode;}else{$('otpDev').style.display='none';}
+  startTimer(d.expiresInSec||300);
+  setTimeout(function(){try{$('otpCode').focus();}catch(e){}},150);
+}
+
+function backToLogin(){
+  if(_otpTimer){clearInterval(_otpTimer);_otpTimer=null;}
+  $('stepOtp').style.display='none';
+  $('stepLogin').style.display='block';
+}
+
+function startTimer(sec){
+  if(_otpTimer)clearInterval(_otpTimer);
+  var left=sec;var rb=$('resendBtn');rb.style.opacity='.5';rb.style.pointerEvents='none';
+  function tick(){
+    var m=Math.floor(left/60),s=left%60;
+    $('otpTimer').textContent='صالح '+m+':'+(s<10?'0':'')+s;
+    if(left<=0){clearInterval(_otpTimer);_otpTimer=null;$('otpTimer').textContent='انتهى الرمز';rb.style.opacity='1';rb.style.pointerEvents='auto';}
+    left--;
+  }
+  tick();_otpTimer=setInterval(tick,1000);
+}
+
+async function verifyOtp(){
+  const code=($('otpCode').value||'').replace(/\D/g,'');
+  if(code.length!==6)return showMsg2('أدخل الرمز المكوّن من 6 أرقام');
+  const btn=$('verifyBtn');btn.disabled=true;btn.textContent='جارٍ التحقق...';
+  try{
+    const r=await fetch('/api/auth/login/verify-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:_loginEmail,code})});
+    const d=await r.json();
+    if(!r.ok){
+      var map={otp_required:'اطلب رمزاً أولاً',otp_expired:'انتهى الرمز — أعد الإرسال',otp_invalid:'الرمز غير صحيح',otp_locked:'محاولات كثيرة — أعد الإرسال',banned:'تم حظر هذا الحساب'};
+      showMsg2(map[d.error]||'تعذّر التحقق','err');
+      btn.disabled=false;btn.textContent='تأكيد ودخول';
+      if(d.error==='otp_invalid'){$('otpCode').value='';$('otpCode').focus();}
+      return;
+    }
+    if(d.token){saveSessionAndGo(d);return;}
+    showMsg2('تعذّر الدخول','err');btn.disabled=false;btn.textContent='تأكيد ودخول';
+  }catch(e){showMsg2('خطأ في الاتصال بالخادم','err');btn.disabled=false;btn.textContent='تأكيد ودخول';}
+}
+
+async function resendOtp(){
+  showMsg2('','');
+  try{
+    const r=await fetch('/api/auth/login/resend-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:_loginEmail})});
+    const d=await r.json();
+    if(d.devCode){$('otpDev').style.display='block';$('otpDev').textContent='رمز الاختبار: '+d.devCode;}
+    startTimer(d.expiresInSec||300);
+    showMsg2('أُعيد إرسال الرمز','ok');
+  }catch(e){showMsg2('تعذّر إعادة الإرسال','err');}
+}
+
 $('pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+$('otpCode').addEventListener('input',function(){this.value=this.value.replace(/\D/g,'').slice(0,6);});
+$('otpCode').addEventListener('keydown',e=>{if(e.key==='Enter')verifyOtp();});
 </script>
 </body>
 </html>
