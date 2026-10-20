@@ -6,7 +6,7 @@
 </script>
 <script>
 /* عزل الحسابات: عند تبديل الحساب نمسح أي حالة محلية قديمة حتى يبدأ كل حساب من الصفر */
-(function(){try{var ss=JSON.parse(localStorage.getItem('skygo_session')||'null')||{};var tok=(ss&&ss.token)||localStorage.getItem('apex_token')||'';var owner=(((ss&&ss.email)||'')+'').toLowerCase()||tok||'';if(!owner)return;var prev=localStorage.getItem('apex_acct_owner')||'';if(prev!==owner){['skygo_futures_pos','skygo_futures_hist','skygo_futures_ord','apex_fees_collected','apex_kyc_status'].forEach(function(k){try{localStorage.removeItem(k);}catch(e){}});localStorage.setItem('apex_acct_owner',owner);}}catch(e){}})();
+(function(){try{var ss=JSON.parse(localStorage.getItem('skygo_session')||'null')||{};var tok=(ss&&ss.token)||localStorage.getItem('apex_token')||'';var owner=(((ss&&ss.email)||'')+'').toLowerCase()||tok||'';if(!owner)return;var prev=localStorage.getItem('apex_acct_owner')||'';if(prev!==owner){var KEEP={'apex_lang':1,'apex_acct_owner':1,'apex_admin_token':1,'skygo_session':1,'apex_token':1,'apex_2fa':1,'apex_bio':1,'apex_hidebal':1,'apex_anti':1};var PFX=['skygo_wallet_','skygo_futures_','apex_apx','apex_fees_collected','apex_kyc_status','apex_favs_','apex_alerts_','apex_scan_addr','apex_sup_'];var kill=[];for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(!k||KEEP[k])continue;for(var j=0;j<PFX.length;j++){if(k.indexOf(PFX[j])===0){kill.push(k);break;}}}kill.forEach(function(k){try{localStorage.removeItem(k);}catch(e){}});localStorage.setItem('apex_acct_owner',owner);}}catch(e){}})();
 </script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
@@ -89,9 +89,28 @@ input{font-size:16px}
   <div class="note"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
     <span>الرصيد والسحب يُداران على السيرفر. كل حساب له رصيده المستقل، ويُخصم المبلغ من رصيد السيرفر بعد التحقق.</span></div>
 
-  <button class="btn dis" id="submitBtn" onclick="doWithdraw()">تأكيد السحب</button>
+  <button class="btn dis" id="submitBtn" onclick="startWithdraw()">تأكيد السحب</button>
 </div>
 <div class="toast" id="toast"></div>
+
+<!-- طبقة تأكيد OTP -->
+<div id="otpOv" style="position:fixed;inset:0;z-index:9998;display:none;background:rgba(0,0,0,.55);backdrop-filter:blur(3px)">
+  <div id="otpSheet" style="position:absolute;left:0;right:0;bottom:0;background:var(--panel,#1b1f24);border-top-left-radius:22px;border-top-right-radius:22px;padding:22px 20px 30px;max-width:480px;margin:0 auto;box-shadow:0 -8px 30px rgba(0,0,0,.4)">
+    <div style="width:42px;height:4px;border-radius:4px;background:var(--border,#333);margin:0 auto 18px"></div>
+    <h3 style="margin:0 0 6px;font-size:18px;font-weight:900;color:var(--txt,#fff);text-align:center">تأكيد السحب</h3>
+    <p style="margin:0 0 4px;font-size:13px;color:var(--mut,#9aa);text-align:center">أرسلنا رمزاً مكوّناً من 6 أرقام إلى بريدك</p>
+    <p id="otpEmail" style="margin:0 0 16px;font-size:12px;color:var(--gold2,#f0b90b);text-align:center;direction:ltr"></p>
+    <div id="otpDev" style="display:none;margin:0 0 14px;font-size:13px;color:#8fd;text-align:center;background:rgba(0,180,120,.12);border-radius:10px;padding:8px"></div>
+    <input id="otpInput" type="text" inputmode="numeric" maxlength="6" placeholder="______" autocomplete="one-time-code"
+      style="width:100%;box-sizing:border-box;text-align:center;letter-spacing:12px;font-size:26px;font-weight:900;padding:14px 0;border-radius:14px;border:1px solid var(--border,#333);background:var(--panel2,#0f1216);color:var(--txt,#fff);direction:ltr" oninput="otpOnInput()">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:12px 2px 0">
+      <button id="otpResend" onclick="requestOtp(true)" style="background:none;border:0;color:var(--gold2,#f0b90b);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">إعادة الإرسال</button>
+      <span id="otpTimer" style="font-size:12px;color:var(--mut,#9aa)"></span>
+    </div>
+    <button class="btn dis" id="otpConfirm" onclick="confirmWithdraw()">تأكيد</button>
+    <button onclick="closeOtp()" style="width:100%;margin-top:10px;background:none;border:0;color:var(--mut,#9aa);font-family:inherit;font-size:14px;cursor:pointer">إلغاء</button>
+  </div>
+</div>
 <script>
 const $=id=>document.getElementById(id);
 const fmt=(n,d=2)=>Number(n).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
@@ -141,31 +160,83 @@ async function refreshWallet(){
   }catch(e){}
 }
 
-async function doWithdraw(){
+var _pendingWd=null, _otpTimer=null;
+
+// الخطوة 1: التحقق من المدخلات ثم طلب رمز OTP
+async function startWithdraw(){
   var v=parseFloat($('amt').value)||0;
   var bal=avail(sel);
   var addr=($('wAddr').value||'').trim();
   if(v<=0){toast('أدخل مبلغاً صحيحاً','err');return;}
   if(v>bal){toast('الرصيد غير كافٍ','err');return;}
   if(addr.length<6){toast('أدخل عنوان محفظة صحيح','err');return;}
+  _pendingWd={amount:v,currency:sel,address:addr};
+  await requestOtp(false);
+}
+
+function openOtp(){$('otpOv').style.display='block';$('otpInput').value='';otpOnInput();setTimeout(function(){try{$('otpInput').focus();}catch(e){}},200);}
+function closeOtp(){$('otpOv').style.display='none';if(_otpTimer){clearInterval(_otpTimer);_otpTimer=null;}onAmt();}
+function otpOnInput(){var c=($('otpInput').value||'').replace(/\D/g,'').slice(0,6);$('otpInput').value=c;$('otpConfirm').className='btn'+(c.length===6?'':' dis');}
+
+// الخطوة 2: طلب الرمز من السيرفر
+async function requestOtp(isResend){
+  if(!_pendingWd)return;
   $('submitBtn').className='btn dis';
   try{
-    var r=await fetch('/api/wallet/withdraw',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({amount:v,currency:sel,address:addr})});
+    var r=await fetch('/api/wallet/withdraw/request-otp',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify(_pendingWd)});
     if(r.status===401){logout();return;}
     var d=await r.json().catch(function(){return {};});
-    if(r.status===403&&(d.error==='account_not_approved'||d.error==='banned')){toast(d.error==='banned'?'الحساب محظور':'حسابك قيد المراجعة — السحب متاح بعد توثيق الإدارة','err');return;}
+    if(r.status===403&&(d.error==='account_not_approved'||d.error==='banned')){toast(d.error==='banned'?'الحساب محظور':'حسابك قيد المراجعة — السحب متاح بعد التوثيق','err');onAmt();return;}
+    if(!r.ok){toast('تعذّر إرسال رمز التأكيد','err');onAmt();return;}
+    $('otpEmail').textContent=d.email||'';
+    if(d.devCode){$('otpDev').style.display='block';$('otpDev').textContent='رمز الاختبار: '+d.devCode;}else{$('otpDev').style.display='none';}
+    if(!isResend)openOtp();
+    startOtpTimer(d.expiresInSec||300);
+    toast(isResend?'أُعيد إرسال الرمز':'أُرسِل رمز التأكيد','ok');
+  }catch(e){toast('تعذّر الاتصال بالسيرفر','err');onAmt();}
+}
+
+function startOtpTimer(sec){
+  if(_otpTimer)clearInterval(_otpTimer);
+  var left=sec;var rs=$('otpResend');rs.style.opacity='.5';rs.style.pointerEvents='none';
+  function tick(){
+    var m=Math.floor(left/60),s=left%60;
+    $('otpTimer').textContent='صالح '+m+':'+(s<10?'0':'')+s;
+    if(left<=0){clearInterval(_otpTimer);_otpTimer=null;$('otpTimer').textContent='انتهى الرمز';rs.style.opacity='1';rs.style.pointerEvents='auto';}
+    left--;
+  }
+  tick();_otpTimer=setInterval(tick,1000);
+}
+
+// الخطوة 3: تنفيذ السحب مع الرمز
+async function confirmWithdraw(){
+  if(!_pendingWd)return;
+  var otp=($('otpInput').value||'').replace(/\D/g,'');
+  if(otp.length!==6){toast('أدخل الرمز المكوّن من 6 أرقام','err');return;}
+  $('otpConfirm').className='btn dis';
+  try{
+    var payload=Object.assign({},_pendingWd,{otp:otp});
+    var r=await fetch('/api/wallet/withdraw',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify(payload)});
+    if(r.status===401){logout();return;}
+    var d=await r.json().catch(function(){return {};});
+    if(r.status===403&&(d.error==='account_not_approved'||d.error==='banned')){toast(d.error==='banned'?'الحساب محظور':'حسابك قيد المراجعة','err');return;}
     if(!r.ok){
-      var msg=d.error==='insufficient_balance'?'الرصيد غير كافٍ':(d.error==='invalid_amount'?'مبلغ غير صالح':'تعذّر تنفيذ السحب');
-      toast(msg,'err');onAmt();return;
+      var map={otp_required:'اطلب رمز التأكيد أولاً',otp_expired:'انتهى الرمز — أعد الإرسال',otp_invalid:'الرمز غير صحيح',otp_locked:'محاولات كثيرة — أعد الإرسال',insufficient_balance:'الرصيد غير كافٍ',invalid_amount:'مبلغ غير صالح'};
+      var msg=map[d.error]||'تعذّر تنفيذ السحب';
+      toast(msg,'err');
+      if(d.error==='otp_invalid'){$('otpConfirm').className='btn';$('otpInput').value='';otpOnInput();return;}
+      if(d.error==='otp_expired'||d.error==='otp_locked'||d.error==='otp_required'){return;}
+      closeOtp();return;
     }
+    var v=_pendingWd.amount;
     if(d.balances){wallet={};for(var k in d.balances){wallet[String(k).toUpperCase()]=Number(d.balances[k])||0;}syncBal();}
     var okMsg;
     if(d.delivered&&d.recipientName){okMsg='تم تحويل '+fmt(v,v>=1?4:6)+' '+sel+' إلى '+d.recipientName+' ✓ وصلت لحسابه';}
     else if(d.delivered){okMsg='تم تحويل '+fmt(v,v>=1?4:6)+' '+sel+' ✓ وصلت للحساب المستلم';}
     else{okMsg='تم سحب '+fmt(v,v>=1?4:6)+' '+sel+' إلى عنوان خارجي';}
-    toast(okMsg,'ok');
+    closeOtp();toast(okMsg,'ok');
     setTimeout(function(){location.href='wallet.html';},1400);
-  }catch(e){toast('تعذّر الاتصال بالسيرفر','err');onAmt();}
+  }catch(e){toast('تعذّر الاتصال بالسيرفر','err');$('otpConfirm').className='btn';}
 }
 
 async function loadPrices(){

@@ -19,6 +19,7 @@ import { BinanceProxy } from './lib/binanceProxy.js';
 import { getActiveSource } from './lib/binanceHosts.js';
 import { Store, publicUser } from './lib/store.js';
 import { ApxStore } from './lib/apxStore.js';
+import { initMailer, sendMail, sendTransferAlert, sendOtp } from './lib/mailer.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -42,6 +43,9 @@ const REQUIRE_APPROVAL = (process.env.REQUIRE_APPROVAL || 'true') !== 'false';
 
 // ---- Persistent demo store (users / sessions / support chat) ----
 const store = new Store(join(__dirname, 'data', 'apex-data.json'));
+
+// ---- نظام التنبيهات البريدية (حوالات + OTP) ----
+initMailer({ outboxPath: join(__dirname, 'data', 'mail-outbox.jsonl') });
 
 // ---- APX platform coin central store (price / history / big-order alerts) ----
 // كاش شموع BTC لكل فاصل زمني (يستخدم لبذر شكل شارت APX مثل BTC تماماً)
@@ -1534,6 +1538,8 @@ app.post('/api/wallet/transfer-internal', strictLimiter, requireUser, (req, res)
       return res.status(500).json({ error: 'transfer_failed' });
     }
     store.addTransaction(req.user.id, { type: 'transfer_internal', direction: 'spot_to_futures', from: 'spot', to: 'futures', amount: amt, currency: cur, note: 'تحويل من الفوري إلى العقود الآجلة' });
+    try { store.addNotification(req.user.id, { title: 'تحويل داخلي', kind: 'money', body: 'تم تحويل ' + amt + ' ' + cur + ' من المحفظة الفورية إلى محفظة العقود الآجلة.' }); } catch (e) {}
+    try { sendTransferAlert({ to: req.user.email, kind: 'transfer', amount: amt, currency: cur, counterparty: 'من المحفظة الفورية ← محفظة العقود' }); } catch (e) {}
     return res.json({ ok: true, balances: u.balances || {}, futures: fb });
   }
 
@@ -1550,6 +1556,8 @@ app.post('/api/wallet/transfer-internal', strictLimiter, requireUser, (req, res)
     return res.status(500).json({ error: 'transfer_failed' });
   }
   store.addTransaction(req.user.id, { type: 'transfer_internal', direction: 'futures_to_spot', from: 'futures', to: 'spot', amount: amt, currency: cur, note: 'تحويل من العقود الآجلة إلى الفوري' });
+  try { store.addNotification(req.user.id, { title: 'تحويل داخلي', kind: 'money', body: 'تم تحويل ' + amt + ' ' + cur + ' من محفظة العقود الآجلة إلى المحفظة الفورية.' }); } catch (e) {}
+  try { sendTransferAlert({ to: req.user.email, kind: 'transfer', amount: amt, currency: cur, counterparty: 'من محفظة العقود ← المحفظة الفورية' }); } catch (e) {}
   return res.json({ ok: true, balances: u.balances || {}, futures: fb });
 });
 
@@ -1600,11 +1608,11 @@ app.post('/api/wallet/transfer', strictLimiter, requireUser, requireApproved, (r
 
 // ---- Notifications (user side) ----
 app.get('/api/notifications', requireUser, (req, res) => {
-  // جرس الصفحة الرئيسية يعرض فقط إشعارات الإدارة (العروض/الرسائل التي يرسلها
-  // الأدمن من لوحة التحكم عبر زر "إرسال إشعار"). إشعارات التحويلات والصفقات
-  // وشحن الرصيد لا تظهر هنا إطلاقاً.
+  // جرس الإشعارات يعرض إشعارات الإدارة (العروض/الرسائل) وكذلك
+  // إشعارات الأموال (kind='money'): الإيداعات والسحوبات والتحويلات
+  // بين الفوري والعقود — تظهر كلها في جرس صفحة المحفظة.
   const all = store.getNotifications(req.user.id) || [];
-  const list = all.filter((n) => n && n.kind === 'admin');
+  const list = all.filter((n) => n && (n.kind === 'admin' || n.kind === 'money'));
   res.json({ ok: true, notifications: list, unread: list.filter((n) => !n.read).length });
 });
 
@@ -1899,12 +1907,15 @@ app.post('/api/admin/users/:id/credit', requireAdmin, async (req, res) => {
   });
   store.addNotification(u.id, {
     title: 'شحن رصيد',
+    kind: 'money',
     body: 'تمت إضافة ' + amt + ' ' + cur + ' إلى رصيدك من الإدارة.',
   });
   store.addTransaction(u.id, {
     type: 'admin_credit', amount: amt, currency: cur,
     counterparty: 'الإدارة', note: String(note || 'شحن رصيد من الإدارة').slice(0, 200),
   });
+  // تنبيه بريدي فوري بالإيداع
+  try { sendTransferAlert({ to: u.email, kind: 'deposit', amount: amt, currency: cur, counterparty: 'الإدارة' }); } catch (e) {}
   store.logAdmin({
     admin: 'admin', action: 'credit', targetId: u.id, targetEmail: u.email, targetName: u.name,
     amount: amt, currency: cur, note: String(note || 'شحن رصيد').slice(0, 200),
@@ -2397,6 +2408,56 @@ app.post('/api/auth/register', strictLimiter, async (req, res) => {
     res.status(500).json({ error: 'Database insertion failed' });
   }
 });
+// ---- OTP تأكيد السحب ----
+// رموز مؤقتة بالذاكرة: userId -> { code, exp, tries, amount, currency, address }
+const withdrawOtps = new Map();
+const OTP_TTL_MS = 5 * 60 * 1000;   // صالح 5 دقائق
+const OTP_MAX_TRIES = 5;
+
+function verifyWithdrawOtp(userId, code, ctx) {
+  const rec = withdrawOtps.get(userId);
+  if (!rec) return { ok: false, error: 'otp_required' };
+  if (Date.now() > rec.exp) { withdrawOtps.delete(userId); return { ok: false, error: 'otp_expired' }; }
+  if (rec.tries >= OTP_MAX_TRIES) { withdrawOtps.delete(userId); return { ok: false, error: 'otp_locked' }; }
+  if (!code || String(code).trim() !== rec.code) {
+    rec.tries += 1;
+    return { ok: false, error: 'otp_invalid' };
+  }
+  // نجح التحقق — استهلك الرمز (لمرة واحدة)
+  withdrawOtps.delete(userId);
+  return { ok: true };
+}
+
+// طلب رمز OTP لتأكيد السحب (يُرسل بالبريد + إشعار داخل التطبيق)
+app.post('/api/wallet/withdraw/request-otp', strictLimiter, requireUser, requireApproved, (req, res) => {
+  const body = req.body || {};
+  const amount = Number(body.amount);
+  const currency = String(body.currency || 'USDT').toUpperCase().slice(0, 12);
+  const address = String(body.address || body.toAddress || '').trim().slice(0, 120);
+  if (!/^[A-Z0-9]{2,12}$/.test(currency)) return res.status(400).json({ error: 'bad_currency' });
+  if (!amount || !isFinite(amount) || amount <= 0) return res.status(400).json({ error: 'invalid_amount' });
+
+  const code = String(Math.floor(100000 + Math.random() * 900000)); // 6 خانات
+  const exp = Date.now() + OTP_TTL_MS;
+  withdrawOtps.set(req.user.id, { code, exp, tries: 0, amount, currency, address });
+
+  // أرسل الرمز بالبريد (best-effort)
+  try { sendOtp({ to: req.user.email, code, amount, currency }); } catch (e) {}
+  // وكذلك كإشعار داخل التطبيق (للاختبار على الجوال دون SMTP)
+  try {
+    store.addNotification(req.user.id, {
+      title: 'رمز تأكيد السحب',
+      kind: 'money',
+      body: 'رمز تأكيد سحب ' + amount + ' ' + currency + ' هو: ' + code + ' (صالح 5 دقائق).',
+    });
+  } catch (e) {}
+
+  // في بيئة العرض/الاختبار دون SMTP نعيد debugCode لتيسير التجربة.
+  const devMode = !process.env.SMTP_HOST || process.env.OTP_DEBUG === 'true';
+  res.json({ ok: true, sent: true, expiresInSec: Math.round(OTP_TTL_MS / 1000),
+    email: req.user.email || '', devCode: devMode ? code : undefined });
+});
+
 // ---- Withdraw (UNIFIED balance ledger) ----
 // Money safety + unification: spot balances now live in ONE place — the `store`
 // ledger keyed by the MySQL id string (same balance the trading pages spend).
@@ -2417,6 +2478,13 @@ app.post('/api/wallet/withdraw', strictLimiter, requireUser, requireApproved, as
   }
   if (!amount || !isFinite(amount) || amount <= 0) {
     return res.status(400).json({ error: 'invalid_amount' });
+  }
+
+  // ---- خطوة OTP: لازم رمز تأكيد صالح قبل تنفيذ السحب ----
+  {
+    const otp = String(body.otp || '').trim();
+    const vr = verifyWithdrawOtp(req.user.id, otp, { amount, currency, address });
+    if (!vr.ok) return res.status(400).json({ error: vr.error });
   }
 
   // هل العنوان يخص حساباً داخلياً حقيقياً؟ لو نعم فالسحب = تحويل يصل للمستلم
@@ -2474,10 +2542,17 @@ app.post('/api/wallet/withdraw', strictLimiter, requireUser, requireApproved, as
   try {
     store.addNotification(req.user.id, {
       title: 'طلب سحب',
+      kind: 'money',
       body: 'تم سحب ' + amount + ' ' + currency + (delivered
         ? (' وتحويلها إلى ' + (recipientName || 'الحساب المستلم') + '.')
         : (' إلى العنوان ' + address + '.')),
     });
+  } catch (e) {}
+
+  // تنبيه بريدي فوري للمُرسِل بالسحب
+  try {
+    sendTransferAlert({ to: req.user.email, kind: 'withdraw', amount, currency,
+      counterparty: delivered ? (recipientName || 'حساب داخلي') : (address || 'عنوان خارجي'), delivered });
   } catch (e) {}
 
   // لو العنوان يخص حساباً داخلياً: اعتمد المبلغ للمستلم + إشعار إيداع + حركة واردة
@@ -2493,8 +2568,14 @@ app.post('/api/wallet/withdraw', strictLimiter, requireUser, requireApproved, as
     try {
       store.addNotification(recipient.id, {
         title: 'إيداع جديد',
+        kind: 'money',
         body: 'استلمت ' + amount + ' ' + currency + ' من ' + (req.user.name || 'مستخدم') + '.',
       });
+    } catch (e) {}
+    // تنبيه بريدي فوري للمستلم بالإيداع
+    try {
+      sendTransferAlert({ to: recipientEmail, kind: 'deposit', amount, currency,
+        counterparty: req.user.name || 'مستخدم' });
     } catch (e) {}
     try {
       store.addTransaction(recipient.id, {
