@@ -307,7 +307,7 @@ export class Store {
   // Records every money movement for a user so the admin can audit deposits,
   // incoming/outgoing transfers and admin credits. `type` is one of:
   // 'admin_credit' | 'transfer_in' | 'transfer_out'.
-  addTransaction(userId, { type, amount, currency, counterparty, note } = {}) {
+  addTransaction(userId, { type, amount, currency, counterparty, note, direction, delivered } = {}) {
     const u = this.findUserById(userId);
     if (!u) return null;
     const tx = {
@@ -317,6 +317,9 @@ export class Store {
       currency: String(currency || 'USDT').toUpperCase().slice(0, 12),
       counterparty: String(counterparty || '').slice(0, 120),
       note: String(note || '').slice(0, 200),
+      // direction: 'in' | 'out' (optional); delivered: هل وصلت لحساب داخلي
+      direction: direction ? String(direction).slice(0, 8) : '',
+      delivered: (delivered === undefined || delivered === null) ? null : !!delivered,
       at: Date.now(),
     };
     u.transactions ||= [];

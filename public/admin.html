@@ -162,6 +162,7 @@ tr:last-child td{border-bottom:0}
       <div class="navi" data-pg="liquidity" onclick="nav('liquidity')"><svg viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg><span>الأرصدة والسيولة</span></div>
       <div class="navi" data-pg="orders" onclick="nav('orders')"><svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h12"/></svg><span>دفتر الأوامر</span><span class="badge" id="badgeOrders"></span></div>
       <div class="navi" data-pg="finance" onclick="nav('finance')"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l3-3 3 3 4-5"/></svg><span>العمليات المالية</span></div>
+      <div class="navi" data-pg="flow" onclick="nav('flow')"><svg viewBox="0 0 24 24"><path d="M12 3v13M7 11l5 5 5-5"/><path d="M5 21h14"/></svg><span>الإيداعات والسحوبات</span><span class="badge" id="badgeFlow"></span></div>
       <div class="navi" data-pg="commission" onclick="nav('commission')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15 9.5a2.5 2.5 0 00-2.5-1.5h-1a2 2 0 000 4h1a2 2 0 010 4h-1A2.5 2.5 0 019 15M12 6v12"/></svg><span>عمولات المنصة</span></div>
       <div class="navi" data-pg="apx" onclick="nav('apx')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 15l3-7 3 7M10 13h4"/></svg><span>عملة APX</span><span class="badge" id="badgeApx"></span></div>
       <div class="navi" data-pg="logs" onclick="nav('logs')"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><span>سجل الأدمن</span></div>
@@ -345,6 +346,30 @@ tr:last-child td{border-bottom:0}
             <button class="btn ghost sm" onclick="loadFinance()">تحديث ↻</button>
           </div>
           <div id="finTable"></div>
+        </div>
+      </div>
+      <!-- DEPOSITS & WITHDRAWALS (money flow) -->
+      <div class="page" id="pg-flow">
+        <h2 class="tt">الإيداعات والسحوبات</h2>
+        <div class="psub">كل أوامر السحب والإيداع — من أي حساب إلى أي حساب، وهل وصلت الحوالة ✓ أم لا</div>
+        <div class="stats">
+          <div class="stat b"><div class="k"><svg viewBox="0 0 24 24"><path d="M12 3v13M7 11l5 5 5-5M5 21h14"/></svg>سحوبات</div><div class="v" id="stFlowWd">0</div></div>
+          <div class="stat g"><div class="k"><svg viewBox="0 0 24 24"><path d="M12 21V8M7 13l5-5 5 5M5 3h14"/></svg>إيداعات</div><div class="v" id="stFlowDep">0</div></div>
+          <div class="stat g"><div class="k"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>وصلت</div><div class="v" id="stFlowOk">0</div></div>
+          <div class="stat r"><div class="k"><svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>لم تصل (خارجي)</div><div class="v" id="stFlowNo">0</div></div>
+        </div>
+        <div class="card">
+          <div class="card-h"><b>حركة الأموال</b>
+            <div class="tabs" id="flowTabs" style="margin-right:10px">
+              <button class="tab on" data-f="" onclick="flowFilter('')">الكل</button>
+              <button class="tab" data-f="withdraw" onclick="flowFilter('withdraw')">سحوبات</button>
+              <button class="tab" data-f="deposit" onclick="flowFilter('deposit')">إيداعات</button>
+            </div>
+            <div class="sp"></div>
+            <input id="flowSearch" placeholder="بحث بالاسم / البريد / العنوان" style="background:var(--panel2);border:1px solid var(--border);color:var(--fg);border-radius:8px;padding:6px 10px;font-size:12.5px;margin-inline-end:8px" oninput="renderFlow()">
+            <button class="btn ghost sm" onclick="loadFlow()">تحديث ↻</button>
+          </div>
+          <div id="flowTable"></div>
         </div>
       </div>
       <!-- ADMIN ACTIVITY LOG -->
@@ -757,6 +782,7 @@ function nav(pg){
   if(pg==='apx')axLoad();
   if(pg==='commission')loadCommission();
   if(pg==='finance')loadFinance();
+  if(pg==='flow')loadFlow();
   if(pg==='logs')loadLogs();
   if(pg==='security')loadSecurity();
   if(pg==='support')loadChats();
@@ -1029,6 +1055,63 @@ function renderFinance(){
   if(!rows.length){$('finTable').innerHTML='<div class="empty">لا توجد عمليات</div>';return;}
   $('finTable').innerHTML='<table><thead><tr><th>المستخدم</th><th>البريد</th><th>النوع</th><th>المبلغ</th><th>الطرف الآخر</th><th>التاريخ</th></tr></thead><tbody>'+
     rows.map(r=>'<tr><td class="u-name">'+esc(r.userName||'-')+'</td><td class="u-mail">'+esc(r.userEmail||'-')+'</td><td>'+esc(txLabel(r.type))+'</td><td style="font-weight:800;direction:ltr;text-align:right;color:'+txColor(r.type)+'">'+txSign(r.type)+fmtAmt(r.amount)+' '+esc(r.currency||'USDT')+'</td><td style="color:var(--muted)">'+esc(r.counterparty||'-')+'</td><td style="color:var(--muted)">'+fmtTime(r.at)+'</td></tr>').join('')+'</tbody></table>';
+}
+/* ---- الإيداعات والسحوبات (money flow) ---- */
+var FLOW=[], FLOW_FILTER='';
+function flowTypeLabel(r){
+  if(r.type==='withdraw')return 'سحب';
+  if(r.type==='admin_credit')return 'شحن إدارة';
+  return 'إيداع';
+}
+function flowStatusCell(r){
+  if(r.type!=='withdraw'){
+    return '<span class="pill approved" style="display:inline-flex;align-items:center;gap:4px"><svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2.4"><path d="M20 6L9 17l-5-5"/></svg>وصل</span>';
+  }
+  if(r.delivered){
+    return '<span class="pill approved" style="display:inline-flex;align-items:center;gap:4px"><svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2.4"><path d="M20 6L9 17l-5-5"/></svg>وصلت</span>';
+  }
+  return '<span class="pill banned" style="display:inline-flex;align-items:center;gap:4px"><svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2.4"><path d="M18 6L6 18M6 6l12 12"/></svg>خارجي — لم تصل</span>';
+}
+function flowFrom(r){
+  if(r.type==='withdraw')return esc(r.fromName||r.fromEmail||'-')+(r.fromEmail?('<div class="u-mail">'+esc(r.fromEmail)+'</div>'):'');
+  return esc(r.fromName||'-');
+}
+function flowTo(r){
+  if(r.type==='withdraw'){
+    if(r.delivered)return esc(r.toName||r.toEmail||'-')+(r.toEmail?('<div class="u-mail">'+esc(r.toEmail)+'</div>'):'')+(r.address?('<div class="u-mail" style="direction:ltr">'+esc(r.address)+'</div>'):'');
+    return '<span style="color:var(--muted);direction:ltr;display:inline-block">'+esc(r.address||'عنوان خارجي')+'</span>';
+  }
+  return esc(r.toName||r.toEmail||'-')+(r.toEmail?('<div class="u-mail">'+esc(r.toEmail)+'</div>'):'');
+}
+function flowFilter(f){FLOW_FILTER=f;document.querySelectorAll('#flowTabs .tab').forEach(function(t){t.classList.toggle('on',t.dataset.f===f);});renderFlow();}
+async function loadFlow(){
+  try{const d=await api('/api/admin/money-flow');FLOW=d.rows||[];const sm=d.summary||{};
+    $('stFlowWd').textContent=sm.withdrawals||0;
+    $('stFlowDep').textContent=sm.deposits||0;
+    $('stFlowOk').textContent=sm.delivered||0;
+    $('stFlowNo').textContent=sm.undelivered||0;
+    const b=$('badgeFlow');if(b){b.textContent=sm.undelivered||0;b.classList.toggle('on',(sm.undelivered||0)>0);}
+    renderFlow();
+  }catch(e){}
+}
+function renderFlow(){
+  var q=(($('flowSearch')&&$('flowSearch').value)||'').trim().toLowerCase();
+  var rows=FLOW;
+  if(FLOW_FILTER==='withdraw')rows=rows.filter(function(r){return r.type==='withdraw';});
+  else if(FLOW_FILTER==='deposit')rows=rows.filter(function(r){return r.type!=='withdraw';});
+  if(q)rows=rows.filter(function(r){return ((r.fromName||'')+' '+(r.fromEmail||'')+' '+(r.toName||'')+' '+(r.toEmail||'')+' '+(r.address||'')).toLowerCase().indexOf(q)>=0;});
+  if(!rows.length){$('flowTable').innerHTML='<div class="empty">لا توجد حركات</div>';return;}
+  $('flowTable').innerHTML='<table><thead><tr><th>النوع</th><th>من</th><th>إلى</th><th>المبلغ</th><th>الحالة</th><th>التاريخ</th></tr></thead><tbody>'+
+    rows.map(function(r){
+      var color=r.type==='withdraw'?'var(--red,#f6465d)':'var(--green,#0ecb81)';
+      var sign=r.type==='withdraw'?'-':'+';
+      return '<tr><td style="font-weight:800">'+esc(flowTypeLabel(r))+'</td>'+
+        '<td class="u-name">'+flowFrom(r)+'</td>'+
+        '<td class="u-name">'+flowTo(r)+'</td>'+
+        '<td style="font-weight:800;direction:ltr;text-align:right;color:'+color+'">'+sign+fmtAmt(r.amount)+' '+esc(r.currency||'USDT')+'</td>'+
+        '<td>'+flowStatusCell(r)+'</td>'+
+        '<td style="color:var(--muted)">'+fmtTime(r.at)+'</td></tr>';
+    }).join('')+'</tbody></table>';
 }
 /* ---- admin activity log ---- */
 function logLabel(a){return ({credit:'شحن رصيد',balance_adjust:'تعديل رصيد',notify:'إرسال إشعار',ban:'حظر حساب',unban:'رفع الحظر'})[a]||a;}

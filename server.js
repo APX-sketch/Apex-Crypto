@@ -1976,6 +1976,48 @@ app.get('/api/admin/transactions', requireAdmin, (req, res) => {
   res.json({ ok: true, transactions: rows });
 });
 
+// ---- Admin: الإيداعات والسحوبات (money flow) ----
+// موجز موحّد لكل أوامر السحب والإيداع/التحويل: من أين وإلى أين،
+// وهل وصلت الحوالة لحساب داخلي (✓ أخضر) أم لا (✗). السحوبات تُبنى
+// من سجل العمليات (opsLog)، والإيداعات من دفتر الحركات الواردة.
+app.get('/api/admin/money-flow', requireAdmin, (req, res) => {
+  // السحوبات / الحوالات الصادرة من سجل العمليات
+  const wd = (opsLog.entries || [])
+    .filter((e) => e.category === 'withdraw' && e.kind === 'withdraw_ok')
+    .map((e) => ({
+      id: e.id, at: e.at, type: 'withdraw', status: e.status,
+      delivered: !!(e.meta && e.meta.delivered),
+      external: !!(e.meta && e.meta.external),
+      amount: e.amount, currency: e.currency,
+      fromName: e.userName || '', fromEmail: e.userEmail || '',
+      toName: (e.meta && e.meta.recipientName) || '',
+      toEmail: (e.meta && e.meta.recipientEmail) || '',
+      address: (e.meta && e.meta.address) || '',
+      detail: e.detail || '',
+    }));
+  // الإيداعات = الائتمانات الواردة (تحويل وارد + شحن إدارة)
+  const txs = store.getAllTransactions();
+  const dep = txs
+    .filter((t) => t.type === 'transfer_in' || t.type === 'admin_credit')
+    .map((t) => ({
+      id: t.id, at: t.at,
+      type: t.type === 'admin_credit' ? 'admin_credit' : 'deposit',
+      status: 'ok', delivered: true, external: false,
+      amount: t.amount, currency: t.currency,
+      fromName: t.counterparty || (t.type === 'admin_credit' ? 'الإدارة' : ''), fromEmail: '',
+      toName: t.userName || '', toEmail: t.userEmail || '',
+      address: '', detail: t.note || '',
+    }));
+  const rows = wd.concat(dep).sort((a, b) => b.at - a.at).slice(0, 400);
+  const summary = {
+    withdrawals: wd.length,
+    deposits: dep.length,
+    delivered: wd.filter((w) => w.delivered).length,
+    undelivered: wd.filter((w) => !w.delivered).length,
+  };
+  res.json({ ok: true, summary, rows });
+});
+
 // ---- Admin: activity log (credits / balance edits / bans / notifications) ----
 app.get('/api/admin/logs', requireAdmin, (req, res) => {
   res.json({ ok: true, logs: store.getAdminLogs() });
@@ -2377,6 +2419,18 @@ app.post('/api/wallet/withdraw', strictLimiter, requireUser, requireApproved, as
     return res.status(400).json({ error: 'invalid_amount' });
   }
 
+  // هل العنوان يخص حساباً داخلياً حقيقياً؟ لو نعم فالسحب = تحويل يصل للمستلم
+  // (يُخصم من المُرسِل ويُضاف للمستلم مع إشعار لكلا الطرفين). لو لا فهو سحب
+  // إلى عنوان خارجي (يُخصم فقط ويُعلَّم بأنه لم يصل لحساب داخلي).
+  let recipient = null;
+  try { recipient = address ? store.getUserByAddress(address) : null; } catch (e) { recipient = null; }
+  if (recipient && recipient.id === req.user.id) {
+    return res.status(400).json({ error: 'self_transfer' });
+  }
+  if (recipient && recipient.status === 'banned') {
+    return res.status(403).json({ error: 'recipient_banned' });
+  }
+
   // المتاح = الرصيد الموحّد − المبالغ المحجوزة لأوامر مفتوحة
   const lockedForCcy = Number((lockedBalances(req.user.id) || {})[currency]) || 0;
   const current = Number((req.user.balances || {})[currency]) || 0;
@@ -2400,13 +2454,56 @@ app.post('/api/wallet/withdraw', strictLimiter, requireUser, requireApproved, as
     return res.status(400).json({ error: 'insufficient_balance' });
   }
 
-  // سجّل الحركة في دفتر معاملات المستخدم للمراجعة
+  const delivered = !!recipient;
+  const recipientName = recipient ? (recipient.name || '') : '';
+  const recipientEmail = recipient ? (recipient.email || '') : '';
+
+  // سجّل حركة الصادر في دفتر معاملات المُرسِل (مع حالة الوصول)
   try {
     store.addTransaction(req.user.id, {
       type: 'transfer_out', amount, currency,
-      counterparty: address || 'سحب خارجي', note: 'طلب سحب',
+      counterparty: delivered
+        ? ((recipientName || 'مستخدم') + ' (' + address + ')')
+        : (address || 'سحب خارجي'),
+      note: delivered ? 'سحب وصل إلى حساب داخلي' : 'سحب إلى عنوان خارجي',
+      direction: 'out', delivered,
     });
   } catch (e) {}
+
+  // إشعار للمُرسِل بأن السحب تم (يظهر في جرس الإشعارات)
+  try {
+    store.addNotification(req.user.id, {
+      title: 'طلب سحب',
+      body: 'تم سحب ' + amount + ' ' + currency + (delivered
+        ? (' وتحويلها إلى ' + (recipientName || 'الحساب المستلم') + '.')
+        : (' إلى العنوان ' + address + '.')),
+    });
+  } catch (e) {}
+
+  // لو العنوان يخص حساباً داخلياً: اعتمد المبلغ للمستلم + إشعار إيداع + حركة واردة
+  let recipientDeposit = null;
+  if (delivered) {
+    try {
+      recipientDeposit = store.addDeposit(recipient.id, {
+        amount, currency, kind: 'transfer',
+        from: req.user.depositAddress || '', fromName: req.user.name || '',
+        note: 'تحويل وارد (سحب من حساب آخر)',
+      });
+    } catch (e) {}
+    try {
+      store.addNotification(recipient.id, {
+        title: 'إيداع جديد',
+        body: 'استلمت ' + amount + ' ' + currency + ' من ' + (req.user.name || 'مستخدم') + '.',
+      });
+    } catch (e) {}
+    try {
+      store.addTransaction(recipient.id, {
+        type: 'transfer_in', amount, currency,
+        counterparty: (req.user.name || 'مستخدم') + ' (' + (req.user.depositAddress || '') + ')',
+        note: 'تحويل وارد', direction: 'in', delivered: true,
+      });
+    } catch (e) {}
+  }
 
   // زامن جدول wallets في MySQL مع الدفتر الموحّد (لعرض سيولة الأدمن)
   const newBal = Number((u.balances || {})[currency]) || 0;
@@ -2418,7 +2515,14 @@ app.post('/api/wallet/withdraw', strictLimiter, requireUser, requireApproved, as
   } catch (e) { console.warn('[withdraw] wallet mirror failed:', e.message); }
 
   logOps(req, { category: 'withdraw', kind: 'withdraw_ok', status: 'ok',
-    amount, currency, detail: 'سحب ناجح', meta: { address, newBalance: newBal } });
+    amount, currency,
+    detail: delivered
+      ? ('سحب وصل إلى ' + (recipientName || recipientEmail || 'حساب داخلي'))
+      : 'سحب إلى عنوان خارجي (لم يصل لحساب داخلي)',
+    meta: { address, newBalance: newBal, delivered, external: !delivered,
+            recipientId: recipient ? recipient.id : '', recipientName, recipientEmail } });
 
-  res.json({ ok: true, message: 'Withdrawal successful', currency, amount, balance: newBal, balances: u.balances || {} });
+  res.json({ ok: true, message: 'Withdrawal successful', currency, amount,
+    balance: newBal, balances: u.balances || {},
+    delivered, recipientName });
 });

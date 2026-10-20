@@ -159,8 +159,12 @@ async function doWithdraw(){
       toast(msg,'err');onAmt();return;
     }
     if(d.balances){wallet={};for(var k in d.balances){wallet[String(k).toUpperCase()]=Number(d.balances[k])||0;}syncBal();}
-    toast('تم سحب '+fmt(v,v>=1?4:6)+' '+sel+' بنجاح','ok');
-    setTimeout(function(){location.href='wallet.html';},1100);
+    var okMsg;
+    if(d.delivered&&d.recipientName){okMsg='تم تحويل '+fmt(v,v>=1?4:6)+' '+sel+' إلى '+d.recipientName+' ✓ وصلت لحسابه';}
+    else if(d.delivered){okMsg='تم تحويل '+fmt(v,v>=1?4:6)+' '+sel+' ✓ وصلت للحساب المستلم';}
+    else{okMsg='تم سحب '+fmt(v,v>=1?4:6)+' '+sel+' إلى عنوان خارجي';}
+    toast(okMsg,'ok');
+    setTimeout(function(){location.href='wallet.html';},1400);
   }catch(e){toast('تعذّر الاتصال بالسيرفر','err');onAmt();}
 }
 
