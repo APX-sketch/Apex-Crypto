@@ -271,7 +271,7 @@ async function ensureSchema() {
     'CREATE TABLE IF NOT EXISTS wallets (' +
     ' id INT AUTO_INCREMENT PRIMARY KEY,' +
     ' user_id INT NOT NULL,' +
-    ' currency VARCHAR(12) NOT NULL DEFAULT "USDT",' +
+' currency VARCHAR(12) NOT NULL DEFAULT \'USDT\', ' +
     ' balance DECIMAL(30,8) NOT NULL DEFAULT 0,' +
     ' locked_balance DECIMAL(30,8) NOT NULL DEFAULT 0,' +
     ' UNIQUE KEY uq_user_cur (user_id, currency)' +
