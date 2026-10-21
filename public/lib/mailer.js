@@ -27,23 +27,32 @@ function _cfg() {
   };
 }
 
-// تهيئة كسولة للناقل (تُحاول مرة واحدة فقط).
-async function _ensure() {
+// تهيئة دالة الإرسال باستخدام Gmail SMTP مباشرة
+async function ensure() {
   if (_ready) return _ready;
   _ready = (async () => {
-    const c = _cfg();
-    if (!c.host || !c.user) return; // لا إعداد SMTP → استخدم outbox
     try {
       const nm = await import('nodemailer');
       const nodemailer = nm.default || nm;
-      _transport = nodemailer.createTransport({
-        host: c.host, port: c.port, secure: c.secure,
-        auth: { user: c.user, pass: c.pass },
-      });
-      _enabled = true;
-      console.log('[mailer] SMTP transport ready via ' + c.host + ':' + c.port);
+      
+      const user = process.env.EMAIL_USER;
+      const pass = process.env.EMAIL_PASS;
+
+      if (user && pass) {
+        transport = nodemailer.createTransport({
+          service: 'gmail',
+          auth: {
+            user: user,
+            pass: pass
+          }
+        });
+        _enabled = true;
+        console.log('[mailer] Gmail SMTP ready for: ' + user);
+      } else {
+        console.warn('[mailer] EMAIL_USER or EMAIL_PASS not defined!');
+      }
     } catch (e) {
-      console.warn('[mailer] nodemailer غير مثبّت أو فشل الإعداد (سيُستخدم outbox): ' + e.message);
+      console.warn('[mailer] Nodemailer failed to load: ' + e.message);
     }
   })();
   return _ready;
