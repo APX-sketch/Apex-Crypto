@@ -1,5 +1,5 @@
 export function isMailerConfigured() {
-  return !!(process.env.SMTP_PASS || process.env.BREVO_API_KEY || process.env.EMAIL_PASS);
+  return !!(process.env.BREVO_API_KEY || process.env.SMTP_PASS);
 }
 
 export async function initMailer() {
@@ -17,7 +17,7 @@ export async function sendMail({ to, subject, text, html }) {
   const senderName = 'Apex Crypto';
 
   if (!apiKey) {
-    console.error('[mailer] مفتاح Brevo غير موجود');
+    console.error('[mailer] خطأ: Key not found - مفتاح Brevo غير موجود');
     return false;
   }
 
@@ -26,7 +26,7 @@ export async function sendMail({ to, subject, text, html }) {
       method: 'POST',
       headers: {
         'accept': 'application/json',
-        'api-key': apiKey,
+        'api-key': apiKey.trim(),
         'content-type': 'application/json'
       },
       body: JSON.stringify({
