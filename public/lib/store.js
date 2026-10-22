@@ -177,6 +177,19 @@ export class Store {
     return u;
   }
 
+  // Update mutable identity fields on an existing ledger record (e.g. email
+  // after a verified change). Never touches balances. Returns the user or null.
+  updateUser(id, fields = {}) {
+    const u = this.findUserById(id);
+    if (!u) return null;
+    let changed = false;
+    if (fields.email != null) { u.email = String(fields.email).toLowerCase().trim(); changed = true; }
+    if (fields.name != null) { u.name = String(fields.name).trim(); changed = true; }
+    if (fields.country != null) { u.country = String(fields.country).trim(); changed = true; }
+    if (changed) this._save();
+    return u;
+  }
+
   // Return the raw identity document for one user (admin review only).
   getIdDoc(id) {
     const u = this.findUserById(id);

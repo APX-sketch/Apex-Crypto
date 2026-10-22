@@ -19,7 +19,7 @@ import { BinanceProxy } from './lib/binanceProxy.js';
 import { getActiveSource } from './lib/binanceHosts.js';
 import { Store, publicUser } from './lib/store.js';
 import { ApxStore } from './lib/apxStore.js';
-import { initMailer, sendMail, sendTransferAlert, sendOtp } from './lib/mailer.js';
+import { initMailer, sendMail, sendTransferAlert, sendOtp, sendEmailChangeOtp, isMailerConfigured, getMailLog, getMailStats } from './lib/mailer.js';
 import { OtpStore } from './lib/otp.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -70,8 +70,11 @@ const REQUIRE_APPROVAL = (process.env.REQUIRE_APPROVAL || 'true') !== 'false';
 // ---- Persistent demo store (users / sessions / support chat) ----
 const store = new Store(join(__dirname, 'data', 'apex-data.json'));
 
-// ---- نظام التنبيهات البريدية (حوالات + OTP) ----
-initMailer({ outboxPath: join(__dirname, 'data', 'mail-outbox.jsonl') });
+// ---- نظام التنبيهات البريدية (حوالات + OTP) + سجلّ مراقبة الإرسال ----
+initMailer({
+  outboxPath: join(__dirname, 'data', 'mail-outbox.jsonl'),
+  logPath: join(__dirname, 'data', 'mail-log.jsonl'),
+});
 
 // ---- APX platform coin central store (price / history / big-order alerts) ----
 // كاش شموع BTC لكل فاصل زمني (يستخدم لبذر شكل شارت APX مثل BTC تماماً)
@@ -208,6 +211,38 @@ function verifyUserToken(token) {
     if (!id || Number(exp) < Date.now()) return null;
     return String(id);
   } catch (e) { return null; }
+}
+
+// ---- تذكّر الجهاز (Trusted Device) — تقليل طلبات OTP المتكررة ----
+// بعد أول تحقق OTP ناجح، إذا اختار المستخدم "تذكّر هذا الجهاز" نُصدِر
+// رمزاً موقّعاً (trustToken) مرتبطاً بـ (معرّف المستخدم + معرّف الجهاز + مدة صلاحية).
+// يخزنه العميل ويُرسِله عند الدخول التالي؛ إن كان صالحاً نتجاوز OTP ونُصدِر التوكن مباشرة.
+// الرمز موقّع بـ SESSION_SECRET (HMAC) فلا يُزوّر ولا يصلح لحساب آخر أو جهاز آخر.
+const TRUST_TTL_MS = Number(process.env.TRUST_DEVICE_TTL_MS || 30 * 24 * 60 * 60 * 1000); // 30 يوماً
+const DEVICE_ID_RE = /^[A-Za-z0-9_-]{8,64}$/;
+function signDeviceToken(userId, deviceId) {
+  const payload = 'dev.' + String(userId) + '.' + String(deviceId) + '.' + (Date.now() + TRUST_TTL_MS);
+  const sig = createHmac('sha256', SESSION_SECRET).update(payload).digest();
+  return b64url(payload) + '.' + b64url(sig);
+}
+function verifyDeviceToken(token, userId, deviceId) {
+  try {
+    const t = String(token || '');
+    const dot = t.lastIndexOf('.');
+    if (dot <= 0) return false;
+    const payloadB64 = t.slice(0, dot);
+    const sigB64 = t.slice(dot + 1);
+    const payload = Buffer.from(payloadB64.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+    const expected = createHmac('sha256', SESSION_SECRET).update(payload).digest();
+    const got = Buffer.from(sigB64.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+    if (expected.length !== got.length || !timingSafeEqual(expected, got)) return false;
+    const parts = payload.split('.');
+    if (parts[0] !== 'dev') return false;
+    if (parts[1] !== String(userId)) return false;
+    if (deviceId && parts[2] !== String(deviceId)) return false;
+    if (Number(parts[3]) < Date.now()) return false;
+    return true;
+  } catch (e) { return false; }
 }
 
 // Read a single user row (identity + status) by id / email.
@@ -373,6 +408,50 @@ function futuresApply(userId, deltas) {
   futuresWallets[userId] = next;
   saveFutures();
   return next;
+}
+
+// ---- User preferences (notification toggles) ----
+// تفضيلات المستخدم — حالياً: تفعيل/إيقاف تنبيهات الحوالات البريدية
+// (إيداع/سحب/تحويل). رموز OTP والأمان تُرسَل دائماً بغض النظر عن هذا.
+// مخزن JSON بسيط مُفتاح بمعرّف المستخدم (نصًّا).
+const PREFS_FILE = join(__dirname, 'data', 'apex-prefs.json');
+function loadPrefs() {
+  try {
+    if (existsSync(PREFS_FILE)) {
+      const d = JSON.parse(readFileSync(PREFS_FILE, 'utf8'));
+      return (d && typeof d === 'object') ? d : {};
+    }
+  } catch (e) { /* ignore corrupt / missing file */ }
+  return {};
+}
+const userPrefs = loadPrefs(); // { userId: { emailAlerts: true } }
+function savePrefs() {
+  try {
+    mkdirSync(dirname(PREFS_FILE), { recursive: true });
+    writeFileSync(PREFS_FILE, JSON.stringify(userPrefs));
+  } catch (e) { console.warn('[prefs] save failed:', e.message); }
+}
+function getPrefs(userId) {
+  const p = userPrefs[String(userId)];
+  return {
+    emailAlerts: !p || p.emailAlerts !== false, // الافتراضي: مفعّل
+  };
+}
+function setPrefs(userId, patch) {
+  const cur = userPrefs[String(userId)] || {};
+  if (patch && Object.prototype.hasOwnProperty.call(patch, 'emailAlerts')) {
+    cur.emailAlerts = !!patch.emailAlerts;
+  }
+  userPrefs[String(userId)] = cur;
+  savePrefs();
+  return getPrefs(userId);
+}
+// هل تنبيهات الحوالات البريدية مُفعّلة لهذا المستخدم؟ (افتراضياً نعم)
+function emailAlertsOn(userId) { return getPrefs(userId).emailAlerts; }
+// غلاف آمن لتنبيه الحوالة: يحترم تفضيل المستخدم قبل الإرسال.
+function alertTransfer(ownerId, args) {
+  try { if (emailAlertsOn(ownerId)) return sendTransferAlert(args); } catch (e) {}
+  return null;
 }
 
 // ---- Security log: balance-tampering / money-safety events ----
@@ -1008,10 +1087,20 @@ app.post('/api/auth/login', strictLimiter, async (req, res) => {
     //    إلا بعد التحقق من الرمز (/api/auth/login/verify-otp).
     //    يُعطّل بضبط LOGIN_OTP=false.
     if (String(process.env.LOGIN_OTP || 'true') !== 'false') {
+      // 4-أ. جهاز موثوق؟ إن أرسل العميل trustToken + deviceId صالحين
+      //      لهذا المستخدم → نتجاوز OTP ونُصدِر التوكن مباشرة.
+      const deviceId = String((req.body || {}).deviceId || '').slice(0, 64);
+      const trustToken = String((req.body || {}).trustToken || '');
+      if (deviceId && trustToken && DEVICE_ID_RE.test(deviceId) && verifyDeviceToken(trustToken, user.id, deviceId)) {
+        try { await pool.query('UPDATE users SET last_seen = ? WHERE id = ?', [Date.now(), user.id]); } catch (e) {}
+        const token = signUserToken(user.id);
+        return res.json({ ok: true, token, status: user.status || 'pending', user: dbPublicUser(user), trusted: true });
+      }
+
       const emailNorm = String(user.email || '').trim().toLowerCase();
       const { code, expiresInSec } = loginOtps.issue(emailNorm, { uid: user.id });
       try { await sendOtp({ to: user.email, code, purpose: 'login' }); } catch (e) {}
-      const devMode = !process.env.SMTP_HOST || process.env.OTP_DEBUG === 'true';
+      const devMode = !isMailerConfigured() || process.env.OTP_DEBUG === 'true';
       return res.json({ ok: true, otpRequired: true, email: user.email || '',
         expiresInSec, devCode: devMode ? code : undefined });
     }
@@ -1043,7 +1132,16 @@ app.post('/api/auth/login/verify-otp', strictLimiter, async (req, res) => {
 
     try { await pool.query('UPDATE users SET last_seen = ? WHERE id = ?', [Date.now(), user.id]); } catch (e) {}
     const token = signUserToken(user.id);
-    res.json({ ok: true, token, status: user.status || 'pending', user: dbPublicUser(user) });
+    const resp = { ok: true, token, status: user.status || 'pending', user: dbPublicUser(user) };
+    // تذكّر الجهاز: إن طلب العميل ذلك وأرسل deviceId صالحاً
+    // نُصدِر trustToken يخزنه العميل لتجاوز OTP في المرات القادمة.
+    const rememberDevice = !!(req.body || {}).rememberDevice;
+    const deviceId = String((req.body || {}).deviceId || '').slice(0, 64);
+    if (rememberDevice && DEVICE_ID_RE.test(deviceId)) {
+      resp.trustToken = signDeviceToken(user.id, deviceId);
+      resp.trustTtlDays = Math.round(TRUST_TTL_MS / 86400000);
+    }
+    res.json(resp);
   } catch (err) {
     console.error('Login OTP verify error:', err);
     res.status(500).json({ error: 'otp_verify_failed' });
@@ -1057,7 +1155,7 @@ app.post('/api/auth/login/resend-otp', strictLimiter, async (req, res) => {
     if (!email) return res.status(400).json({ error: 'invalid_credentials' });
     // لا نكشف هل البريد مسجّل أم لا (حماية من التعداد): نردّ ok دائماً
     const user = await dbGetUserByEmail(email);
-    const devMode = !process.env.SMTP_HOST || process.env.OTP_DEBUG === 'true';
+    const devMode = !isMailerConfigured() || process.env.OTP_DEBUG === 'true';
     if (!user || user.status === 'banned') {
       return res.json({ ok: true, sent: true });
     }
@@ -1080,10 +1178,107 @@ app.get('/api/auth/me', requireUser, async (req, res) => {
   try {
     const dbu = await dbGetUserById(req.user.uid);
     if (!dbu) return res.status(401).json({ error: 'unauthorized' });
-    res.json({ ok: true, status: dbu.status || 'pending', user: dbPublicUser(dbu) });
+    res.json({ ok: true, status: dbu.status || 'pending', user: dbPublicUser(dbu),
+      prefs: getPrefs(req.user.id) });
   } catch (err) {
     console.error('auth/me error:', err.message);
     res.status(500).json({ error: 'me_failed' });
+  }
+});
+
+// ============================================================
+//  إعدادات المستخدم (Settings): تفضيلات التنبيهات + تغيير البريد
+// ============================================================
+
+// قراءة تفضيلات المستخدم
+app.get('/api/user/prefs', requireUser, (req, res) => {
+  res.json({ ok: true, prefs: getPrefs(req.user.id) });
+});
+
+// تحديث تفضيلات التنبيهات (حالياً: emailAlerts)
+app.post('/api/user/prefs', requireUser, (req, res) => {
+  const body = req.body || {};
+  const patch = {};
+  if (Object.prototype.hasOwnProperty.call(body, 'emailAlerts')) patch.emailAlerts = !!body.emailAlerts;
+  const prefs = setPrefs(req.user.id, patch);
+  try {
+    logOps(req, { category: 'account', kind: 'prefs_update', status: 'ok',
+      detail: 'تحديث تفضيلات التنبيهات', meta: prefs });
+  } catch (e) {}
+  res.json({ ok: true, prefs });
+});
+
+// خطوة 1 من تغيير البريد: التحقق من كلمة المرور + إرسال رمز للبريد الجديد
+// لا يُغيّر شيئاً حتى يُتحقّق من الرمز في الخطوة 2 (لإثبات ملكية البريد الجديد).
+app.post('/api/auth/change-email', strictLimiter, requireUser, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const newEmail = String(body.newEmail || '').trim().toLowerCase();
+    const password = String(body.password || '');
+    // تحقق شكلي بسيط من البريد
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail) || newEmail.length > 160) {
+      return res.status(400).json({ error: 'bad_email' });
+    }
+    if (!password) return res.status(400).json({ error: 'password_required' });
+
+    // 1) تحقّق من كلمة المرور الحالية (من مصدر الحقيقة MySQL)
+    const dbu = await dbGetUserById(req.user.uid);
+    if (!dbu) return res.status(401).json({ error: 'unauthorized' });
+    const vr = verifyPassword(password, dbu.password);
+    if (!vr.ok) {
+      logSecurity(req, { kind: 'change_email_bad_password', severity: 'warning',
+        detail: 'محاولة تغيير بريد بكلمة مرور خاطئة' });
+      return res.status(401).json({ error: 'invalid_password' });
+    }
+
+    // 2) البريد الجديد لا يساوي الحالي، وغير مستخدم من حساب آخر
+    if (newEmail === String(dbu.email || '').trim().toLowerCase()) {
+      return res.status(400).json({ error: 'same_email' });
+    }
+    const taken = await dbGetUserByEmail(newEmail);
+    if (taken && String(taken.id) !== String(dbu.id)) {
+      return res.status(409).json({ error: 'email_exists' });
+    }
+
+    // 3) أصدِر رمزاً مرتبطاً بالمستخدم والبريد الجديد، وأرسِله للبريد الجديد
+    const { code, expiresInSec } = emailChangeOtps.issue(req.user.id, { newEmail });
+    try { await sendEmailChangeOtp({ to: newEmail, code }); } catch (e) {}
+    const devMode = !isMailerConfigured() || process.env.OTP_DEBUG === 'true';
+    res.json({ ok: true, otpRequired: true, newEmail, expiresInSec,
+      devCode: devMode ? code : undefined });
+  } catch (err) {
+    console.error('change-email error:', err.message);
+    res.status(500).json({ error: 'change_email_failed' });
+  }
+});
+
+// خطوة 2 من تغيير البريد: التحقق من الرمز ثم تطبيق التغيير
+app.post('/api/auth/change-email/verify', strictLimiter, requireUser, async (req, res) => {
+  try {
+    const code = String((req.body || {}).code || '').trim();
+    const vr = emailChangeOtps.verify(req.user.id, code);
+    if (!vr.ok) return res.status(400).json({ error: vr.error });
+    const newEmail = String((vr.meta && vr.meta.newEmail) || '').trim().toLowerCase();
+    if (!newEmail) return res.status(400).json({ error: 'otp_expired' });
+
+    // تأكد مرة أخيرة أن البريد ما زال متاحاً
+    const taken = await dbGetUserByEmail(newEmail);
+    if (taken && String(taken.id) !== String(req.user.uid)) {
+      return res.status(409).json({ error: 'email_exists' });
+    }
+    // حدّث MySQL (مصدر الحقيقة) ثم الدفتر الموحّد
+    await pool.query('UPDATE users SET email = ? WHERE id = ?', [newEmail, req.user.uid]);
+    try { store.updateUser(req.user.id, { email: newEmail }); } catch (e) {}
+    try {
+      logOps(req, { category: 'account', kind: 'email_changed', status: 'ok',
+        detail: 'تغيير البريد الإلكتروني (بعد تأكيد الرمز)',
+        meta: { newEmail } });
+    } catch (e) {}
+    const u = await dbGetUserById(req.user.uid);
+    res.json({ ok: true, user: dbPublicUser(u) });
+  } catch (err) {
+    console.error('change-email verify error:', err.message);
+    res.status(500).json({ error: 'change_email_verify_failed' });
   }
 });
 
@@ -1621,7 +1816,7 @@ app.post('/api/wallet/transfer-internal', strictLimiter, requireUser, (req, res)
     }
     store.addTransaction(req.user.id, { type: 'transfer_internal', direction: 'spot_to_futures', from: 'spot', to: 'futures', amount: amt, currency: cur, note: 'تحويل من الفوري إلى العقود الآجلة' });
     try { store.addNotification(req.user.id, { title: 'تحويل داخلي', kind: 'money', body: 'تم تحويل ' + amt + ' ' + cur + ' من المحفظة الفورية إلى محفظة العقود الآجلة.' }); } catch (e) {}
-    try { sendTransferAlert({ to: req.user.email, kind: 'transfer', amount: amt, currency: cur, counterparty: 'من المحفظة الفورية ← محفظة العقود' }); } catch (e) {}
+    try { alertTransfer(req.user.id, { to: req.user.email, kind: 'transfer', amount: amt, currency: cur, counterparty: 'من المحفظة الفورية ← محفظة العقود' }); } catch (e) {}
     return res.json({ ok: true, balances: u.balances || {}, futures: fb });
   }
 
@@ -1639,7 +1834,7 @@ app.post('/api/wallet/transfer-internal', strictLimiter, requireUser, (req, res)
   }
   store.addTransaction(req.user.id, { type: 'transfer_internal', direction: 'futures_to_spot', from: 'futures', to: 'spot', amount: amt, currency: cur, note: 'تحويل من العقود الآجلة إلى الفوري' });
   try { store.addNotification(req.user.id, { title: 'تحويل داخلي', kind: 'money', body: 'تم تحويل ' + amt + ' ' + cur + ' من محفظة العقود الآجلة إلى المحفظة الفورية.' }); } catch (e) {}
-  try { sendTransferAlert({ to: req.user.email, kind: 'transfer', amount: amt, currency: cur, counterparty: 'من محفظة العقود ← المحفظة الفورية' }); } catch (e) {}
+  try { alertTransfer(req.user.id, { to: req.user.email, kind: 'transfer', amount: amt, currency: cur, counterparty: 'من محفظة العقود ← المحفظة الفورية' }); } catch (e) {}
   return res.json({ ok: true, balances: u.balances || {}, futures: fb });
 });
 
@@ -1997,7 +2192,7 @@ app.post('/api/admin/users/:id/credit', requireAdmin, async (req, res) => {
     counterparty: 'الإدارة', note: String(note || 'شحن رصيد من الإدارة').slice(0, 200),
   });
   // تنبيه بريدي فوري بالإيداع
-  try { sendTransferAlert({ to: u.email, kind: 'deposit', amount: amt, currency: cur, counterparty: 'الإدارة' }); } catch (e) {}
+  try { alertTransfer(u.id, { to: u.email, kind: 'deposit', amount: amt, currency: cur, counterparty: 'الإدارة' }); } catch (e) {}
   store.logAdmin({
     admin: 'admin', action: 'credit', targetId: u.id, targetEmail: u.email, targetName: u.name,
     amount: amt, currency: cur, note: String(note || 'شحن رصيد').slice(0, 200),
@@ -2156,6 +2351,23 @@ app.get('/api/admin/ops-log', requireAdmin, (req, res) => {
   if (st) logs = logs.filter((e) => e.status === st);
   if (uid) logs = logs.filter((e) => String(e.userId) === uid || String(e.uid) === uid);
   res.json({ ok: true, summary, logs: logs.slice(0, 300) });
+});
+
+// ---- Admin: سجلّ البريد (مراقبة نجاح/فشل إرسال الرسائل) ----
+// يُظهِر آخر محاولات الإرسال مع ملخّص (ناجح/فاشل + آخر خطأ) حتى يراقب
+// الأدمن فشل تسليم البريد (مثلاً كلمة تطبيقات خاطئة أو حجب من Gmail).
+app.get('/api/admin/mail-log', requireAdmin, (req, res) => {
+  try {
+    const limit = Number(req.query.limit || 200);
+    const stats = getMailStats();
+    let logs = getMailLog({ limit });
+    const only = String(req.query.only || '').trim();
+    if (only === 'failed') logs = logs.filter((e) => !e.ok);
+    else if (only === 'sent') logs = logs.filter((e) => e.ok);
+    res.json({ ok: true, stats, logs });
+  } catch (e) {
+    res.json({ ok: true, stats: { total: 0, sent: 0, failed: 0, last24hFailed: 0, configured: isMailerConfigured() }, logs: [] });
+  }
 });
 // ---- Admin: live order book (all pending + recent executed orders) ----
 // Lets the admin monitor every account's server-side orders in real time:
@@ -2494,6 +2706,8 @@ app.post('/api/auth/register', strictLimiter, async (req, res) => {
 // مخزنان مستقلان (بالذاكرة): رمز 6 خانات، صالح 5 دقائق، 5 محاولات.
 const withdrawOtps = new OtpStore({ ttlMs: 5 * 60 * 1000, maxTries: 5 });
 const loginOtps = new OtpStore({ ttlMs: 5 * 60 * 1000, maxTries: 5 });
+// رمز تأكيد تغيير البريد (يُرسَل للبريد الجديد) — مُفتاح بمعرّف المستخدم
+const emailChangeOtps = new OtpStore({ ttlMs: 5 * 60 * 1000, maxTries: 5 });
 
 // طلب رمز OTP لتأكيد السحب (يُرسل بالبريد + إشعار داخل التطبيق)
 app.post('/api/wallet/withdraw/request-otp', strictLimiter, requireUser, requireApproved, (req, res) => {
@@ -2509,17 +2723,21 @@ app.post('/api/wallet/withdraw/request-otp', strictLimiter, requireUser, require
 
   // أرسل الرمز بالبريد (best-effort)
   try { sendOtp({ to: req.user.email, code, amount, currency }); } catch (e) {}
-  // وكذلك كإشعار داخل التطبيق (للاختبار على الجوال دون SMTP)
+  // في وضع الاختبار فقط (بلا بريد مُعدّ) نضع الرمز داخل إشعار بالتطبيق لتيسير التجربة؛
+  // أمّا عند تفعيل البريد الحقيقي فلا نكشف الرمز داخل التطبيق إطلاقاً (يصل للإيميل فقط).
+  const emailOn = isMailerConfigured() && process.env.OTP_DEBUG !== 'true';
   try {
     store.addNotification(req.user.id, {
       title: 'رمز تأكيد السحب',
       kind: 'money',
-      body: 'رمز تأكيد سحب ' + amount + ' ' + currency + ' هو: ' + code + ' (صالح 5 دقائق).',
+      body: emailOn
+        ? ('أرسلنا رمز تأكيد سحب ' + amount + ' ' + currency + ' إلى بريدك الإلكتروني (صالح 5 دقائق).')
+        : ('رمز تأكيد سحب ' + amount + ' ' + currency + ' هو: ' + code + ' (صالح 5 دقائق).'),
     });
   } catch (e) {}
 
-  // في بيئة العرض/الاختبار دون SMTP نعيد devCode لتيسير التجربة.
-  const devMode = !process.env.SMTP_HOST || process.env.OTP_DEBUG === 'true';
+  // في بيئة العرض/الاختبار دون بريد مُعدّ نعيد devCode لتيسير التجربة.
+  const devMode = !isMailerConfigured() || process.env.OTP_DEBUG === 'true';
   res.json({ ok: true, sent: true, expiresInSec,
     email: req.user.email || '', devCode: devMode ? code : undefined });
 });
@@ -2615,9 +2833,9 @@ app.post('/api/wallet/withdraw', strictLimiter, requireUser, requireApproved, as
     });
   } catch (e) {}
 
-  // تنبيه بريدي فوري للمُرسِل بالسحب
+  // تنبيه بريدي فوري للمُرسِل بالسحب (يحترم تفضيل التنبيهات)
   try {
-    sendTransferAlert({ to: req.user.email, kind: 'withdraw', amount, currency,
+    alertTransfer(req.user.id, { to: req.user.email, kind: 'withdraw', amount, currency,
       counterparty: delivered ? (recipientName || 'حساب داخلي') : (address || 'عنوان خارجي'), delivered });
   } catch (e) {}
 
@@ -2638,9 +2856,9 @@ app.post('/api/wallet/withdraw', strictLimiter, requireUser, requireApproved, as
         body: 'استلمت ' + amount + ' ' + currency + ' من ' + (req.user.name || 'مستخدم') + '.',
       });
     } catch (e) {}
-    // تنبيه بريدي فوري للمستلم بالإيداع
+    // تنبيه بريدي فوري للمستلم بالإيداع (يحترم تفضيله)
     try {
-      sendTransferAlert({ to: recipientEmail, kind: 'deposit', amount, currency,
+      alertTransfer(recipient.id, { to: recipientEmail, kind: 'deposit', amount, currency,
         counterparty: req.user.name || 'مستخدم' });
     } catch (e) {}
     try {

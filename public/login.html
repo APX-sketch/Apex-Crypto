@@ -62,6 +62,10 @@ h1{font-size:20px;margin:0 0 4px}
     <div style="direction:ltr;text-align:center;color:var(--gold2);font-size:13px;margin-bottom:14px" id="otpEmail"></div>
     <div class="devcode" id="otpDev"></div>
     <div class="fld"><input id="otpCode" class="otp-in" type="text" inputmode="numeric" maxlength="6" placeholder="______" autocomplete="one-time-code"></div>
+    <label style="display:flex;align-items:center;gap:9px;font-size:13px;color:var(--muted);margin:2px 2px 4px;cursor:pointer;user-select:none">
+      <input id="rememberDev" type="checkbox" checked style="width:17px;height:17px;accent-color:var(--gold2);cursor:pointer">
+      تذكّر هذا الجهاز (لا يُطلَب الرمز لمدة 30 يوماً)
+    </label>
     <div class="otp-row">
       <button class="linkbtn" id="resendBtn" onclick="resendOtp()">إعادة الإرسال</button>
       <span class="timer" id="otpTimer"></span>
@@ -72,6 +76,20 @@ h1{font-size:20px;margin:0 0 4px}
 </div>
 <script>
 const $=id=>document.getElementById(id);
+// معرّف ثابت للجهاز (يُنشأ مرة واحدة ويُحفظ) — يُستخدم لميزة تذكّر الجهاز.
+function deviceId(){
+  var k='apex_device_id';var v=localStorage.getItem(k);
+  if(!v||!/^[A-Za-z0-9_-]{8,64}$/.test(v)){
+    try{var a=new Uint8Array(16);crypto.getRandomValues(a);v=Array.from(a).map(function(x){return x.toString(16).padStart(2,'0');}).join('');}
+    catch(e){v='d'+Date.now().toString(36)+Math.random().toString(36).slice(2,12);}
+    localStorage.setItem(k,v);
+  }
+  return v;
+}
+// تخزين/جلب رمز ثقة الجهاز لكل بريد (حتى يعمل مع عدة حسابات على نفس الجهاز).
+function trustKey(email){return 'apex_trust_'+String(email||'').trim().toLowerCase();}
+function getTrust(email){try{return localStorage.getItem(trustKey(email))||'';}catch(e){return '';}}
+function setTrust(email,tok){try{if(tok)localStorage.setItem(trustKey(email),tok);}catch(e){}}
 function getNext(){const p=new URLSearchParams(location.search);const n=p.get('next')||'index.html';return /^[a-zA-Z0-9_\-]+\.html$/.test(n)?n:'index.html';}
 function showMsg(t,cls){const m=$('msg');m.textContent=t;m.className='msg '+(cls||'err');}
 function showMsg2(t,cls){const m=$('msg2');m.textContent=t;m.className='msg '+(cls||'err');}
@@ -92,7 +110,7 @@ async function doLogin(){
   if(!email||!pass)return showMsg('الرجاء إدخال البريد وكلمة المرور');
   const btn=$('submitBtn');btn.disabled=true;btn.textContent='جارٍ الدخول...';
   try{
-    const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password:pass})});
+    const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password:pass,deviceId:deviceId(),trustToken:getTrust(email)})});
     const d=await r.json();
     if(!r.ok){
       if(d.error==='pending')showMsg('حسابك قيد المراجعة من الإدارة. الرجاء الانتظار حتى الموافقة.','warn');
@@ -148,7 +166,7 @@ async function verifyOtp(){
   if(code.length!==6)return showMsg2('أدخل الرمز المكوّن من 6 أرقام');
   const btn=$('verifyBtn');btn.disabled=true;btn.textContent='جارٍ التحقق...';
   try{
-    const r=await fetch('/api/auth/login/verify-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:_loginEmail,code})});
+    const r=await fetch('/api/auth/login/verify-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:_loginEmail,code,rememberDevice:$('rememberDev')?$('rememberDev').checked:false,deviceId:deviceId()})});
     const d=await r.json();
     if(!r.ok){
       var map={otp_required:'اطلب رمزاً أولاً',otp_expired:'انتهى الرمز — أعد الإرسال',otp_invalid:'الرمز غير صحيح',otp_locked:'محاولات كثيرة — أعد الإرسال',banned:'تم حظر هذا الحساب'};
@@ -157,6 +175,8 @@ async function verifyOtp(){
       if(d.error==='otp_invalid'){$('otpCode').value='';$('otpCode').focus();}
       return;
     }
+    // خزّن رمز ثقة الجهاز إن أصدره الخادم (عند اختيار تذكّر الجهاز)
+    if(d.trustToken)setTrust(_loginEmail,d.trustToken);
     if(d.token){saveSessionAndGo(d);return;}
     showMsg2('تعذّر الدخول','err');btn.disabled=false;btn.textContent='تأكيد ودخول';
   }catch(e){showMsg2('خطأ في الاتصال بالخادم','err');btn.disabled=false;btn.textContent='تأكيد ودخول';}

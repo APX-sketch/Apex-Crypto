@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>الإعدادات · Apex</title>
+<style>
+  :root{--bg:#0b0e11;--card:#161a1e;--card2:#1e2329;--line:#2b3139;--txt:#eaecef;--sub:#848e9c;--gold:#f0b90b;--green:#0ecb81;--red:#f6465d}
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  body{background:var(--bg);color:var(--txt);font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;padding-bottom:40px}
+  .top{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:12px;padding:14px 16px;background:rgba(11,14,17,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .bk{width:34px;height:34px;display:flex;align-items:center;justify-content:center;border-radius:10px;background:var(--card2);color:var(--txt);font-size:20px;cursor:pointer;text-decoration:none}
+  .top h1{font-size:17px;font-weight:700}
+  .wrap{max-width:560px;margin:0 auto;padding:16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:16px}
+  .card h2{font-size:15px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:8px}
+  .card h2 svg{width:18px;height:18px;stroke:var(--gold);fill:none;stroke-width:2}
+  .hint{color:var(--sub);font-size:12.5px;line-height:1.7;margin-bottom:14px}
+  .fld{margin-bottom:12px}
+  .fld label{display:block;font-size:12.5px;color:var(--sub);margin-bottom:6px}
+  .fld input{width:100%;background:var(--card2);border:1px solid var(--line);border-radius:10px;color:var(--txt);padding:12px 13px;font-size:14px;outline:none;transition:border .15s}
+  .fld input:focus{border-color:var(--gold)}
+  .fld input:disabled{opacity:.55}
+  .btn{width:100%;background:var(--gold);color:#0b0e11;border:none;border-radius:10px;padding:13px;font-size:14.5px;font-weight:700;cursor:pointer;transition:opacity .15s}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn.ghost{background:transparent;color:var(--sub);border:1px solid var(--line)}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 0}
+  .row .tx b{display:block;font-size:14px;margin-bottom:3px}
+  .row .tx span{font-size:12px;color:var(--sub);line-height:1.6}
+  .sw{width:48px;height:27px;border-radius:14px;background:var(--line);position:relative;cursor:pointer;flex:0 0 auto;transition:background .2s}
+  .sw::after{content:'';position:absolute;top:3px;right:3px;width:21px;height:21px;border-radius:50%;background:#fff;transition:transform .2s}
+  .sw.on{background:var(--green)}
+  .sw.on::after{transform:translateX(-21px)}
+  .sw.busy{opacity:.5;pointer-events:none}
+  .cur{font-size:13px;color:var(--sub);margin-top:2px}
+  .cur b{color:var(--txt)}
+  .msg{font-size:12.5px;margin-top:10px;display:none;padding:9px 11px;border-radius:9px;line-height:1.6}
+  .msg.ok{display:block;background:rgba(14,203,129,.12);color:var(--green);border:1px solid rgba(14,203,129,.3)}
+  .msg.err{display:block;background:rgba(246,70,93,.12);color:var(--red);border:1px solid rgba(246,70,93,.3)}
+  .msg.info{display:block;background:rgba(240,185,11,.1);color:var(--gold);border:1px solid rgba(240,185,11,.3)}
+  .hidden{display:none!important}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e2329;border:1px solid var(--line);color:var(--txt);padding:11px 18px;border-radius:10px;font-size:13px;opacity:0;transition:opacity .25s;z-index:100;pointer-events:none}
+  .toast.show{opacity:1}
+  .otpbox{letter-spacing:6px;text-align:center;font-size:18px!important;font-weight:700}
+</style>
+</head>
+<body>
+<div class="top">
+  <a class="bk" href="index.html">›</a>
+  <h1>الإعدادات</h1>
+</div>
+
+<div class="wrap">
+
+  <!-- تغيير البريد الإلكتروني -->
+  <div class="card">
+    <h2><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>البريد الإلكتروني</h2>
+    <div class="cur">البريد الحالي: <b id="curEmail">—</b></div>
+    <div class="hint" style="margin-top:10px">لتغيير بريدك نتحقّق من كلمة المرور أولاً، ثم نرسل رمز تأكيد إلى البريد الجديد لإثبات ملكيته.</div>
+
+    <!-- الخطوة 1 -->
+    <div id="emStep1">
+      <div class="fld"><label>البريد الجديد</label><input id="emNew" type="email" placeholder="name@example.com" autocomplete="email"></div>
+      <div class="fld"><label>كلمة المرور الحالية</label><input id="emPass" type="password" placeholder="••••••••" autocomplete="current-password"></div>
+      <button class="btn" id="emSendBtn" onclick="emailSend()">إرسال رمز التأكيد</button>
+    </div>
+
+    <!-- الخطوة 2 -->
+    <div id="emStep2" class="hidden">
+      <div class="fld"><label>أدخل الرمز المُرسَل إلى <b id="emTarget"></b></label><input id="emOtp" class="otpbox" inputmode="numeric" maxlength="6" placeholder="------"></div>
+      <button class="btn" id="emVerBtn" onclick="emailVerify()">تأكيد وحفظ البريد</button>
+      <button class="btn ghost" style="margin-top:8px" onclick="emailReset()">إلغاء</button>
+    </div>
+
+    <div class="msg" id="emMsg"></div>
+  </div>
+
+  <!-- تنبيهات البريد -->
+  <div class="card">
+    <h2><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg>التنبيهات</h2>
+    <div class="hint">عند التفعيل، نرسل لك بريداً عند كل عملية إيداع أو سحب أو تحويل. رسائل الأمان ورموز التحقق تُرسل دائماً.</div>
+    <div class="row">
+      <div class="tx"><b>تنبيهات البريد للمعاملات</b><span>إشعار بالإيداعات والسحوبات والتحويلات</span></div>
+      <div class="sw" id="swAlerts" onclick="toggleAlerts()"></div>
+    </div>
+    <div class="msg" id="alMsg"></div>
+  </div>
+
+</div>
+<div class="toast" id="toast"></div>
+<!--SCRIPT-->
+<script>
+const $=id=>document.getElementById(id);
+const sess=JSON.parse(localStorage.getItem('skygo_session')||'{}');
+const TOKEN=(sess&&sess.token)||localStorage.getItem('apex_token')||'';
+if(!TOKEN){location.replace('login.html');}
+const H={'Authorization':'Bearer '+TOKEN};
+const HJ=Object.assign({'Content-Type':'application/json'},H);
+
+let toastT=null;
+function toast(t){const el=$('toast');el.textContent=t;el.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>el.classList.remove('show'),2200);}
+function showMsg(id,kind,t){const el=$(id);el.className='msg '+kind;el.textContent=t;}
+function clrMsg(id){const el=$(id);el.className='msg';el.textContent='';}
+
+const EMAIL_ERR={bad_email:'صيغة البريد غير صحيحة.',password_required:'أدخل كلمة المرور.',invalid_password:'كلمة المرور غير صحيحة.',same_email:'هذا هو بريدك الحالي بالفعل.',email_exists:'البريد مستخدم من حساب آخر.',otp_required:'أدخل الرمز.',otp_invalid:'الرمز غير صحيح.',otp_expired:'انتهت صلاحية الرمز، أعد المحاولة.',otp_locked:'تجاوزت عدد المحاولات، أعد الطلب.',unauthorized:'انتهت الجلسة، سجّل الدخول مجدداً.'};
+function errText(code,fb){return EMAIL_ERR[code]||fb||'حدث خطأ، أعد المحاولة.';}
+
+// تحميل البريد الحالي + حالة التنبيهات
+async function loadMe(){
+  try{
+    const r=await fetch('/api/auth/me',{headers:H});
+    if(r.status===401){location.replace('login.html');return;}
+    const d=await r.json();
+    const u=d.user||d||{};
+    $('curEmail').textContent=u.email||'—';
+    const on=!!(u.prefs?u.prefs.emailAlerts:(d.prefs&&d.prefs.emailAlerts));
+    $('swAlerts').classList.toggle('on',on);
+  }catch(e){}
+  // جلب التفضيلات صراحة (احتياطي)
+  try{const r=await fetch('/api/user/prefs',{headers:H});const d=await r.json();if(d&&d.prefs)$('swAlerts').classList.toggle('on',!!d.prefs.emailAlerts);}catch(e){}
+}
+loadMe();
+
+// ===== تغيير البريد =====
+let pendingEmail='';
+async function emailSend(){
+  clrMsg('emMsg');
+  const newEmail=$('emNew').value.trim();
+  const password=$('emPass').value;
+  if(!newEmail){showMsg('emMsg','err','أدخل البريد الجديد.');return;}
+  if(!password){showMsg('emMsg','err','أدخل كلمة المرور.');return;}
+  const b=$('emSendBtn');b.disabled=true;b.textContent='جارٍ الإرسال…';
+  try{
+    const r=await fetch('/api/auth/change-email',{method:'POST',headers:HJ,body:JSON.stringify({newEmail,password})});
+    const d=await r.json();
+    if(!r.ok||!d.ok){showMsg('emMsg','err',errText(d.error));return;}
+    pendingEmail=d.newEmail||newEmail;
+    $('emTarget').textContent=pendingEmail;
+    $('emStep1').classList.add('hidden');
+    $('emStep2').classList.remove('hidden');
+    $('emOtp').focus();
+    if(d.devCode){showMsg('emMsg','info','وضع التجربة — الرمز: '+d.devCode);}
+    else{showMsg('emMsg','ok','أرسلنا رمزاً إلى '+pendingEmail+'. الرمز صالح لمدة 5 دقائق.');}
+  }catch(e){showMsg('emMsg','err','تعذّر الاتصال بالخادم.');}
+  finally{b.disabled=false;b.textContent='إرسال رمز التأكيد';}
+}
+async function emailVerify(){
+  clrMsg('emMsg');
+  const code=$('emOtp').value.trim();
+  if(!/^\d{6}$/.test(code)){showMsg('emMsg','err','أدخل رمزاً مكوّناً من 6 أرقام.');return;}
+  const b=$('emVerBtn');b.disabled=true;b.textContent='جارٍ التأكيد…';
+  try{
+    const r=await fetch('/api/auth/change-email/verify',{method:'POST',headers:HJ,body:JSON.stringify({code})});
+    const d=await r.json();
+    if(!r.ok||!d.ok){showMsg('emMsg','err',errText(d.error));return;}
+    const em=(d.user&&d.user.email)||pendingEmail;
+    $('curEmail').textContent=em;
+    if(sess){sess.email=em;try{localStorage.setItem('skygo_session',JSON.stringify(sess));}catch(e){}}
+    emailReset();
+    showMsg('emMsg','ok','تم تغيير البريد إلى '+em+' بنجاح.');
+    toast('تم تحديث البريد');
+  }catch(e){showMsg('emMsg','err','تعذّر الاتصال بالخادم.');}
+  finally{b.disabled=false;b.textContent='تأكيد وحفظ البريد';}
+}
+function emailReset(){
+  $('emStep2').classList.add('hidden');
+  $('emStep1').classList.remove('hidden');
+  $('emNew').value='';$('emPass').value='';$('emOtp').value='';pendingEmail='';
+}
+
+// ===== تبديل تنبيهات البريد =====
+async function toggleAlerts(){
+  const sw=$('swAlerts');
+  if(sw.classList.contains('busy'))return;
+  const want=!sw.classList.contains('on');
+  sw.classList.add('busy');sw.classList.toggle('on',want);
+  clrMsg('alMsg');
+  try{
+    const r=await fetch('/api/user/prefs',{method:'POST',headers:HJ,body:JSON.stringify({emailAlerts:want})});
+    const d=await r.json();
+    if(!r.ok||!d.ok){throw new Error();}
+    const on=!!(d.prefs&&d.prefs.emailAlerts);
+    sw.classList.toggle('on',on);
+    showMsg('alMsg','ok',on?'تم تفعيل تنبيهات البريد.':'تم إيقاف تنبيهات البريد.');
+  }catch(e){
+    sw.classList.toggle('on',!want);
+    showMsg('alMsg','err','تعذّر حفظ التفضيل، أعد المحاولة.');
+  }finally{sw.classList.remove('busy');}
+}
+</script>
+</body>
+</html>

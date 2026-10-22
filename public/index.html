@@ -11,7 +11,7 @@
 </script>
 <script>
 /* عزل الحسابات: عند تبديل الحساب على نفس المتصفح نمسح أي حالة محلية قديمة (صفقات/سجل/أوامر/عمولات/توثيق) حتى يبدأ كل حساب من الصفر ولا تتسرّب بيانات بين الحسابات */
-(function(){try{var s=JSON.parse(localStorage.getItem('skygo_session')||'null')||{};var tok=(s&&s.token)||localStorage.getItem('apex_token')||'';var owner=(((s&&s.email)||'')+'').toLowerCase()||tok||'';if(!owner)return;var prev=localStorage.getItem('apex_acct_owner')||'';if(prev!==owner){['skygo_futures_pos','skygo_futures_hist','skygo_futures_ord','apex_fees_collected','apex_kyc_status'].forEach(function(k){try{localStorage.removeItem(k);}catch(e){}});localStorage.setItem('apex_acct_owner',owner);}}catch(e){}})();
+(function(){try{var s=JSON.parse(localStorage.getItem('skygo_session')||'null')||{};var tok=(s&&s.token)||localStorage.getItem('apex_token')||'';var owner=(((s&&s.email)||'')+'').toLowerCase()||tok||'';if(!owner)return;var prev=localStorage.getItem('apex_acct_owner')||'';if(prev!==owner){/* تبدّل الحساب: امسح كل ما يخص الحساب السابق (رصيد/حيازة/صفقات) حتى لا يرى حساب جديد أي رصيد متبقٍّ */var KEEP={'apex_lang':1,'apex_acct_owner':1,'apex_admin_token':1,'skygo_session':1,'apex_token':1,'apex_2fa':1,'apex_bio':1,'apex_hidebal':1,'apex_anti':1};var PFX=['skygo_wallet_','skygo_futures_','apex_apx','apex_fees_collected','apex_kyc_status','apex_favs_','apex_alerts_','apex_scan_addr','apex_sup_'];var kill=[];for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(!k||KEEP[k])continue;for(var j=0;j<PFX.length;j++){if(k.indexOf(PFX[j])===0){kill.push(k);break;}}}kill.forEach(function(k){try{localStorage.removeItem(k);}catch(e){}});localStorage.setItem('apex_acct_owner',owner);}}catch(e){}})();
 </script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
@@ -234,7 +234,7 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
 .vf.pending{color:var(--gold1)!important;background:rgba(224,166,21,.12)!important}
 .vf.rejected{color:#ff8a97!important;background:rgba(246,70,93,.12)!important}
 /* ===== QR SCANNER OVERLAY ===== */
-.scan-ov{position:fixed;inset:0;top:0;left:0;z-index:70;background:#000;display:none;flex-direction:column;width:100%;height:100vh;height:100dvh;max-width:480px;left:50%;transform:translateX(-50%)}
+.scan-ov{position:fixed;top:0;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;height:100vh;height:100dvh;z-index:9999;background:#000;display:none;flex-direction:column}
 .scan-ov.show{display:flex}
 .scan-top{display:flex;align-items:center;gap:12px;padding:calc(14px + env(safe-area-inset-top)) 16px 14px;background:linear-gradient(135deg,#1b1f24,#0f1216);border-bottom:1px solid var(--border)}
 .scan-top .bk{width:38px;height:38px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:var(--panel2);border:1px solid var(--border);border-radius:11px;cursor:pointer;font-size:20px;color:var(--txt)}
@@ -375,6 +375,7 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
     <a class="ditem" onclick="openSheet('shSecurity')"><span class="ic"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg></span><b data-i18n="security">الأمان والحماية</b><span class="ar">‹</span></a>
     <a class="ditem" onclick="openSheet('shKyc')"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg></span><b data-i18n="kyc">توثيق الهوية (KYC)</b><span class="ar">‹</span></a>
     <a class="ditem" onclick="openSheet('shLang')"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 010 18M12 3a15 15 0 000 18"/></svg></span><b data-i18n="settings">الإعدادات واللغة</b><span class="ar">‹</span></a>
+    <a class="ditem" href="settings.html"><span class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg></span><b data-i18n="accountSettings">البريد والتنبيهات</b><span class="ar">‹</span></a>
     <a class="ditem" onclick="openSheet('shHelp')"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 015 0c0 2-2.5 2-2.5 4M12 17h.01"/></svg></span><b data-i18n="help">المساعدة والدعم</b><span class="ar">‹</span></a>
     <a class="ditem logout" onclick="doLogout()"><span class="ic"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg></span><b data-i18n="logout">تسجيل الخروج</b></a>
   </div>

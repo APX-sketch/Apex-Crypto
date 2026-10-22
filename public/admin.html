@@ -167,6 +167,7 @@ tr:last-child td{border-bottom:0}
       <div class="navi" data-pg="apx" onclick="nav('apx')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 15l3-7 3 7M10 13h4"/></svg><span>عملة APX</span><span class="badge" id="badgeApx"></span></div>
       <div class="navi" data-pg="logs" onclick="nav('logs')"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><span>سجل الأدمن</span></div>
       <div class="navi" data-pg="security" onclick="nav('security')"><svg viewBox="0 0 24 24"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z"/><path d="M12 8v4M12 16h.01"/></svg><span>سجل الأمان</span><span class="badge" id="badgeSec"></span></div>
+      <div class="navi" data-pg="maillog" onclick="nav('maillog')"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg><span>سجل البريد</span><span class="badge" id="badgeMail"></span></div>
       <div class="navi" data-pg="support" onclick="nav('support')"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg><span>الدعم والشكاوى</span><span class="badge" id="badgeChat"></span></div>
     </div>
     <div class="main">
@@ -405,6 +406,29 @@ tr:last-child td{border-bottom:0}
             <button class="btn ghost sm" onclick="loadSecurity()">تحديث ↻</button>
           </div>
           <div id="secTable"></div>
+        </div>
+      </div>
+      <!-- MAIL LOG (مراقبة نجاح/فشل إرسال البريد) -->
+      <div class="page" id="pg-maillog">
+        <h2 class="tt">سجل البريد — مراقبة الإرسال</h2>
+        <div class="psub">كل محاولة إرسال بريد (رموز تحقق، تنبيهات معاملات) مع نتيجتها — للكشف السريع عن فشل التسليم (كلمة تطبيقات خاطئة أو حجب من Gmail)</div>
+        <div class="stats">
+          <div class="stat g"><div class="k"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>ناجح</div><div class="v" id="stMailSent">0</div></div>
+          <div class="stat r"><div class="k"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>فاشل</div><div class="v" id="stMailFail">0</div></div>
+          <div class="stat y"><div class="k"><svg viewBox="0 0 24 24"><path d="M12 2l10 18H2z"/><path d="M12 9v4M12 17h.01"/></svg>فشل آخر 24س</div><div class="v" id="stMail24">0</div></div>
+          <div class="stat b"><div class="k"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>حالة الخدمة</div><div class="v" id="stMailCfg" style="font-size:16px">—</div></div>
+        </div>
+        <div class="card">
+          <div class="card-h"><b>أحدث المحاولات</b>
+            <div class="tabs" id="mailTabs" style="margin-right:10px">
+              <button class="tab on" data-f="" onclick="mailFilter('')">الكل</button>
+              <button class="tab" data-f="failed" onclick="mailFilter('failed')">الفاشل فقط</button>
+              <button class="tab" data-f="sent" onclick="mailFilter('sent')">الناجح فقط</button>
+            </div>
+            <div class="sp"></div>
+            <button class="btn ghost sm" onclick="loadMailLog()">تحديث ↻</button>
+          </div>
+          <div id="mailTable"></div>
         </div>
       </div>
     </div>
@@ -785,6 +809,7 @@ function nav(pg){
   if(pg==='flow')loadFlow();
   if(pg==='logs')loadLogs();
   if(pg==='security')loadSecurity();
+  if(pg==='maillog')loadMailLog();
   if(pg==='support')loadChats();
 }
 async function refreshAll(){await refreshStats();refreshHealth();loadRecent();}
@@ -1141,6 +1166,24 @@ async function loadSecurity(){
     if(!logs.length){$('secTable').innerHTML='<div class="empty">لا توجد محاولات مسجّلة — الأرصدة سليمة كلها</div>';return;}
     $('secTable').innerHTML='<table><thead><tr><th>الخطورة</th><th>الحدث</th><th>الحساب</th><th>IP</th><th>التفاصيل</th><th>التاريخ</th></tr></thead><tbody>'+
       logs.map(l=>'<tr><td>'+secSevPill(l.severity)+'</td><td style="font-weight:700">'+secKind(l.kind)+'<div class="u-mail">'+esc(l.detail||'')+'</div></td><td class="u-name">'+esc(l.userName||l.userEmail||l.uid||l.userId||'—')+(l.userEmail?('<div class="u-mail">'+esc(l.userEmail)+'</div>'):'')+'</td><td style="direction:ltr;color:var(--muted)">'+esc(l.ip||'-')+'</td><td>'+secMeta(l.meta)+'</td><td style="color:var(--muted)">'+fmtTime(l.at)+'</td></tr>').join('')+'</tbody></table>';
+  }catch(e){}
+}
+/* ---- سجل البريد: مراقبة نجاح/فشل الإرسال ---- */
+var MAIL_FILTER='';
+function mailKind(k){return ({otp:'رمز دخول',login_otp:'رمز دخول',email_change_otp:'رمز تغيير البريد',transfer:'تنبيه تحويل',deposit:'تنبيه إيداع',withdraw:'تنبيه سحب',alert:'تنبيه',mail:'بريد'})[k]||esc(k||'بريد');}
+function mailFilter(f){MAIL_FILTER=f;document.querySelectorAll('#mailTabs .tab').forEach(function(t){t.classList.toggle('on',t.dataset.f===f);});loadMailLog();}
+async function loadMailLog(){
+  try{const q=MAIL_FILTER?('?only='+encodeURIComponent(MAIL_FILTER)):'';const d=await api('/api/admin/mail-log'+q);
+    const st=d.stats||{};const logs=d.logs||[];
+    $('stMailSent').textContent=st.sent||0;
+    $('stMailFail').textContent=st.failed||0;
+    $('stMail24').textContent=st.last24hFailed||0;
+    $('stMailCfg').textContent=st.configured?'مفعّلة':'غير مضبوطة';
+    $('stMailCfg').style.color=st.configured?'var(--green1,#0ecb81)':'var(--red1,#f6465d)';
+    const b=$('badgeMail');if(b){b.textContent=st.last24hFailed||0;b.classList.toggle('on',(st.last24hFailed||0)>0);}
+    if(!logs.length){$('mailTable').innerHTML='<div class="empty">لا توجد محاولات إرسال مسجّلة</div>';return;}
+    $('mailTable').innerHTML='<table><thead><tr><th>الحالة</th><th>النوع</th><th>المُرسَل إليه</th><th>الخطأ</th><th>التاريخ</th></tr></thead><tbody>'+
+      logs.map(function(l){var ok=!!l.ok;return '<tr><td>'+(ok?'<span class="pill approved">ناجح</span>':'<span class="pill banned">فاشل</span>')+'</td><td style="font-weight:700">'+mailKind(l.kind)+'</td><td class="u-mail" style="direction:ltr;text-align:right">'+esc(l.to||'-')+'</td><td style="color:var(--muted);direction:ltr;text-align:right;font-size:12px">'+(ok?'-':esc(l.error||'—'))+'</td><td style="color:var(--muted)">'+fmtTime(l.at)+'</td></tr>';}).join('')+'</tbody></table>';
   }catch(e){}
 }
 /* ---- support chat ---- */
