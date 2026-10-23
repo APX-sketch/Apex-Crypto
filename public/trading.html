@@ -10,7 +10,7 @@ var s=JSON.parse(localStorage.getItem('skygo_session')||'null');
 </script>
 <script>
 /* عزل الحسابات: عند تبديل الحساب نمسح أي حالة محلية قديمة (صفقات/سجل/أوامر/عمولات/توثيق) حتى يبدأ كل حساب من الصفر ولا تتسرّب بيانات بين الحسابات */
-(function(){try{var ss=JSON.parse(localStorage.getItem('skygo_session')||'null')||{};var tok=(ss&&ss.token)||localStorage.getItem('apex_token')||'';var owner=(((ss&&ss.email)||'')+'').toLowerCase()||tok||'';if(!owner)return;var prev=localStorage.getItem('apex_acct_owner')||'';if(prev!==owner){['skygo_futures_pos','skygo_futures_hist','skygo_futures_ord','apex_fees_collected','apex_kyc_status'].forEach(function(k){try{localStorage.removeItem(k);}catch(e){}});localStorage.setItem('apex_acct_owner',owner);}}catch(e){}})();
+(function(){try{var ss=JSON.parse(localStorage.getItem('skygo_session')||'null')||{};var tok=(ss&&ss.token)||localStorage.getItem('apex_token')||'';var owner=(((ss&&ss.email)||'')+'').toLowerCase()||tok||'';if(!owner)return;var prev=localStorage.getItem('apex_acct_owner')||'';if(prev!==owner){var KEEP={'apex_lang':1,'apex_acct_owner':1,'apex_admin_token':1,'skygo_session':1,'apex_token':1,'apex_2fa':1,'apex_bio':1,'apex_hidebal':1,'apex_anti':1};var PFX=['skygo_wallet_','skygo_futures_','apex_apx','apex_fees_collected','apex_kyc_status','apex_favs_','apex_alerts_','apex_scan_addr','apex_sup_'];var kill=[];for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(!k||KEEP[k])continue;for(var j=0;j<PFX.length;j++){if(k.indexOf(PFX[j])===0){kill.push(k);break;}}}kill.forEach(function(k){try{localStorage.removeItem(k);}catch(e){}});localStorage.setItem('apex_acct_owner',owner);}}catch(e){}})();
 </script>
 <style>
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -284,6 +284,58 @@ html,body{margin:0;background:#05070a;color:var(--txt);font-family:'Segoe UI',Ta
 .ob-row .ob-p,.ob-row .ob-q{flex:1}
 .ob-row .ob-q{text-align:end}
 .mk-empty{padding:24px;text-align:center;color:var(--mut);font-size:12px}
+/* ===== شريط أقسام التداول (تحويل/فوري/أسهم/توقع + القائمة) ===== */
+.ttabs{display:flex;align-items:center;gap:4px;padding:8px 10px;border-bottom:1px solid var(--line);background:var(--bg);overflow-x:auto;scrollbar-width:none}
+.ttabs::-webkit-scrollbar{display:none}
+.ttab{white-space:nowrap;padding:7px 12px;border-radius:9px;background:transparent;color:var(--mut);font-size:13px;font-weight:800;border:none;cursor:pointer;flex:0 0 auto}
+.ttab.on{color:var(--txt);background:var(--card2)}
+.ttab.on b{color:var(--yellow)}
+.ttools{margin-inline-start:auto;display:flex;align-items:center;gap:6px;flex:0 0 auto;padding-inline-start:6px}
+.ttool{width:34px;height:32px;border:none;background:var(--card2);color:var(--txt);border-radius:9px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.ttool:active{transform:scale(.9)}
+.ttool svg{width:19px;height:19px;stroke:var(--txt);fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.ttool .dot3{display:flex;gap:2.5px}
+.ttool .dot3 i{width:3.5px;height:3.5px;border-radius:50%;background:var(--txt)}
+/* ===== شيت سفلي عام (القائمة/السجل/الأرصدة/الطلبات) ===== */
+.sheetmask{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:94;display:none}
+.sheetmask.on{display:block}
+.bsheet{position:fixed;left:0;right:0;bottom:0;z-index:95;max-width:480px;margin:0 auto;background:var(--card);border-radius:18px 18px 0 0;transform:translateY(100%);transition:transform .26s cubic-bezier(.2,.8,.25,1);max-height:86vh;display:flex;flex-direction:column;box-shadow:0 -8px 30px rgba(0,0,0,.55)}
+.bsheet.on{transform:translateY(0)}
+.bs-h{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.bs-h b{font-size:15px;flex:1}
+.bs-h .bs-x{background:none;border:none;color:var(--mut);font-size:22px;cursor:pointer;padding:0 4px}
+.bs-body{overflow-y:auto;padding:10px 14px 24px}
+/* شبكة أيقونات القائمة */
+.mgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px 4px}
+.mcell{display:flex;flex-direction:column;align-items:center;gap:7px;padding:14px 4px;border-radius:12px;cursor:pointer;background:transparent;border:none;color:var(--txt)}
+.mcell:active{background:var(--card2)}
+.mcell .mic{width:46px;height:46px;border-radius:50%;background:var(--card2);display:flex;align-items:center;justify-content:center}
+.mcell .mic svg{width:23px;height:23px;stroke:var(--yellow);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.mcell span{font-size:11.5px;font-weight:700;color:var(--txt);text-align:center;line-height:1.3}
+.mcell .mic.gold{background:linear-gradient(135deg,var(--gold1),var(--gold2))}
+.mcell .mic.gold svg{stroke:#05070a}
+.msechd{font-size:12px;font-weight:800;color:var(--mut);margin:14px 2px 6px}
+/* تبويبات السجل */
+.hstabs{display:flex;gap:8px;padding:2px 2px 12px}
+.hstab{flex:1;text-align:center;padding:9px;border-radius:10px;background:var(--card2);color:var(--mut);font-size:12.5px;font-weight:800;cursor:pointer;border:1px solid transparent}
+.hstab.on{color:var(--txt);background:#20262e;border-color:var(--line)}
+.hrow{display:flex;align-items:center;gap:8px;padding:11px 4px;border-bottom:1px solid var(--line);font-size:12.5px}
+.hrow .hx{flex:1;min-width:0}
+.hrow .hx b{display:block;font-size:13px;margin-bottom:2px}
+.hrow .hx small{color:var(--mut);font-size:11px}
+.hrow .hv{text-align:end;font-weight:800;direction:ltr}
+.pill-buy{color:var(--green)}
+.pill-sell{color:var(--red)}
+.hempty{padding:30px;text-align:center;color:var(--mut);font-size:12.5px}
+/* أرصدة */
+.brow{display:flex;align-items:center;gap:10px;padding:12px 4px;border-bottom:1px solid var(--line)}
+.brow .bcoin{width:34px;height:34px;border-radius:50%;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:var(--yellow)}
+.brow .bnm{flex:1}
+.brow .bnm b{display:block;font-size:13.5px}
+.brow .bnm small{color:var(--mut);font-size:11px}
+.brow .bamt{text-align:end;direction:ltr}
+.brow .bamt b{display:block;font-size:13.5px}
+.brow .bamt small{color:var(--mut);font-size:11px}
 </style>
 <script src="i18n.js"></script>
 </head>
@@ -303,6 +355,20 @@ html,body{margin:0;background:#05070a;color:var(--txt);font-family:'Segoe UI',Ta
       <button class="icbtn" id="bellBtn" aria-label="التنبيهات">
         <svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="#eaecef" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
       </button>
+    </div>
+  </div>
+
+  <!-- شريط أقسام التداول -->
+  <div class="ttabs">
+    <button class="ttab" onclick="location.href='convert.html'">تحويل العملة</button>
+    <button class="ttab on"><b>التداول الفوري</b></button>
+    <button class="ttab" onclick="soon('الأسهم')">الأسهم</button>
+    <button class="ttab" onclick="soon('توقع')">توقع</button>
+    <div class="ttools">
+      <button class="ttool" aria-label="السجل" onclick="openHist()">
+        <svg viewBox="0 0 24 24"><path d="M4 4h12l4 4v12H4z"/><path d="M8 10h8M8 14h5"/><circle cx="17" cy="15" r="3.4"/><path d="M17 13.6V15l1 .7"/></svg>
+      </button>
+      <button class="ttool" aria-label="المزيد" onclick="openMenu()"><span class="dot3"><i></i><i></i><i></i></span></button>
     </div>
   </div>
 
@@ -484,6 +550,59 @@ html,body{margin:0;background:#05070a;color:var(--txt);font-family:'Segoe UI',Ta
   </div>
 </div>
 <div class="toast" id="toast"></div>
+
+<!-- ===== طبقة التعتيم المشتركة للشيتات ===== -->
+<div class="sheetmask" id="sheetMask" onclick="closeSheets()"></div>
+
+<!-- قائمة الثلاث نقاط -->
+<div class="bsheet" id="menuSheet">
+  <div class="bs-h"><b>المزيد</b><button class="bs-x" onclick="closeSheets()">✕</button></div>
+  <div class="bs-body">
+    <div class="msechd">أساسي</div>
+    <div class="mgrid">
+      <button class="mcell" onclick="openOrders()"><span class="mic gold"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span><span>الطلبات المفتوحة</span></button>
+      <button class="mcell" onclick="openBal()"><span class="mic gold"><svg viewBox="0 0 24 24"><path d="M3 7h16a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M16 13h.01"/></svg></span><span>الأرصدة</span></button>
+      <button class="mcell" onclick="openHist()"><span class="mic gold"><svg viewBox="0 0 24 24"><path d="M4 4h12l4 4v12H4z"/><path d="M8 10h8M8 14h5"/><circle cx="17" cy="15" r="3.2"/><path d="M17 13.7V15l1 .6"/></svg></span><span>السجل</span></button>
+      <button class="mcell" onclick="soon('تحليل التداول')"><span class="mic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v9l6 3"/></svg></span><span>تحليل التداول</span></button>
+    </div>
+    <div class="msechd">أدوات</div>
+    <div class="mgrid">
+      <button class="mcell" onclick="soon('التفضيلات')"><span class="mic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 00-.1-1l2-1.5-2-3.4-2.3 1A7 7 0 0015 6l-.4-2.5h-5.2L9 6a7 7 0 00-1.6.9l-2.3-1-2 3.4 2 1.5a7 7 0 000 2l-2 1.5 2 3.4 2.3-1a7 7 0 001.6.9l.4 2.5h5.2l.4-2.5a7 7 0 001.6-.9l2.3 1 2-3.4-2-1.5c.1-.3.1-.7.1-1z"/></svg></span><span>التفضيلات</span></button>
+      <button class="mcell" onclick="soon('التداول التجريبي')"><span class="mic"><svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="10" rx="3"/><path d="M7 12h3M8.5 10.5v3M15 11h.01M17.5 13h.01"/></svg></span><span>التداول التجريبي</span></button>
+      <button class="mcell" onclick="soon('الخريطة الحرارية')"><span class="mic"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></span><span>الخريطة الحرارية</span></button>
+      <button class="mcell" onclick="soon('الرسوم')"><span class="mic"><svg viewBox="0 0 24 24"><path d="M19 5L5 19"/><circle cx="7.5" cy="7.5" r="2.5"/><circle cx="16.5" cy="16.5" r="2.5"/></svg></span><span>الرسوم</span></button>
+      <button class="mcell" onclick="soon('معلمات التداول')"><span class="mic"><svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 012-2h7v18H6a2 2 0 01-2-2z"/><path d="M13 3h5a2 2 0 012 2v14a2 2 0 01-2 2h-5"/></svg></span><span>معلمات التداول</span></button>
+      <button class="mcell" onclick="soon('إعلان')"><span class="mic"><svg viewBox="0 0 24 24"><path d="M3 10v4h3l5 4V6L6 10z"/><path d="M16 9a4 4 0 010 6M18.5 7a7 7 0 010 10"/></svg></span><span>إعلان</span></button>
+      <button class="mcell" onclick="location.href='index.html'"><span class="mic"><svg viewBox="0 0 24 24"><path d="M4 10a8 8 0 0116 0v4a3 3 0 01-3 3h-1v-6h4M4 14v-4m0 4a3 3 0 003 3h0v-6H4"/></svg></span><span>مركز المساعدة</span></button>
+      <button class="mcell" onclick="location.href='markets.html'"><span class="mic"><svg viewBox="0 0 24 24"><path d="M12 3l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 18l-5.8 3.4 1.1-6.5L2.6 9.8l6.5-.9z"/></svg></span><span>المفضلة</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- السجل (بيع/شراء + كافة العمليات) -->
+<div class="bsheet" id="histSheet">
+  <div class="bs-h"><b>السجل</b><button class="bs-x" onclick="closeSheets()">✕</button></div>
+  <div class="bs-body">
+    <div class="hstabs">
+      <div class="hstab on" data-h="all" onclick="histTab('all')">الكل</div>
+      <div class="hstab" data-h="trades" onclick="histTab('trades')">بيع/شراء</div>
+      <div class="hstab" data-h="ops" onclick="histTab('ops')">العمليات</div>
+    </div>
+    <div id="histBody"></div>
+  </div>
+</div>
+
+<!-- الأرصدة -->
+<div class="bsheet" id="balSheet">
+  <div class="bs-h"><b>الأرصدة</b><button class="bs-x" onclick="closeSheets()">✕</button></div>
+  <div class="bs-body" id="balBody"></div>
+</div>
+
+<!-- الطلبات المفتوحة -->
+<div class="bsheet" id="ordSheet">
+  <div class="bs-h"><b>الطلبات المفتوحة</b><button class="bs-x" onclick="closeSheets()">✕</button></div>
+  <div class="bs-body" id="ordBody"></div>
+</div>
 <div class="almask" id="alMask"></div>
 <div class="aldlg" id="alDlg">
   <div class="al-hd"><b>🔔 تنبيه سعر <span id="alSym">--</span></b><button class="al-x" onclick="closeAlert()" aria-label="إغلاق">✕</button></div>
@@ -1269,6 +1388,93 @@ function init(){
   $('mask').addEventListener('click',closeSheet);
 }
 init();
+
+/* ===================== أقسام التداول + القائمة + السجل/الأرصدة/الطلبات ===================== */
+function soon(name){toast((name||'هذه الميزة')+' — قريباً');}
+
+function _openSheet(id){
+  closeSheets(true);
+  var m=$('sheetMask'),s=$(id);
+  if(m)m.classList.add('on');
+  if(s)requestAnimationFrame(function(){s.classList.add('on');});
+}
+function closeSheets(skipMask){
+  ['menuSheet','histSheet','balSheet','ordSheet'].forEach(function(id){var s=$(id);if(s)s.classList.remove('on');});
+  if(!skipMask){var m=$('sheetMask');if(m)m.classList.remove('on');}
+}
+function openMenu(){_openSheet('menuSheet');}
+
+/* ---- السجل: بيع/شراء + كافة العمليات ---- */
+var _histTab='all';
+function openHist(){_histTab='all';_syncHistTabs();_openSheet('histSheet');if(TOK&&typeof pullXfers==='function')pullXfers().then(renderHist).catch(function(){});renderHist();}
+function histTab(t){_histTab=t;_syncHistTabs();renderHist();}
+function _syncHistTabs(){document.querySelectorAll('#histSheet .hstab').forEach(function(x){x.classList.toggle('on',x.dataset.h===_histTab);});}
+function _opLabel(t){
+  var ty=String(t.type||'');
+  if(ty==='transfer_internal'){var toSpot=(t.to==='spot')||(t.direction==='futures_to_spot');return {title:toSpot?'تحويل → الفوري':'تحويل → العقود',sign:toSpot?'+':'-',cls:toSpot?'pill-buy':'pill-sell'};}
+  if(ty.indexOf('deposit')>=0)return {title:'إيداع',sign:'+',cls:'pill-buy'};
+  if(ty.indexOf('withdraw')>=0)return {title:'سحب',sign:'-',cls:'pill-sell'};
+  if(ty.indexOf('fee')>=0)return {title:'عمولة',sign:'-',cls:'pill-sell'};
+  return {title:(t.title||ty||'عملية'),sign:'',cls:''};
+}
+function renderHist(){
+  var el=$('histBody');if(!el)return;
+  var rows=[];
+  if(_histTab==='all'||_histTab==='trades'){
+    (history||[]).forEach(function(h){rows.push({t:h.t||0,kind:'trade',d:h});});
+  }
+  if(_histTab==='all'||_histTab==='ops'){
+    (XFERS||[]).forEach(function(x){rows.push({t:(x.t||x.time||x.ts||0),kind:'op',d:x});});
+  }
+  rows.sort(function(a,b){return (b.t||0)-(a.t||0);});
+  if(!rows.length){el.innerHTML='<div class="hempty">لا توجد عمليات بعد</div>';return;}
+  el.innerHTML=rows.slice(0,80).map(function(r){
+    if(r.kind==='trade'){
+      var h=r.d;var isBuy=h.side==='buy';var qc=(splitSym(h.sym||'').quote)||'USDT';
+      return '<div class="hrow"><div class="hx"><b class="'+(isBuy?'pill-buy':'pill-sell')+'">'+(isBuy?'شراء':'بيع')+' '+ (h.b||splitSym(h.sym||'').base) +'</b>'+
+        '<small>'+fmt(h.q,6)+' @ '+fmt(h.p,pdec(h.p))+' · '+fmtTime(h.t||Date.now())+'</small></div>'+
+        '<div class="hv '+(isBuy?'pill-buy':'pill-sell')+'">'+(isBuy?'-':'+')+fmt(h.val||(h.p*h.q),2)+' '+qc+'</div></div>';
+    }
+    var x=r.d;var lb=_opLabel(x);var curc=String(x.currency||'USDT');var amt=Number(x.amount||0);
+    return '<div class="hrow"><div class="hx"><b>'+lb.title+'</b><small>'+fmtTime(r.t||Date.now())+'</small></div>'+
+      '<div class="hv '+lb.cls+'">'+lb.sign+fmt(amt,curc==='USDT'?2:6)+' '+curc+'</div></div>';
+  }).join('');
+}
+
+/* ---- الأرصدة ---- */
+function openBal(){_openSheet('balSheet');if(TOK&&typeof pullWallet==='function')pullWallet().then(renderBal).catch(function(){});renderBal();}
+function renderBal(){
+  var el=$('balBody');if(!el)return;
+  var items=[];
+  for(var c in wallet){var v=Number(wallet[c]||0);if(v>0||c==='USDT')items.push({c:c,v:v,lk:(typeof lockedOf==='function'?lockedOf(c):0)});}
+  if(window.APX){var av=APX.hold?APX.hold():0;if(av>0)items.push({c:APX.BASE,v:av,lk:0});}
+  items.sort(function(a,b){return b.v-a.v;});
+  if(!items.length){el.innerHTML='<div class="hempty">لا يوجد رصيد بعد</div>';return;}
+  el.innerHTML=items.map(function(it){
+    var dc=it.c==='USDT'?2:6;var avail2=it.v-(it.lk||0);if(avail2<0)avail2=0;
+    return '<div class="brow"><span class="bcoin">'+it.c.slice(0,3)+'</span>'+
+      '<div class="bnm"><b>'+it.c+'</b><small>'+coinName(it.c)+'</small></div>'+
+      '<div class="bamt"><b>'+fmt(it.v,dc)+'</b><small>متاح '+fmt(avail2,dc)+(it.lk>0?(' · محجوز '+fmt(it.lk,dc)):'')+'</small></div></div>';
+  }).join('');
+}
+
+/* ---- الطلبات المفتوحة (نفس الأوامر المعلّقة) ---- */
+function openOrders(){_openSheet('ordSheet');if(TOK&&typeof loadServerOrders==='function'){try{loadServerOrders();}catch(e){}}renderOrd();}
+function renderOrd(){
+  var el=$('ordBody');if(!el)return;
+  if(!pendingOrders.length){el.innerHTML='<div class="hempty">لا توجد طلبات مفتوحة</div>';return;}
+  el.innerHTML=pendingOrders.map(function(o){
+    if(o.type==='tpsl'){
+      var tb=(o.tp?('جني '+fmt(o.tp,pdec(o.tp))):'')+(o.sl?((o.tp?' · ':'')+'إيقاف '+fmt(o.sl,pdec(o.sl))):'');
+      return '<div class="hrow"><div class="hx"><b class="pill-sell">TP/SL · '+(o.b||'')+'/'+(o.qc||'USDT')+'</b><small>بيع '+fmt(o.q,6)+' · '+tb+'</small></div>'+
+        '<button class="pcancel" onclick="cancelPending(\''+o.id+'\');renderOrd();">إلغاء</button></div>';
+    }
+    var isBuy=o.side==='buy';
+    return '<div class="hrow"><div class="hx"><b class="'+(isBuy?'pill-buy':'pill-sell')+'">'+(isBuy?'شراء':'بيع')+' '+(o.b||'')+'/'+(o.qc||'USDT')+'</b>'+
+      '<small>'+fmt(o.q,6)+' @ '+fmt(o.p,pdec(o.p))+' · الإجمالي '+fmt(o.p*o.q,2)+' '+(o.qc||'USDT')+'</small></div>'+
+      '<button class="pcancel" onclick="cancelPending(\''+o.id+'\');renderOrd();">إلغاء</button></div>';
+  }).join('');
+}
 /* تحديث فوري لصفحة التداول عند تغيّر سعر APX من لوحة الأدمن */
 if(window.APX&&APX.onChange){APX.onChange(function(){try{if(APX.is(cur.s)){pollTicker();if(typeof pollDepth==='function')pollDepth();}if(typeof refreshSymTicks==='function')refreshSymTicks();}catch(e){}});}
 
