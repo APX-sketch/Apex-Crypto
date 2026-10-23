@@ -186,6 +186,21 @@ html,body{margin:0;background:#05070a;color:var(--txt);font-family:'Segoe UI',Ta
 .otb-tabs{display:flex;gap:18px;border-bottom:1px solid var(--line);margin-bottom:10px}
 .otb-tab{padding:8px 0;font-size:13px;font-weight:800;color:var(--mut);border-bottom:2px solid transparent}
 .otb-tab.on{color:var(--txt);border-bottom-color:var(--gold2)}
+/* رصيد/أموال متاحة داخل شاشة الأمر (نمط بينانس) */
+.obbal{display:flex;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px solid var(--line)}
+.obbal:last-child{border-bottom:none}
+.obbal .bc{width:34px;height:34px;flex:0 0 auto;border-radius:50%;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:var(--yellow)}
+.obbal .bn{flex:1;min-width:0}
+.obbal .bn b{font-size:13px;display:block}
+.obbal .bn small{font-size:10.5px;color:var(--mut)}
+.obbal .ba{text-align:end}
+.obbal .ba b{font-size:13px;display:block}
+.obbal .ba small{font-size:10.5px;color:var(--mut)}
+.obfund{margin-top:12px;padding:12px 0 18px;border-top:1px solid var(--line)}
+.obfund-row{display:flex;align-items:center;justify-content:space-between;font-size:12.5px;color:var(--mut);margin-bottom:8px}
+.obfund-row b{color:var(--txt);font-size:14px;direction:ltr}
+.obfund-link{display:block;font-size:12px;font-weight:700;color:var(--yellow);text-decoration:none}
+.obfund-link:active{opacity:.7}
 .err{color:var(--red);font-size:12px;text-align:center;min-height:16px;margin:2px 0}
 .toast{position:fixed;left:50%;top:16%;transform:translateX(-50%);background:#232a33;border:1px solid var(--line);color:var(--txt);padding:10px 16px;border-radius:10px;font-size:13px;z-index:99;opacity:0;transition:.25s;pointer-events:none;max-width:90%;text-align:center}
 .almask{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:60;display:none}
@@ -542,11 +557,17 @@ html,body{margin:0;background:#05070a;color:var(--txt);font-family:'Segoe UI',Ta
   </div>
   <div class="otb">
     <div class="otb-tabs">
-      <div class="otb-tab on" data-ob="pend" onclick="obTab('pend')">الأوامر المعلّقة (<span id="obPendCnt">0</span>)</div>
+      <div class="otb-tab on" data-ob="pend" onclick="obTab('pend')">الطلبات المفتوحة (<span id="obPendCnt">0</span>)</div>
+      <div class="otb-tab" data-ob="bal" onclick="obTab('bal')">الأرصدة (<span id="obBalCnt">0</span>)</div>
       <div class="otb-tab" data-ob="trades" onclick="obTab('trades')">الصفقات</div>
     </div>
     <div id="obPend"></div>
+    <div id="obBal" style="display:none"></div>
     <div id="obTrades" style="display:none"></div>
+    <div class="obfund">
+      <div class="obfund-row"><span>الأموال المتاحة</span><b id="obFundAmt">0.00 USDT</b></div>
+      <a class="obfund-link" href="convert.html">حوّل الأموال إلى محفظتك الفورية للتداول ›</a>
+    </div>
   </div>
 </div>
 <div class="toast" id="toast"></div>
@@ -1015,10 +1036,30 @@ function setSide(s){side=s;
   $('err').textContent='';updateBalDisplay();recalc('qty');}
 /* إظهار/إخفاء حقول جني الأرباح/إيقاف الخسارة */
 function toggleTpsl(){var f=$('tpslFields');if(f)f.style.display=$('tpslChk').checked?'block':'none';}
-/* تبويب الأوامر المعلّقة/الصفقات داخل شاشة الأمر */
+/* تبويب الطلبات المفتوحة/الأرصدة/الصفقات داخل شاشة الأمر */
 function obTab(t){document.querySelectorAll('.otb-tab').forEach(x=>x.classList.toggle('on',x.dataset.ob===t));
   if($('obPend'))$('obPend').style.display=(t==='pend')?'block':'none';
-  if($('obTrades'))$('obTrades').style.display=(t==='trades')?'block':'none';}
+  if($('obBal'))$('obBal').style.display=(t==='bal')?'block':'none';
+  if($('obTrades'))$('obTrades').style.display=(t==='trades')?'block':'none';
+  if(t==='bal')renderSheetBal();}
+/* الأرصدة داخل شاشة الأمر (نمط بينانس) */
+function renderSheetBal(){
+  var el=$('obBal');if(el){
+    var items=[];
+    for(var c in wallet){var v=Number(wallet[c]||0);if(v>0||c==='USDT')items.push({c:String(c).toUpperCase(),v:v});}
+    if(window.APX){var av=APX.hold?APX.hold():0;if(av>0&&!items.some(function(x){return x.c===APX.BASE;}))items.push({c:APX.BASE,v:av});}
+    items.sort(function(a,b){return b.v-a.v;});
+    var cnt=$('obBalCnt');if(cnt)cnt.textContent=items.length;
+    if(!items.length){el.innerHTML='<div class="xempty">لا يوجد رصيد بعد</div>';}
+    else{el.innerHTML=items.map(function(it){
+      var dc=it.c==='USDT'?2:6;var lk=lockedOf(it.c);var avail2=it.v-lk;if(avail2<0)avail2=0;
+      return '<div class="obbal"><span class="bc">'+it.c.slice(0,3)+'</span>'+
+        '<div class="bn"><b>'+it.c+'</b><small>'+coinName(it.c)+'</small></div>'+
+        '<div class="ba"><b>'+fmt(it.v,dc)+'</b><small>متاح '+fmt(avail2,dc)+(lk>0?(' · محجوز '+fmt(lk,dc)):'')+'</small></div></div>';
+    }).join('');}
+  }
+  var fa=$('obFundAmt');if(fa){var u=bal('USDT');fa.textContent=fmt(u,2)+' USDT';}
+}
 function renderSheetPending(){var el=$('obPend');if(!el)return;
   var cnt=$('obPendCnt');if(cnt)cnt.textContent=pendingOrders.length;
   if(!pendingOrders.length){el.innerHTML='<div class="xempty">لا توجد أوامر معلّقة</div>';return;}
@@ -1053,7 +1094,7 @@ function renderSheetTrades(){var el=$('obTrades');if(!el)return;
     +'<span class="pinfo"><b>'+(h.b||'')+'/'+qc+'</b> · '+fmt(h.q,6)+' @ '+fmt(h.p,dd)+'<br><small>الإجمالي '+fmt(h.val||h.p*h.q,2)+' '+qc+' · '+fmtTime(h.t)+'</small></span></div>';
   }).join('');
 }
-function renderSheetLists(){renderSheetPending();renderSheetTrades();}
+function renderSheetLists(){renderSheetPending();renderSheetTrades();renderSheetBal();}
 function closeSheet(){$('mask').classList.remove('on');$('sheet').classList.remove('on');}
 function setOType(t){otype=t;document.querySelectorAll('.otab').forEach(x=>x.classList.toggle('on',x.dataset.ot===t));
   if(t==='market'){$('priceFld').style.opacity='.5';$('inPrice').disabled=true;$('inPrice').value=mark?(+mark).toFixed(pdec(mark)):'';}
