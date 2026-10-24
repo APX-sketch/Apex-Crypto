@@ -10,7 +10,7 @@ var s=JSON.parse(localStorage.getItem('skygo_session')||'null');
 </script>
 <script>
 /* عزل الحسابات: عند تبديل الحساب نمسح أي حالة محلية قديمة (صفقات/سجل/أوامر/عمولات/توثيق) حتى يبدأ كل حساب من الصفر ولا تتسرّب بيانات بين الحسابات */
-(function(){try{var ss=JSON.parse(localStorage.getItem('skygo_session')||'null')||{};var tok=(ss&&ss.token)||localStorage.getItem('apex_token')||'';var owner=(((ss&&ss.email)||'')+'').toLowerCase()||tok||'';if(!owner)return;var prev=localStorage.getItem('apex_acct_owner')||'';if(prev!==owner){var KEEP={'apex_lang':1,'apex_acct_owner':1,'apex_admin_token':1,'skygo_session':1,'apex_token':1,'apex_2fa':1,'apex_bio':1,'apex_hidebal':1,'apex_anti':1};var PFX=['skygo_wallet_','skygo_futures_','apex_apx','apex_fees_collected','apex_kyc_status','apex_favs_','apex_alerts_','apex_scan_addr','apex_sup_','apex_grids_'];var kill=[];for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(!k||KEEP[k])continue;for(var j=0;j<PFX.length;j++){if(k.indexOf(PFX[j])===0){kill.push(k);break;}}}kill.forEach(function(k){try{localStorage.removeItem(k);}catch(e){}});localStorage.setItem('apex_acct_owner',owner);}}catch(e){}})();
+(function(){try{var ss=JSON.parse(localStorage.getItem('skygo_session')||'null')||{};var tok=(ss&&ss.token)||localStorage.getItem('apex_token')||'';var owner=(((ss&&ss.email)||'')+'').toLowerCase()||tok||'';if(!owner)return;var prev=localStorage.getItem('apex_acct_owner')||'';if(prev!==owner){var KEEP={'apex_lang':1,'apex_acct_owner':1,'apex_admin_token':1,'skygo_session':1,'apex_token':1,'apex_2fa':1,'apex_bio':1,'apex_hidebal':1,'apex_anti':1};var PFX=['skygo_wallet_','skygo_futures_','apex_apx','apex_fees_collected','apex_kyc_status','apex_favs_','apex_alerts_','apex_scan_addr','apex_sup_','apex_grids_','apex_demo_wallet_'];var kill=[];for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(!k||KEEP[k])continue;for(var j=0;j<PFX.length;j++){if(k.indexOf(PFX[j])===0){kill.push(k);break;}}}kill.forEach(function(k){try{localStorage.removeItem(k);}catch(e){}});localStorage.setItem('apex_acct_owner',owner);}}catch(e){}})();
 </script>
 <style>
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -412,11 +412,62 @@ html,body{margin:0;background:#05070a;color:var(--txt);font-family:'Segoe UI',Ta
 .brow .bamt{text-align:end;direction:ltr}
 .brow .bamt b{display:block;font-size:13.5px}
 .brow .bamt small{color:var(--mut);font-size:11px}
+/* ===== (A) شريط التنقل العلوي (تحويل/فوري/أسهم/توقع) ===== */
+.tnav{display:flex;align-items:center;gap:18px;padding:9px 16px 6px;overflow-x:auto;scrollbar-width:none;background:var(--bg);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:21}
+.tnav::-webkit-scrollbar{display:none}
+.tnav-i{white-space:nowrap;background:none;border:none;color:var(--mut);font-size:14px;font-weight:700;cursor:pointer;padding:4px 0;position:relative;flex:0 0 auto}
+.tnav-i.on{color:var(--txt);font-weight:800}
+.tnav-i.on::after{content:'';position:absolute;bottom:-6px;left:0;right:0;height:3px;border-radius:3px;background:var(--yellow)}
+/* ===== (B) مفتاح التداول الافتراضي ===== */
+.demobar{display:flex;align-items:center;gap:8px;padding:8px 14px 0}
+.demobar .dlbl{font-size:12.5px;font-weight:700;color:var(--mut);display:flex;align-items:center;gap:6px}
+.demobar .dlbl svg{width:15px;height:15px;stroke:var(--mut);fill:none;stroke-width:1.8}
+.demobar.on .dlbl{color:var(--yellow)}
+.demobar.on .dlbl svg{stroke:var(--yellow)}
+.dswitch{margin-inline-start:auto;position:relative;width:42px;height:23px;flex:0 0 auto}
+.dswitch input{opacity:0;width:0;height:0;position:absolute}
+.dsl{position:absolute;inset:0;background:var(--card2);border:1px solid var(--line);border-radius:20px;transition:.2s;cursor:pointer}
+.dsl::before{content:'';position:absolute;width:17px;height:17px;border-radius:50%;background:#848e9c;top:2px;right:2px;transition:.2s}
+.dswitch input:checked + .dsl{background:rgba(224,166,21,.25);border-color:var(--yellow)}
+.dswitch input:checked + .dsl::before{background:var(--yellow);transform:translateX(-19px)}
+.demo-banner{display:none;margin:8px 14px 0;padding:8px 12px;border-radius:10px;background:rgba(224,166,21,.12);border:1px solid rgba(224,166,21,.4);color:var(--yellow);font-size:11.5px;font-weight:700;text-align:center}
+.demo-banner.on{display:block}
+/* ===== (C) تبويبات البيانات السفلية (طلبات/أرصدة/بوتات) ===== */
+.dtabs-wrap{margin-top:10px;border-top:1px solid var(--line)}
+.dtabs{display:flex;align-items:center;gap:18px;padding:10px 16px 0}
+.dtab{white-space:nowrap;background:none;border:none;color:var(--mut);font-size:13.5px;font-weight:700;cursor:pointer;padding:5px 0 8px;position:relative;flex:0 0 auto}
+.dtab.on{color:var(--txt);font-weight:800}
+.dtab.on::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2.5px;border-radius:2px;background:var(--yellow)}
+.dtab .dtc{color:var(--mut);font-weight:700;font-size:12px}
+.dtpanel{padding:8px 14px 14px}
+.dt-empty{padding:28px 10px;text-align:center;color:var(--mut);font-size:12.5px}
+.dt-empty .dte-ic{font-size:30px;margin-bottom:8px;opacity:.6}
+.dt-ord{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--line)}
+.dt-ord .dto-x{flex:1;min-width:0}
+.dt-ord .dto-x b{display:block;font-size:12.5px;margin-bottom:2px}
+.dt-ord .dto-x small{color:var(--mut);font-size:11px}
+.dt-ord .dto-cancel{background:var(--card2);border:1px solid var(--line);color:var(--mut);font-size:11px;font-weight:700;padding:6px 12px;border-radius:8px;cursor:pointer;flex:0 0 auto}
+.dt-create{display:block;width:100%;margin-top:10px;background:rgba(224,166,21,.14);border:1px solid var(--yellow);color:var(--yellow);font-size:13px;font-weight:800;padding:11px;border-radius:10px;cursor:pointer}
+.dt-bot{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:11px;margin-bottom:8px}
+.dt-bot .dtb-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.dt-bot .dtb-top b{font-size:13px}
+.dt-bot .dtb-top .dtb-tag{font-size:10px;color:#05070a;background:var(--green);padding:2px 7px;border-radius:5px;font-weight:800}
+.dt-bot .dtb-row{display:flex;justify-content:space-between;font-size:11px;color:var(--mut);padding:1px 0}
+.dt-bot .dtb-row b{color:var(--txt);font-weight:700}
+.dt-bot .dtb-del{color:var(--red);font-size:11px;background:none;border:0;cursor:pointer;margin-top:4px;padding:0}
 </style>
 <script src="i18n.js"></script>
 </head>
 <body>
 <div class="app">
+  <!-- شريط التنقل العلوي: تحويل العملة / التداول الفوري / الأسهم / توقّع -->
+  <div class="tnav">
+    <button class="tnav-i" onclick="goConvert()">تحويل العملة</button>
+    <button class="tnav-i on" onclick="toast('أنت في التداول الفوري')">التداول الفوري</button>
+    <button class="tnav-i" onclick="goFutures()">العقود الآجلة</button>
+    <button class="tnav-i" onclick="soon('الأسهم')">الأسهم</button>
+    <button class="tnav-i" onclick="soon('التوقّع')">توقّع</button>
+  </div>
   <div class="top">
     <button class="back" onclick="history.length>1?history.back():location.href='index.html'">‹</button>
     <div class="pairhd">
@@ -512,15 +563,21 @@ html,body{margin:0;background:#05070a;color:var(--txt);font-family:'Segoe UI',Ta
     <div class="cv-soon"><div class="cv-soon-ic">⚡</div><b>Trade-X</b><p>أدوات التداول المتقدمة Trade-X — قيد الإعداد وستتوفر قريباً.</p></div>
   </div>
 
+  <div class="demobar" id="demoBar">
+    <span class="dlbl"><svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="10" rx="3"/><path d="M7 12h3M8.5 10.5v3M15 11h.01M17.5 13h.01"/></svg>التداول الافتراضي</span>
+    <label class="dswitch"><input type="checkbox" id="demoChk" onchange="toggleDemo(this.checked)"><span class="dsl"></span></label>
+  </div>
+  <div class="demo-banner" id="demoBanner">وضع تجريبي مفعّل — تتداول برصيد افتراضي (لا تأثير على رصيدك الحقيقي)</div>
+
   <div class="actions">
     <div class="acticons">
       <button class="actbtn" onclick="openMenu()" aria-label="المزيد">
         <span class="dot3"><i></i><i></i><i></i></span>
         <span class="actlbl">المزيد</span>
       </button>
-      <button class="actbtn" onclick="openOrders()" aria-label="المركز">
-        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.3"/><rect x="14" y="3" width="7" height="7" rx="1.3"/><rect x="3" y="14" width="7" height="7" rx="1.3"/><rect x="14" y="14" width="7" height="7" rx="1.3"/></svg>
-        <span class="actlbl">المركز</span>
+      <button class="actbtn" onclick="openHist()" aria-label="السجل">
+        <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v4h4"/><path d="M12 8v4l3 2"/></svg>
+        <span class="actlbl">السجل</span>
       </button>
       <button class="actbtn" onclick="tradeMode()" aria-label="فوري">
         <svg viewBox="0 0 24 24"><path d="M7 7h11l-3-3M17 17H6l3 3"/></svg>
@@ -565,6 +622,18 @@ html,body{margin:0;background:#05070a;color:var(--txt);font-family:'Segoe UI',Ta
   <div id="pendBox" style="display:none">
     <div class="seclbl">الأوامر المعلّقة <span id="pendCnt">0</span></div>
     <div class="pendwrap" id="pendList"></div>
+  </div>
+
+  <!-- تبويبات البيانات: الطلبات المفتوحة / الأرصدة / بوتات -->
+  <div class="dtabs-wrap">
+    <div class="dtabs">
+      <button class="dtab on" data-dt="orders" onclick="pickDtab('orders')">الطلبات المفتوحة <span class="dtc" id="dtOrdCnt">(0)</span></button>
+      <button class="dtab" data-dt="bal" onclick="pickDtab('bal')">الأرصدة <span class="dtc" id="dtBalCnt">(0)</span></button>
+      <button class="dtab" data-dt="bots" onclick="pickDtab('bots')">بوتات <span class="dtc" id="dtBotCnt">(0)</span></button>
+    </div>
+    <div id="dtOrders" class="dtpanel"></div>
+    <div id="dtBal" class="dtpanel" style="display:none"></div>
+    <div id="dtBots" class="dtpanel" style="display:none"></div>
   </div>
 
 </div>
@@ -792,32 +861,38 @@ function isFav(sym){return loadFavArr().indexOf(sym)>=0;}
 function setFav(sym,on){var a=loadFavArr();var i=a.indexOf(sym);if(on&&i<0)a.push(sym);else if(!on&&i>=0)a.splice(i,1);try{localStorage.setItem(FAVKEY(),JSON.stringify(a));}catch(e){}}
 function loadWallet(){var w=localStorage.getItem(WKEY());if(w){try{return JSON.parse(w);}catch(e){}}
   var init={USDT:0,ETH:0,BTC:0,BNB:0,SOL:0,XRP:0};localStorage.setItem(WKEY(),JSON.stringify(init));return init;}
-let wallet=loadWallet();
-function saveWallet(){localStorage.setItem(WKEY(),JSON.stringify(wallet));}
+/* ===== التداول الافتراضي (Demo) — محفظة وهمية معزولة تماماً ===== */
+var DEMO=localStorage.getItem('apex_demo')==='1';
+function DWKEY(){return 'apex_demo_wallet_'+_uid(TSESS.email);}
+function loadDemoWallet(){var w=localStorage.getItem(DWKEY());if(w){try{return JSON.parse(w);}catch(e){}}
+  var init={USDT:50000,BTC:0,ETH:0,BNB:0,SOL:0,XRP:0};localStorage.setItem(DWKEY(),JSON.stringify(init));return init;}
+function useServer(){return TOK && !DEMO;}
+let wallet=DEMO?loadDemoWallet():loadWallet();
+function saveWallet(){localStorage.setItem(DEMO?DWKEY():WKEY(),JSON.stringify(wallet));}
 /* السيرفر هو مصدر الحقيقة للرصيد. نبثّ "نبضة" فقط (دون إرسال الرصيد) حتى تبقى
    حالة "نشط" دقيقة أثناء التصفّح، ونعكس الرصيد المعتمد من السيرفر محلياً. */
-function mirrorBalances(b){if(!b)return;for(var k in wallet){wallet[k]=0;}for(var k2 in b){wallet[String(k2).toUpperCase()]=Number(b[k2])||0;}saveWallet();if(typeof updateBalDisplay==='function')updateBalDisplay();}
+function mirrorBalances(b){if(DEMO)return;if(!b)return;for(var k in wallet){wallet[k]=0;}for(var k2 in b){wallet[String(k2).toUpperCase()]=Number(b[k2])||0;}saveWallet();if(typeof updateBalDisplay==='function')updateBalDisplay();}
 function heartbeat(){if(!TOK)return;try{fetch('/api/wallet/sync',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOK}}).then(function(r){return r.ok?r.json():null;}).then(function(d){if(d&&d.balances)mirrorBalances(d.balances);}).catch(function(){});}catch(e){}}
 function pushWallet(){heartbeat();}
 function syncSeen(){heartbeat();}
 /* يطبّق تغييرات الرصيد (موجب/سالب) على السيرفر جمعياً ثم يعكس الناتج المعتمد.
    التحديث المحلي المتفائل يكون قد طُبّق من المُستدعي قبل النداء. الضيف (بلا توكن)
    يكتفي بالحفظ المحلي. */
-async function applyDelta(deltas){if(!TOK){saveWallet();return true;}try{var r=await fetch('/api/wallet/apply',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOK},body:JSON.stringify({deltas:deltas||{}})});if(r.ok){var d=await r.json();if(d&&d.balances)mirrorBalances(d.balances);if(d&&d.locked)mirrorLocked(d.locked);return true;}}catch(e){}saveWallet();return false;}
+async function applyDelta(deltas){if(DEMO||!TOK){saveWallet();return true;}try{var r=await fetch('/api/wallet/apply',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOK},body:JSON.stringify({deltas:deltas||{}})});if(r.ok){var d=await r.json();if(d&&d.balances)mirrorBalances(d.balances);if(d&&d.locked)mirrorLocked(d.locked);return true;}}catch(e){}saveWallet();return false;}
 async function pullWallet(){if(!TOK)return;try{var r=await fetch('/api/wallet/me',{headers:{'Authorization':'Bearer '+TOK}});if(!r.ok)return;var d=await r.json();mirrorBalances(d.balances||{});mirrorLocked(d.locked||{});}catch(e){}}
 function bal(c){if(window.APX&&c===APX.BASE)return APX.hold();return +(wallet[c]||0);}
 /* الرصيد المحجوز (موجود بالمحفظة لكن غير قابل للتصرّف حتى يُفكّ الأمر) */
 var lockedMap={};
-function mirrorLocked(l){lockedMap={};for(var k in (l||{})){lockedMap[String(k).toUpperCase()]=Number(l[k])||0;}if(typeof updateBalDisplay==='function')updateBalDisplay();}
+function mirrorLocked(l){if(DEMO)return;lockedMap={};for(var k in (l||{})){lockedMap[String(k).toUpperCase()]=Number(l[k])||0;}if(typeof updateBalDisplay==='function')updateBalDisplay();}
 function lockedOf(c){return +(lockedMap[c]||0);}
 /* الرصيد المتاح للتداول = الإجمالي − المحجوز */
 function avail(c){var v=bal(c)-lockedOf(c);return v>0?v:0;}
 /* للضيوف: احسب المحجوز محلياً من الأوامر المعلّقة */
-function recomputeLocalLocked(){if(TOK)return;var m={};for(var i=0;i<pendingOrders.length;i++){var o=pendingOrders[i];var c,a;if(o.type==='tpsl'||o.side==='sell'){c=o.b;a=o.q;}else{c=o.qc||'USDT';a=o.p*o.q*(1+FEE_RATE);}c=String(c).toUpperCase();m[c]=(m[c]||0)+a;}lockedMap=m;}
+function recomputeLocalLocked(){if(useServer())return;var m={};for(var i=0;i<pendingOrders.length;i++){var o=pendingOrders[i];var c,a;if(o.type==='tpsl'||o.side==='sell'){c=o.b;a=o.q;}else{c=o.qc||'USDT';a=o.p*o.q*(1+FEE_RATE);}c=String(c).toUpperCase();m[c]=(m[c]||0)+a;}lockedMap=m;}
 let feeTotal=parseFloat(localStorage.getItem('apex_fees_collected')||'0');
 function addFee(f){feeTotal+=f;localStorage.setItem('apex_fees_collected',feeTotal.toFixed(8));const ft=$('feeTotal');if(ft)ft.textContent=fmt(feeTotal,2)+' USDT';reportFee(f,'spot');}
 /* يُبلّغ السيرفر بقيمة العمولة ليُحوّلها إلى حساب عمولات المنصة (منفصل عن أرصدة المستخدمين) */
-function reportFee(f,src){if(!TOK||!(f>0))return;try{fetch('/api/wallet/fee',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOK},body:JSON.stringify({amount:f,currency:'USDT',source:src||'spot'})}).catch(function(){});}catch(e){}}
+function reportFee(f,src){if(DEMO||!TOK||!(f>0))return;try{fetch('/api/wallet/fee',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOK},body:JSON.stringify({amount:f,currency:'USDT',source:src||'spot'})}).catch(function(){});}catch(e){}}
 function loadHist(){return JSON.parse(localStorage.getItem(HKEY())||'[]');}
 function HKEY(){return 'skygo_hist_'+_uid(TSESS.email);}
 function saveHist(h){localStorage.setItem(HKEY(),JSON.stringify(h.slice(0,60)));}
@@ -1231,7 +1306,7 @@ function placeOrder(){
   const crossable=(otype==='market')||(mark>0&&(side==='buy'?p>=mark:p<=mark));
   if(otype==='limit'&&!crossable){
     /* أمر معلّق: يُحجز الرصيد الآن على السيرفر (مثل بينانس)، ويُفَكّ الحجز عند الإلغاء */
-    if(TOK){ placeServerOrder(side,p,q,QC); return; }
+    if(useServer()){ placeServerOrder(side,p,q,QC); return; }
     /* ضيف (بلا تسجيل): أمر محلي مؤقت مع حجز افتراضي (دون خصم) */
     var _lc=side==='buy'?QC:cur.b, _la=side==='buy'?(p*q*(1+FEE_RATE)):q;
     if(avail(_lc)+1e-9<_la){e.textContent='الرصيد المتاح '+_lc+' غير كافٍ';return;}
@@ -1242,7 +1317,7 @@ function placeOrder(){
   }
   const px=(otype==='market')?mark:p,v2=px*q,f2=v2*FEE_RATE;
   /* المسجّلون: التنفيذ الفوري (سوق أو حدّي قابل للتنفيذ) يتم بالكامل على السيرفر */
-  if(TOK){ placeMarketServer(side,q,QC); return; }
+  if(useServer()){ placeMarketServer(side,q,QC); return; }
   var _d2={};
   if(side==='buy'){if(avail(QC)<v2+f2){e.textContent='رصيد '+QC+' المتاح غير كافٍ';return;}
     wallet[QC]=+(bal(QC)-v2-f2).toFixed(8);wallet[cur.b]=+(bal(cur.b)+q).toFixed(8);_d2[QC]=-(v2+f2);_d2[cur.b]=q;}
@@ -1257,6 +1332,7 @@ function placeOrder(){
 /* ===== تنفيذ أوامر عملة المنصّة APX (محلياً بالسوق — USDT من السيرفر ورصيد APX محفوظ محلياً) ===== */
 function placeApxOrder(){
   var e=$('err');if(e)e.textContent='';
+  if(DEMO){if(e)e.textContent='عملة المنصّة APX غير متاحة في الوضع التجريبي';toast('عملة APX غير متاحة في الوضع التجريبي');return;}
   var q=parseFloat($('inQty').value)||0;
   if(q<=0){if(e)e.textContent='أدخل الكمية';return;}
   var lp=APX.live()||mark;
@@ -1339,7 +1415,7 @@ function placeTpslOrder(){
   const QC=quoteCcy();
   if(q<=0){e.textContent='أدخل الكمية';return;}
   if(tp<=0&&sl<=0){e.textContent='أدخل سعر جني الأرباح أو إيقاف الخسارة';return;}
-  if(TOK){ placeTpslServer(q,QC,tp,sl); return; }
+  if(useServer()){ placeTpslServer(q,QC,tp,sl); return; }
   /* ضيف: مراقبة محلية مبسّطة مع حجز افتراضي للرصيد */
   if(avail(cur.b)+1e-9<q){e.textContent='الرصيد المتاح '+cur.b+' غير كافٍ';return;}
   pendingOrders.unshift({id:Date.now()+'_'+Math.random().toString(36).slice(2,7),sym:cur.s,b:cur.b,qc:QC,side:'sell',p:(tp||sl),q:q,t:Date.now(),type:'tpsl',tp:tp,sl:sl});
@@ -1348,7 +1424,7 @@ function placeTpslOrder(){
 }
 /* فحص الأوامر المعلّقة محلياً — للضيوف فقط. المسجّلون تُطابَق أوامرهم على السيرفر */
 function checkPending(price){
-  if(TOK)return;
+  if(useServer())return;
   if(!isFinite(price)||!pendingOrders.length)return;let changed=false;
   for(let i=pendingOrders.length-1;i>=0;i--){const o=pendingOrders[i];if(o.sym!==cur.s)continue;
     let hit;
@@ -1378,7 +1454,7 @@ function settleFill(o){
   return true;
 }
 function cancelPending(id){
-  if(TOK){
+  if(useServer()){
     fetch('/api/orders/'+encodeURIComponent(id)+'/cancel',{method:'POST',headers:{'Authorization':'Bearer '+TOK}})
       .then(function(r){return r.json();}).then(function(d){if(d&&d.balances)mirrorBalances(d.balances);if(d&&d.locked)mirrorLocked(d.locked);loadServerOrders();updateBalDisplay();toast('تم إلغاء الأمر وفُكّ الرصيد المحجوز');})
       .catch(function(){toast('تعذّر الإلغاء');});
@@ -1434,7 +1510,7 @@ async function placeTpslServer(q,QC,tp,sl){
   }catch(e){toast('تعذّر الاتصال بالسيرفر');}
 }
 async function loadServerOrders(){
-  if(!TOK)return;
+  if(!useServer())return;
   try{
     const r=await fetch('/api/orders',{headers:{'Authorization':'Bearer '+TOK}});
     if(!r.ok)return;const d=await r.json();
@@ -1460,6 +1536,8 @@ async function pollNotifs(){
   }catch(e){}
 }
 function renderPending(){
+  if(typeof updateDtCounts==='function')updateDtCounts();
+  if(typeof renderDtOrders==='function'&&curDtab==='orders')renderDtOrders();
   const box=$('pendBox'),list=$('pendList');if(!box)return;
   if(!pendingOrders.length){box.style.display='none';list.innerHTML='';return;}
   box.style.display='block';$('pendCnt').textContent=pendingOrders.length;
@@ -1476,7 +1554,7 @@ function renderPending(){
   if(typeof renderSheetLists==='function')renderSheetLists();
 }
 function updateBalDisplay(){
-  if(!TOK)recomputeLocalLocked();
+  if(!useServer())recomputeLocalLocked();
   const QC=quoteCcy();
   if($('qccy'))$('qccy').textContent=QC;
   $('usdtBal').textContent=fmt(bal(QC),2);
@@ -1485,6 +1563,8 @@ function updateBalDisplay(){
     var txt=fmt(avail(c),dd)+' '+c;
     if(lockedOf(c)>1e-8)txt+=' · محجوز '+fmt(lockedOf(c),dd);
     $('availTxt').textContent=txt;}
+  if(typeof updateDtCounts==='function')updateDtCounts();
+  if(curDtab==='bal'&&typeof renderDtBal==='function')renderDtBal();
 }
 
 /* ===== التشغيل ===== */
@@ -1523,6 +1603,82 @@ async function pullXfers(){
     renderXfers();
   }catch(e){}
 }
+/* ===== وضع التداول الافتراضي (ديمو) + شريط التنقل + تبويبات البيانات ===== */
+function toggleDemo(on){
+  DEMO=!!on;
+  try{localStorage.setItem('apex_demo',DEMO?'1':'0');}catch(e){}
+  wallet=DEMO?loadDemoWallet():loadWallet();
+  lockedMap={};
+  pendingOrders=loadPend();
+  var db=$('demoBar');if(db)db.classList.toggle('on',DEMO);
+  var bn=$('demoBanner');if(bn)bn.classList.toggle('on',DEMO);
+  var ck=$('demoChk');if(ck)ck.checked=DEMO;
+  recomputeLocalLocked();
+  if(useServer()){try{pullWallet();}catch(e){}try{loadServerOrders();}catch(e){}}
+  renderPending();if(typeof renderSheetLists==='function')renderSheetLists();updateBalDisplay();
+  if(typeof APX!=='undefined'&&APX&&APX.is&&APX.is(cur.s))updatePairSub();
+  toast(DEMO?'تم تفعيل الوضع التجريبي — تتداول برصيد افتراضي':'تم إيقاف الوضع التجريبي — عدت إلى رصيدك الحقيقي');
+}
+function goConvert(){try{location.href='convert.html';}catch(e){soon('تحويل العملة');}}
+function goFutures(){try{location.href='futures.html';}catch(e){soon('العقود الآجلة');}}
+
+var curDtab='orders';
+function pickDtab(name){
+  curDtab=name;
+  var tabs=document.querySelectorAll('.dtab');[].slice.call(tabs).forEach(function(e){e.classList.toggle('on',e.dataset.dt===name);});
+  var o=$('dtOrders'),b=$('dtBal'),bo=$('dtBots');
+  if(o)o.style.display=name==='orders'?'':'none';
+  if(b)b.style.display=name==='bal'?'':'none';
+  if(bo)bo.style.display=name==='bots'?'':'none';
+  if(name==='orders')renderDtOrders();else if(name==='bal')renderDtBal();else renderDtBots();
+}
+function renderDtOrders(){
+  var el=$('dtOrders');if(!el)return;
+  if(!pendingOrders.length){el.innerHTML='<div class="hempty">لا توجد طلبات مفتوحة</div>';return;}
+  el.innerHTML=pendingOrders.map(function(o){
+    if(o.type==='tpsl'){
+      var tb=(o.tp?('جني '+fmt(o.tp,pdec(o.tp))):'')+(o.sl?((o.tp?' · ':'')+'إيقاف '+fmt(o.sl,pdec(o.sl))):'');
+      return '<div class="hrow"><div class="hx"><b class="pill-sell">TP/SL · '+(o.b||'')+'/'+(o.qc||'USDT')+'</b><small>بيع '+fmt(o.q,6)+' · '+tb+'</small></div>'+
+        '<button class="pcancel" onclick="cancelPending(\''+o.id+'\');renderDtOrders();">إلغاء</button></div>';
+    }
+    var isBuy=o.side==='buy';
+    return '<div class="hrow"><div class="hx"><b class="'+(isBuy?'pill-buy':'pill-sell')+'">'+(isBuy?'شراء':'بيع')+' '+(o.b||'')+'/'+(o.qc||'USDT')+'</b>'+
+      '<small>'+fmt(o.q,6)+' @ '+fmt(o.p,pdec(o.p))+' · الإجمالي '+fmt(o.p*o.q,2)+' '+(o.qc||'USDT')+'</small></div>'+
+      '<button class="pcancel" onclick="cancelPending(\''+o.id+'\');renderDtOrders();">إلغاء</button></div>';
+  }).join('');
+}
+function renderDtBal(){
+  var el=$('dtBal');if(!el)return;
+  var items=[];
+  for(var c in wallet){var v=Number(wallet[c]||0);if(v>0||c==='USDT')items.push({c:c,v:v,lk:(typeof lockedOf==='function'?lockedOf(c):0)});}
+  if(!DEMO&&window.APX){var av=APX.hold?APX.hold():0;if(av>0)items.push({c:APX.BASE,v:av,lk:0});}
+  items.sort(function(a,b){return b.v-a.v;});
+  if(!items.length){el.innerHTML='<div class="hempty">لا يوجد رصيد بعد</div>';return;}
+  el.innerHTML=items.map(function(it){
+    var dc=it.c==='USDT'?2:6;var avail2=it.v-(it.lk||0);if(avail2<0)avail2=0;
+    return '<div class="brow"><span class="bcoin">'+it.c.slice(0,3)+'</span>'+
+      '<div class="bnm"><b>'+it.c+'</b><small>'+coinName(it.c)+'</small></div>'+
+      '<div class="bamt"><b>'+fmt(it.v,dc)+'</b><small>متاح '+fmt(avail2,dc)+(it.lk>0?(' · محجوز '+fmt(it.lk,dc)):'')+'</small></div></div>';
+  }).join('');
+}
+function renderDtBots(){
+  var el=$('dtBots');if(!el)return;
+  var arr=(typeof gridLoad==='function')?gridLoad():[];
+  if(!arr.length){el.innerHTML='<div class="hempty">لا توجد بوتات (شبكات) بعد — أنشئ شبكة من تبويب «الشبكة»</div>';return;}
+  el.innerHTML=arr.map(function(x){
+    var step=(x.up-x.lo)/x.n;
+    return '<div class="gactive-card"><div class="gactive-top"><span class="gsym">'+x.sym+' · شبكة</span><button class="gdel" onclick="gridDel('+x.id+');renderDtBots();updateDtCounts();">إيقاف ×</button></div>'+
+      '<div class="gactive-row"><span>النطاق</span><b>'+fmt(x.lo,pdec(x.lo))+' – '+fmt(x.up,pdec(x.up))+'</b></div>'+
+      '<div class="gactive-row"><span>عدد الشبكات</span><b>'+x.n+' · '+fmt(step,pdec(step))+'/شبكة</b></div>'+
+      '<div class="gactive-row"><span>الاستثمار</span><b>'+fmt(x.inv,2)+' '+(x.q||'USDT')+'</b></div></div>';
+  }).join('');
+}
+function updateDtCounts(){
+  var oc=$('dtOrdCnt');if(oc)oc.textContent='('+pendingOrders.length+')';
+  var bc=$('dtBalCnt');if(bc){var n=0;for(var c in wallet){if(Number(wallet[c]||0)>0)n++;}bc.textContent='('+n+')';}
+  var bt=$('dtBotCnt');if(bt){var g=(typeof gridLoad==='function')?gridLoad().length:0;bt.textContent='('+g+')';}
+}
+
 function init(){
   /* فتح العملة المطلوبة من الرابط trading.html?symbol=xxx */
   const qsym=(new URLSearchParams(location.search).get('symbol')||'').toUpperCase();
@@ -1534,8 +1690,12 @@ function init(){
   buildTabs();$('pairName').innerHTML=cur.b+'<small>/'+quoteCcy()+'</small>';updatePairSub();
   const on=document.querySelector('.symtab.on');if(on&&on.scrollIntoView)on.scrollIntoView({inline:'center',block:'nearest'});
   updateBalDisplay();initChart();loadKlines();startFeed();
+  var _db=$('demoBar');if(_db)_db.classList.toggle('on',DEMO);
+  var _bn=$('demoBanner');if(_bn)_bn.classList.toggle('on',DEMO);
+  var _ck=$('demoChk');if(_ck)_ck.checked=DEMO;
   renderPending();
-  if(TOK)loadServerOrders();
+  if(useServer())loadServerOrders();
+  pickDtab('orders');
   renderXfers();
   $('mask').addEventListener('click',closeSheet);
 }
@@ -1992,8 +2152,8 @@ function createGrid(){var g=gridNums();
   if(!(g.inv>0)){toast('أدخل مبلغ الاستثمار');return;}
   var arr=gridLoad();arr.unshift({id:Date.now(),sym:cur.s,b:cur.b,q:quoteCcy(),up:g.up,lo:g.lo,n:g.n,inv:g.inv,at:Date.now()});gridSave(arr);
   var u=$('gUpper'),l=$('gLower'),iv=$('gInvest');if(u)u.value='';if(l)l.value='';if(iv)iv.value='';gridCalcUpdate();
-  toast('تم إنشاء شبكة '+cur.s);renderGridActive();}
-function gridDel(id){var arr=gridLoad().filter(function(x){return x.id!==id;});gridSave(arr);toast('تم حذف الشبكة');renderGridActive();}
+  toast('تم إنشاء شبكة '+cur.s);renderGridActive();if(typeof updateDtCounts==='function')updateDtCounts();if(curDtab==='bots'&&typeof renderDtBots==='function')renderDtBots();}
+function gridDel(id){var arr=gridLoad().filter(function(x){return x.id!==id;});gridSave(arr);toast('تم حذف الشبكة');renderGridActive();if(typeof updateDtCounts==='function')updateDtCounts();}
 function renderGridActive(){var el=$('gridActive');if(!el)return;var arr=gridLoad().filter(function(x){return x.sym===cur.s;});
   if(!arr.length){el.innerHTML='';return;}
   el.innerHTML='<div class="seclbl" style="margin:4px 0">الشبكات النشطة ('+arr.length+')</div>'+arr.map(function(x){
