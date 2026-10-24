@@ -122,7 +122,20 @@ html,body{margin:0;background:#05070a;color:var(--txt);font-family:'Segoe UI',Ta
 .pend .pinfo small{color:var(--mut)}
 .pend .pcancel{border:1px solid var(--line);background:var(--card2);color:#f6465d;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700}
 .chartLd{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--mut);font-size:13px}
-.actions{display:flex;gap:12px;padding:14px 12px 8px}
+.actions{display:flex;gap:12px;padding:14px 12px 8px;align-items:stretch}
+.acticons{display:flex;gap:4px;flex:0 0 auto}
+.actbtn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-width:44px;padding:6px 4px;border:none;background:transparent;color:var(--mut);cursor:pointer;border-radius:10px}
+.actbtn:active{background:var(--card2)}
+.actbtn svg{width:21px;height:21px;stroke:var(--txt);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.actbtn .actlbl{font-size:10px;font-weight:700;color:var(--mut)}
+.actbtn .dot3{display:flex;gap:3px}
+.actbtn .dot3 i{width:4px;height:4px;border-radius:50%;background:var(--txt)}
+/* شريط أقسام المحتوى */
+.ctabs{display:flex;align-items:center;gap:16px;padding:6px 16px 4px;overflow-x:auto;scrollbar-width:none}
+.ctabs::-webkit-scrollbar{display:none}
+.ctab{white-space:nowrap;padding:5px 0;background:none;border:none;color:var(--mut);font-size:13.5px;font-weight:700;cursor:pointer;position:relative;flex:0 0 auto}
+.ctab.on{color:var(--yellow);font-weight:800}
+.ctab.on::after{content:'';position:absolute;bottom:-2px;left:50%;transform:translateX(-50%);width:18px;height:2.5px;border-radius:2px;background:var(--yellow)}
 .bigbtn{flex:1;border:none;border-radius:14px;padding:16px 0;font-size:17px;font-weight:800;color:#05070a}
 .buy{background:linear-gradient(135deg,#12d68a,#0ecb81)}
 .sell{background:linear-gradient(135deg,#ff5e73,#f6465d)}
@@ -397,6 +410,15 @@ html,body{margin:0;background:#05070a;color:var(--txt);font-family:'Segoe UI',Ta
     </div>
   </div>
 
+  <!-- شريط أقسام المحتوى (السعر/المعلومات/البيانات/Square/Trade-X) -->
+  <div class="ctabs">
+    <button class="ctab on">السعر</button>
+    <button class="ctab" onclick="soon('المعلومات')">المعلومات</button>
+    <button class="ctab" onclick="soon('البيانات')">البيانات</button>
+    <button class="ctab" onclick="soon('Square')">Square</button>
+    <button class="ctab" onclick="soon('Trade-X')">Trade-X</button>
+  </div>
+
   <div class="phead">
     <div class="price" id="price">--</div>
     <div class="chg" id="chg">--</div>
@@ -437,6 +459,20 @@ html,body{margin:0;background:#05070a;color:var(--txt);font-family:'Segoe UI',Ta
   <div class="perfrow" id="perfRow"></div>
 
   <div class="actions">
+    <div class="acticons">
+      <button class="actbtn" onclick="openMenu()" aria-label="المزيد">
+        <span class="dot3"><i></i><i></i><i></i></span>
+        <span class="actlbl">المزيد</span>
+      </button>
+      <button class="actbtn" onclick="openOrders()" aria-label="المركز">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.3"/><rect x="14" y="3" width="7" height="7" rx="1.3"/><rect x="3" y="14" width="7" height="7" rx="1.3"/><rect x="14" y="14" width="7" height="7" rx="1.3"/></svg>
+        <span class="actlbl">المركز</span>
+      </button>
+      <button class="actbtn" onclick="soon('نمط التداول الفوري')" aria-label="فوري">
+        <svg viewBox="0 0 24 24"><path d="M7 7h11l-3-3M17 17H6l3 3"/></svg>
+        <span class="actlbl">فوري</span>
+      </button>
+    </div>
     <button class="bigbtn buy" onclick="openSheet('buy')" data-i18n="buy">شراء</button>
     <button class="bigbtn sell" onclick="openSheet('sell')" data-i18n="sell">بيع</button>
   </div>
@@ -463,12 +499,6 @@ html,body{margin:0;background:#05070a;color:var(--txt);font-family:'Segoe UI',Ta
   <div id="pendBox" style="display:none">
     <div class="seclbl">الأوامر المعلّقة <span id="pendCnt">0</span></div>
     <div class="pendwrap" id="pendList"></div>
-  </div>
-
-  <div class="seclbl">السجل العام للتداولات <span>مباشر</span></div>
-  <div class="tape">
-    <div class="tapehd"><span>السعر (USDT)</span><span>الكمية</span><span>الإجمالي</span><span style="text-align:end">الوقت</span></div>
-    <div id="tape"></div>
   </div>
 
 </div>
@@ -735,7 +765,7 @@ function buildTabs(){
 function pickSym(el){applySymByIndex(+el.dataset.i);}
 function applySymByIndex(i){
   if(i<0||i>=SYMBOLS.length)return;
-  cur=SYMBOLS[i];mark=0;lastTickPx=null;tape=[];lastCandle=null;$('tape').innerHTML='';
+  cur=SYMBOLS[i];mark=0;lastTickPx=null;tape=[];lastCandle=null;if($('tape'))$('tape').innerHTML='';
   [].slice.call(document.querySelectorAll('.symtab')).forEach(function(x){x.classList.toggle('on',+x.dataset.i===i);});
   $('pairName').innerHTML=cur.b+'<small>/'+quoteCcy()+'</small>';updatePairSub();$('chartLd').style.display='flex';statsFromTicker=false;$('hi').textContent='--';$('lo').textContent='--';$('vol').textContent='--';
   var on=document.querySelector('.symtab.on');if(on&&on.scrollIntoView)on.scrollIntoView({inline:'center',block:'nearest'});
@@ -825,7 +855,7 @@ function addTape(x){
 function timeStr(ts){const d=new Date(ts);const p=n=>(n<10?'0':'')+n;return p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds());}
 function renderTape(){
   const dd=pdec(mark);
-  $('tape').innerHTML=tape.map(x=>`<div class="taperow ${x.mine?'mine':''}"><span class="p ${x.buy?'up':'down'}">${fmt(x.p,dd)}</span><span>${fmt(x.q,qdec())}${x.mine?' <span class=\"mtag\">أنت</span>':''}</span><span>${fmt(x.p*x.q,2)}</span><span class="t">${timeStr(x.t)}</span></div>`).join('');
+  var _tp=$('tape');if(_tp){_tp.innerHTML=tape.map(x=>`<div class="taperow ${x.mine?'mine':''}"><span class="p ${x.buy?'up':'down'}">${fmt(x.p,dd)}</span><span>${fmt(x.q,qdec())}${x.mine?' <span class=\"mtag\">أنت</span>':''}</span><span>${fmt(x.p*x.q,2)}</span><span class="t">${timeStr(x.t)}</span></div>`).join('');}
   if(typeof renderMkt==='function'&&curMkt==='trades')renderMkt();
 }
 
