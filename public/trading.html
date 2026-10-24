@@ -10,7 +10,7 @@ var s=JSON.parse(localStorage.getItem('skygo_session')||'null');
 </script>
 <script>
 /* عزل الحسابات: عند تبديل الحساب نمسح أي حالة محلية قديمة (صفقات/سجل/أوامر/عمولات/توثيق) حتى يبدأ كل حساب من الصفر ولا تتسرّب بيانات بين الحسابات */
-(function(){try{var ss=JSON.parse(localStorage.getItem('skygo_session')||'null')||{};var tok=(ss&&ss.token)||localStorage.getItem('apex_token')||'';var owner=(((ss&&ss.email)||'')+'').toLowerCase()||tok||'';if(!owner)return;var prev=localStorage.getItem('apex_acct_owner')||'';if(prev!==owner){var KEEP={'apex_lang':1,'apex_acct_owner':1,'apex_admin_token':1,'skygo_session':1,'apex_token':1,'apex_2fa':1,'apex_bio':1,'apex_hidebal':1,'apex_anti':1};var PFX=['skygo_wallet_','skygo_futures_','apex_apx','apex_fees_collected','apex_kyc_status','apex_favs_','apex_alerts_','apex_scan_addr','apex_sup_'];var kill=[];for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(!k||KEEP[k])continue;for(var j=0;j<PFX.length;j++){if(k.indexOf(PFX[j])===0){kill.push(k);break;}}}kill.forEach(function(k){try{localStorage.removeItem(k);}catch(e){}});localStorage.setItem('apex_acct_owner',owner);}}catch(e){}})();
+(function(){try{var ss=JSON.parse(localStorage.getItem('skygo_session')||'null')||{};var tok=(ss&&ss.token)||localStorage.getItem('apex_token')||'';var owner=(((ss&&ss.email)||'')+'').toLowerCase()||tok||'';if(!owner)return;var prev=localStorage.getItem('apex_acct_owner')||'';if(prev!==owner){var KEEP={'apex_lang':1,'apex_acct_owner':1,'apex_admin_token':1,'skygo_session':1,'apex_token':1,'apex_2fa':1,'apex_bio':1,'apex_hidebal':1,'apex_anti':1};var PFX=['skygo_wallet_','skygo_futures_','apex_apx','apex_fees_collected','apex_kyc_status','apex_favs_','apex_alerts_','apex_scan_addr','apex_sup_','apex_grids_'];var kill=[];for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(!k||KEEP[k])continue;for(var j=0;j<PFX.length;j++){if(k.indexOf(PFX[j])===0){kill.push(k);break;}}}kill.forEach(function(k){try{localStorage.removeItem(k);}catch(e){}});localStorage.setItem('apex_acct_owner',owner);}}catch(e){}})();
 </script>
 <style>
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -136,6 +136,35 @@ html,body{margin:0;background:#05070a;color:var(--txt);font-family:'Segoe UI',Ta
 .ctab{white-space:nowrap;padding:5px 0;background:none;border:none;color:var(--mut);font-size:13.5px;font-weight:700;cursor:pointer;position:relative;flex:0 0 auto}
 .ctab.on{color:var(--yellow);font-weight:800}
 .ctab.on::after{content:'';position:absolute;bottom:-2px;left:50%;transform:translateX(-50%);width:18px;height:2.5px;border-radius:2px;background:var(--yellow)}
+.cview{padding:0 14px 14px}
+.cv-load{padding:40px 10px;text-align:center;color:var(--mut);font-size:12.5px}
+.cv-soon{padding:46px 20px;text-align:center}
+.cv-soon-ic{font-size:34px;margin-bottom:10px}
+.cv-soon b{display:block;font-size:16px;margin-bottom:6px}
+.cv-soon p{color:var(--mut);font-size:12.5px;line-height:1.8;max-width:300px;margin:0 auto}
+.info-hero{display:flex;align-items:center;gap:10px;padding:14px 2px 10px}
+.info-ic{width:40px;height:40px;border-radius:50%;background:var(--card2,#1a1d26);display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--yellow);font-size:15px;flex:0 0 auto;overflow:hidden}
+.info-ic img{width:100%;height:100%;object-fit:cover}
+.info-hero .ih-nm{font-size:15px;font-weight:800}
+.info-hero .ih-sym{color:var(--mut);font-size:11.5px}
+.info-hero .ih-px{margin-inline-start:auto;text-align:left}
+.info-hero .ih-px b{font-size:16px}
+.info-hero .ih-px span{display:block;font-size:11.5px;font-weight:700}
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line,#272b36);border:1px solid var(--line,#272b36);border-radius:10px;overflow:hidden;margin-top:6px}
+.info-cell{background:var(--bg,#0c0e14);padding:11px 12px}
+.info-cell .k{color:var(--mut);font-size:11px;margin-bottom:3px}
+.info-cell .v{font-size:13px;font-weight:700}
+.info-cell.full{grid-column:1 / -1}
+.info-links{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.info-links a{display:inline-flex;align-items:center;gap:5px;background:var(--card2,#1a1d26);border:1px solid var(--line,#272b36);color:var(--txt,#eee);font-size:11.5px;font-weight:700;padding:7px 12px;border-radius:20px;text-decoration:none}
+.info-desc{color:var(--mut);font-size:12px;line-height:1.9;margin-top:12px}
+.info-note{color:var(--mut);font-size:10.5px;margin-top:12px;text-align:center;opacity:.7}
+.dv-sec{margin-top:12px}
+.dv-sec .seclbl{margin-bottom:6px}
+.dv-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.dv-card{background:var(--card2,#1a1d26);border:1px solid var(--line,#272b36);border-radius:10px;padding:11px 12px}
+.dv-card .k{color:var(--mut);font-size:11px;margin-bottom:4px}
+.dv-card .v{font-size:14px;font-weight:800}
 .bigbtn{flex:1;border:none;border-radius:14px;padding:16px 0;font-size:17px;font-weight:800;color:#05070a}
 .buy{background:linear-gradient(135deg,#12d68a,#0ecb81)}
 .sell{background:linear-gradient(135deg,#ff5e73,#f6465d)}
@@ -279,6 +308,25 @@ html,body{margin:0;background:#05070a;color:var(--txt);font-family:'Segoe UI',Ta
 .tr-row .tt{color:var(--mut)}
 .grid-info{padding:14px;text-align:center;color:var(--mut);font-size:12px;line-height:1.9}
 .grid-info b{color:var(--yellow)}
+.grid-wrap{padding:10px}
+.grid-intro{color:var(--mut);font-size:11.5px;line-height:1.8;margin-bottom:10px}
+.grid-intro b{color:var(--yellow)}
+.grid-form{display:flex;flex-direction:column;gap:8px}
+.gfld{display:flex;align-items:center;gap:8px;background:var(--card2,#1a1d26);border:1px solid var(--line,#272b36);border-radius:10px;padding:8px 10px}
+.gfld span{flex:0 0 78px;color:var(--mut);font-size:11.5px}
+.gfld input{flex:1;background:transparent;border:0;outline:none;color:var(--txt,#eee);font-size:14px;font-weight:700;text-align:left;direction:ltr;min-width:0}
+.gfld em{flex:0 0 auto;color:var(--mut);font-size:11px;font-style:normal}
+.grid-prefill{display:flex;gap:8px}
+.grid-prefill .pct{flex:1}
+.grid-calc{font-size:11.5px;color:var(--mut);line-height:1.9;padding:2px 4px}
+.grid-calc b{color:var(--txt,#eee)}
+.grid-active{margin-top:12px;display:flex;flex-direction:column;gap:8px}
+.gactive-card{background:var(--card2,#1a1d26);border:1px solid var(--line,#272b36);border-radius:10px;padding:10px}
+.gactive-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.gactive-top .gsym{font-weight:800;font-size:13px}
+.gactive-top .gdel{color:var(--red,#f6465d);font-size:11px;cursor:pointer;background:none;border:0}
+.gactive-row{display:flex;justify-content:space-between;font-size:11px;color:var(--mut);padding:1px 0}
+.gactive-row b{color:var(--txt,#eee);font-weight:700}
 .sd-fav{color:var(--yellow);font-size:13px;width:16px;text-align:center;flex:0 0 auto}
 .sd-nm{flex:1;display:flex;flex-direction:column;line-height:1.25;margin-inline-start:8px}
 .sd-nm b{font-weight:800;font-size:14px;display:inline}
@@ -386,19 +434,6 @@ html,body{margin:0;background:#05070a;color:var(--txt);font-family:'Segoe UI',Ta
     </div>
   </div>
 
-  <!-- شريط أقسام التداول -->
-  <div class="ttabs">
-    <button class="ttab" onclick="location.href='convert.html'">تحويل العملة</button>
-    <button class="ttab on"><b>التداول الفوري</b></button>
-    <button class="ttab" onclick="soon('الأسهم')">الأسهم</button>
-    <button class="ttab" onclick="soon('توقع')">توقع</button>
-    <div class="ttools">
-      <button class="ttool" aria-label="السجل" onclick="openHist()">
-        <svg viewBox="0 0 24 24"><path d="M4 4h12l4 4v12H4z"/><path d="M8 10h8M8 14h5"/><circle cx="17" cy="15" r="3.4"/><path d="M17 13.6V15l1 .7"/></svg>
-      </button>
-      <button class="ttool" aria-label="المزيد" onclick="openMenu()"><span class="dot3"><i></i><i></i><i></i></span></button>
-    </div>
-  </div>
 
   <div class="symdrop" id="symDrop" onclick="if(event.target===this)toggleSymDrop()">
     <div class="panel">
@@ -412,11 +447,11 @@ html,body{margin:0;background:#05070a;color:var(--txt);font-family:'Segoe UI',Ta
 
   <!-- شريط أقسام المحتوى (السعر/المعلومات/البيانات/Square/Trade-X) -->
   <div class="ctabs">
-    <button class="ctab on">السعر</button>
-    <button class="ctab" onclick="soon('المعلومات')">المعلومات</button>
-    <button class="ctab" onclick="soon('البيانات')">البيانات</button>
-    <button class="ctab" onclick="soon('Square')">Square</button>
-    <button class="ctab" onclick="soon('Trade-X')">Trade-X</button>
+    <button class="ctab on" data-cv="price" onclick="switchCView('price')">السعر</button>
+    <button class="ctab" data-cv="info" onclick="switchCView('info')">المعلومات</button>
+    <button class="ctab" data-cv="data" onclick="switchCView('data')">البيانات</button>
+    <button class="ctab" data-cv="square" onclick="switchCView('square')">Square</button>
+    <button class="ctab" data-cv="tradex" onclick="switchCView('tradex')">Trade-X</button>
   </div>
 
   <div class="phead">
@@ -429,6 +464,7 @@ html,body{margin:0;background:#05070a;color:var(--txt);font-family:'Segoe UI',Ta
     </div>
   </div>
 
+  <div id="priceChart">
   <div class="ivtabs" id="ivtabs"></div>
 
   <div class="chartwrap">
@@ -457,6 +493,24 @@ html,body{margin:0;background:#05070a;color:var(--txt);font-family:'Segoe UI',Ta
   <!-- المؤشرات الفنية ونِسب الأداء: نُقلت أسفل الشارت -->
   <div class="indtabs" id="indtabs"></div>
   <div class="perfrow" id="perfRow"></div>
+  </div><!-- /priceChart -->
+
+  <!-- عرض المعلومات (نمط بينانس) -->
+  <div class="cview" id="infoView" style="display:none">
+    <div class="cv-load" id="infoLoad">جارٍ تحميل معلومات العملة…</div>
+    <div id="infoBody"></div>
+  </div>
+  <!-- عرض البيانات -->
+  <div class="cview" id="dataView" style="display:none">
+    <div id="dataBody"></div>
+  </div>
+  <!-- Square / Trade-X -->
+  <div class="cview" id="squareView" style="display:none">
+    <div class="cv-soon"><div class="cv-soon-ic">💬</div><b>Square</b><p>مجتمع Square للأخبار والمنشورات — قيد الإعداد وسيُفعّل قريباً.</p></div>
+  </div>
+  <div class="cview" id="tradexView" style="display:none">
+    <div class="cv-soon"><div class="cv-soon-ic">⚡</div><b>Trade-X</b><p>أدوات التداول المتقدمة Trade-X — قيد الإعداد وستتوفر قريباً.</p></div>
+  </div>
 
   <div class="actions">
     <div class="acticons">
@@ -468,7 +522,7 @@ html,body{margin:0;background:#05070a;color:var(--txt);font-family:'Segoe UI',Ta
         <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.3"/><rect x="14" y="3" width="7" height="7" rx="1.3"/><rect x="3" y="14" width="7" height="7" rx="1.3"/><rect x="14" y="14" width="7" height="7" rx="1.3"/></svg>
         <span class="actlbl">المركز</span>
       </button>
-      <button class="actbtn" onclick="soon('نمط التداول الفوري')" aria-label="فوري">
+      <button class="actbtn" onclick="tradeMode()" aria-label="فوري">
         <svg viewBox="0 0 24 24"><path d="M7 7h11l-3-3M17 17H6l3 3"/></svg>
         <span class="actlbl">فوري</span>
       </button>
@@ -492,7 +546,19 @@ html,body{margin:0;background:#05070a;color:var(--txt);font-family:'Segoe UI',Ta
     <div id="mkDepth" style="display:none"></div>
     <div id="mkTrades" style="display:none"></div>
     <div id="mkGrid" style="display:none">
-      <div class="grid-info">التداول بالشبكة (<b>Grid</b>) — أداة تداول آلي تشتري وتبيع ضمن نطاق سعري محدد.<br>حدّد النطاق الأعلى والأدنى وعدد الشبكات لتفعيله.<br><button class="pct" style="max-width:200px;margin:10px auto 0" onclick="toast('أداة الشبكة قريباً')">إنشاء شبكة</button></div>
+      <div class="grid-wrap">
+        <div class="grid-intro">التداول بالشبكة (<b>Grid</b>) — يشتري ويبيع تلقائياً ضمن نطاق سعري محدد. حدّد النطاق الأعلى والأدنى وعدد الشبكات.</div>
+        <div class="grid-form">
+          <div class="gfld"><span>السعر الأعلى</span><input id="gUpper" type="text" inputmode="decimal" placeholder="0"><em id="gQc1">USDT</em></div>
+          <div class="gfld"><span>السعر الأدنى</span><input id="gLower" type="text" inputmode="decimal" placeholder="0"><em id="gQc2">USDT</em></div>
+          <div class="gfld"><span>عدد الشبكات</span><input id="gCount" type="text" inputmode="numeric" placeholder="10"><em>شبكة</em></div>
+          <div class="gfld"><span>الاستثمار</span><input id="gInvest" type="text" inputmode="decimal" placeholder="0"><em id="gQc3">USDT</em></div>
+          <div class="grid-prefill"><button class="pct" onclick="gridAutoRange()">نطاق تلقائي ±٪10</button></div>
+          <div class="grid-calc" id="gridCalc"></div>
+          <button class="confirm buy" style="margin-top:6px" onclick="createGrid()">إنشاء شبكة</button>
+        </div>
+        <div class="grid-active" id="gridActive"></div>
+      </div>
     </div>
   </div>
 
@@ -628,6 +694,17 @@ html,body{margin:0;background:#05070a;color:var(--txt);font-family:'Segoe UI',Ta
       <button class="mcell" onclick="soon('إعلان')"><span class="mic"><svg viewBox="0 0 24 24"><path d="M3 10v4h3l5 4V6L6 10z"/><path d="M16 9a4 4 0 010 6M18.5 7a7 7 0 010 10"/></svg></span><span>إعلان</span></button>
       <button class="mcell" onclick="location.href='index.html'"><span class="mic"><svg viewBox="0 0 24 24"><path d="M4 10a8 8 0 0116 0v4a3 3 0 01-3 3h-1v-6h4M4 14v-4m0 4a3 3 0 003 3h0v-6H4"/></svg></span><span>مركز المساعدة</span></button>
       <button class="mcell" onclick="location.href='markets.html'"><span class="mic"><svg viewBox="0 0 24 24"><path d="M12 3l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 18l-5.8 3.4 1.1-6.5L2.6 9.8l6.5-.9z"/></svg></span><span>المفضلة</span></button>
+    </div>
+  </div>
+</div>
+
+<div class="bsheet" id="modeSheet">
+  <div class="bs-h"><b>نمط التداول</b><button class="bs-x" onclick="closeSheets()">✕</button></div>
+  <div class="bs-body">
+    <div class="mgrid">
+      <button class="mcell on" onclick="closeSheets();toast('أنت في التداول الفوري')"><span class="mic gold"><svg viewBox="0 0 24 24"><path d="M7 7h11l-3-3M17 17H6l3 3"/></svg></span><span>فوري (Spot)</span></button>
+      <button class="mcell" onclick="location.href='futures.html'"><span class="mic"><svg viewBox="0 0 24 24"><path d="M3 3v18h18M8 14l3-3 3 3 4-5"/></svg></span><span>عقود آجلة</span></button>
+      <button class="mcell" onclick="location.href='convert.html'"><span class="mic"><svg viewBox="0 0 24 24"><path d="M7 7h11l-3-3M17 17H6l3 3"/></svg></span><span>تحويل</span></button>
     </div>
   </div>
 </div>
@@ -771,7 +848,8 @@ function applySymByIndex(i){
   [].slice.call(document.querySelectorAll('.symtab')).forEach(function(x){x.classList.toggle('on',+x.dataset.i===i);});
   $('pairName').innerHTML=cur.b+'<small>/'+quoteCcy()+'</small>';updatePairSub();$('chartLd').style.display='flex';statsFromTicker=false;$('hi').textContent='--';$('lo').textContent='--';$('vol').textContent='--';
   var on=document.querySelector('.symtab.on');if(on&&on.scrollIntoView)on.scrollIntoView({inline:'center',block:'nearest'});
-  chartFit=true;stopFeed();startFeed();loadKlines();updateBalDisplay();renderPending();if(typeof loadPerf==='function')loadPerf();if(typeof aiReset==='function'){aiReset();if($('aiChat')&&$('aiChat').classList.contains('on'))openAiChat();}}
+  chartFit=true;stopFeed();startFeed();loadKlines();updateBalDisplay();renderPending();if(typeof loadPerf==='function')loadPerf();if(typeof aiReset==='function'){aiReset();if($('aiChat')&&$('aiChat').classList.contains('on'))openAiChat();}
+  if(typeof curCView!=='undefined'&&curCView!=='price'){try{switchCView(curCView);}catch(e){}}}
 function pickIv(el){[...document.querySelectorAll('.ivtab')].forEach(x=>x.classList.remove('on'));el.classList.add('on');iv=el.dataset.v;$('chartLd').style.display='flex';lastCandle=null;chartFit=true;loadKlines();}
 
 /* ===== التغذية الحية من سيرفرك ===== */
@@ -1473,10 +1551,11 @@ function _openSheet(id){
   if(s)requestAnimationFrame(function(){s.classList.add('on');});
 }
 function closeSheets(skipMask){
-  ['menuSheet','histSheet','balSheet','ordSheet'].forEach(function(id){var s=$(id);if(s)s.classList.remove('on');});
+  ['menuSheet','histSheet','balSheet','ordSheet','modeSheet'].forEach(function(id){var s=$(id);if(s)s.classList.remove('on');});
   if(!skipMask){var m=$('sheetMask');if(m)m.classList.remove('on');}
 }
 function openMenu(){_openSheet('menuSheet');}
+function tradeMode(){_openSheet('modeSheet');}
 
 /* ---- السجل: بيع/شراء + كافة العمليات ---- */
 var _histTab='all';
@@ -1881,7 +1960,7 @@ async function loadPerf(){var w=$('perfRow');if(!w)return;var sym=cur.s;
 function pickMkt(k){curMkt=k;var tabs=document.querySelectorAll('.mkt-tab');[].slice.call(tabs).forEach(function(e){e.classList.toggle('on',e.dataset.mk===k);});
   var map={book:'mkBook',depth:'mkDepth',trades:'mkTrades',grid:'mkGrid'};for(var key in map){var el=$(map[key]);if(el)el.style.display=(key===k)?'':'none';}
   renderMkt();}
-function renderMkt(){if(curMkt==='book')renderMkBook();else if(curMkt==='depth')renderMkDepth();else if(curMkt==='trades')renderMkTrades();}
+function renderMkt(){if(curMkt==='book')renderMkBook();else if(curMkt==='depth')renderMkDepth();else if(curMkt==='trades')renderMkTrades();else if(curMkt==='grid')renderGrid();}
 function renderMkBook(){var el=$('mkBook');if(!el)return;if(!lastBook||!lastBook.asks){el.innerHTML='<div class="mk-empty">جارٍ تحميل دفتر الأوامر...</div>';return;}
   var dd=pdec(mark);var asks=lastBook.asks.slice(0,10).reverse(),bids=lastBook.bids.slice(0,10);
   var maxQ=Math.max.apply(null,asks.concat(bids).map(function(x){return +x[1];}))||1;
@@ -1895,6 +1974,100 @@ function renderMkDepth(){var el=$('mkDepth');if(!el)return;if(!lastBook||!lastBo
   el.innerHTML=html;}
 function renderMkTrades(){var el=$('mkTrades');if(!el)return;if(!tape.length){el.innerHTML='<div class="mk-empty">لا توجد تداولات بعد</div>';return;}
   var dd=pdec(mark);el.innerHTML='<div class="tr-head"><span>السعر('+quoteCcy()+')</span><span>الكمية('+cur.b+')</span><span>الوقت</span></div>'+tape.slice(0,30).map(function(x){return '<div class="tr-row"><span class="'+(x.buy?'up':'down')+'">'+fmt(x.p,dd)+'</span><span>'+fmt(x.q,qdec())+'</span><span class="tr-t">'+timeStr(x.t)+'</span></div>';}).join('');}
+/* ===== (5) التداول بالشبكة (Grid) — محلي عبر localStorage ===== */
+function gridKey(){return 'apex_grids_'+_uid(TSESS.email);}
+function gridLoad(){try{return JSON.parse(localStorage.getItem(gridKey())||'[]')||[];}catch(e){return [];}}
+function gridSave(a){try{localStorage.setItem(gridKey(),JSON.stringify(a));}catch(e){}}
+function gridAutoRange(){if(!(mark>0)){toast('لا يوجد سعر بعد');return;}var up=mark*1.10,lo=mark*0.90;var u=$('gUpper'),l=$('gLower'),c=$('gCount');if(u)u.value=fmt(up,pdec(up));if(l)l.value=fmt(lo,pdec(lo));if(c&&!c.value)c.value='10';gridCalcUpdate();}
+function gridNums(){var up=parseFloat(($('gUpper')||{}).value),lo=parseFloat(($('gLower')||{}).value),n=parseInt(($('gCount')||{}).value,10),inv=parseFloat(($('gInvest')||{}).value);return {up:up,lo:lo,n:n,inv:inv};}
+function gridCalcUpdate(){var el=$('gridCalc');if(!el)return;var g=gridNums();if(!(g.up>0)||!(g.lo>0)||!(g.n>=2)){el.innerHTML='';return;}
+  if(g.up<=g.lo){el.innerHTML='<span style="color:var(--red,#f6465d)">السعر الأعلى يجب أن يكون أكبر من الأدنى</span>';return;}
+  var step=(g.up-g.lo)/g.n;var pctPer=(step/g.lo*100);var perGrid=(g.inv>0)?(g.inv/g.n):0;
+  el.innerHTML='عدد الشبكات: <b>'+g.n+'</b> · المسافة/شبكة: <b>'+fmt(step,pdec(step))+'</b> ('+pctPer.toFixed(2)+'٪)'+(perGrid>0?(' · لكل شبكة: <b>'+fmt(perGrid,2)+' '+quoteCcy()+'</b>'):'');}
+['gUpper','gLower','gCount','gInvest'].forEach(function(id){var e=$(id);if(e)e.addEventListener('input',gridCalcUpdate);});
+function createGrid(){var g=gridNums();
+  if(!(g.up>0)||!(g.lo>0)){toast('أدخل النطاق الأعلى والأدنى');return;}
+  if(g.up<=g.lo){toast('السعر الأعلى يجب أن يكون أكبر من الأدنى');return;}
+  if(!(g.n>=2)){toast('عدد الشبكات 2 على الأقل');return;}
+  if(!(g.inv>0)){toast('أدخل مبلغ الاستثمار');return;}
+  var arr=gridLoad();arr.unshift({id:Date.now(),sym:cur.s,b:cur.b,q:quoteCcy(),up:g.up,lo:g.lo,n:g.n,inv:g.inv,at:Date.now()});gridSave(arr);
+  var u=$('gUpper'),l=$('gLower'),iv=$('gInvest');if(u)u.value='';if(l)l.value='';if(iv)iv.value='';gridCalcUpdate();
+  toast('تم إنشاء شبكة '+cur.s);renderGridActive();}
+function gridDel(id){var arr=gridLoad().filter(function(x){return x.id!==id;});gridSave(arr);toast('تم حذف الشبكة');renderGridActive();}
+function renderGridActive(){var el=$('gridActive');if(!el)return;var arr=gridLoad().filter(function(x){return x.sym===cur.s;});
+  if(!arr.length){el.innerHTML='';return;}
+  el.innerHTML='<div class="seclbl" style="margin:4px 0">الشبكات النشطة ('+arr.length+')</div>'+arr.map(function(x){
+    var step=(x.up-x.lo)/x.n;
+    return '<div class="gactive-card"><div class="gactive-top"><span class="gsym">'+x.sym+'</span><button class="gdel" onclick="gridDel('+x.id+')">إيقاف ×</button></div>'+
+      '<div class="gactive-row"><span>النطاق</span><b>'+fmt(x.lo,pdec(x.lo))+' – '+fmt(x.up,pdec(x.up))+'</b></div>'+
+      '<div class="gactive-row"><span>عدد الشبكات</span><b>'+x.n+' · '+fmt(step,pdec(step))+'/شبكة</b></div>'+
+      '<div class="gactive-row"><span>الاستثمار</span><b>'+fmt(x.inv,2)+' '+x.q+'</b></div></div>';
+  }).join('');}
+function renderGrid(){var c=$('gQc1'),c2=$('gQc2'),c3=$('gQc3');var q=quoteCcy();if(c)c.textContent=q;if(c2)c2.textContent=q;if(c3)c3.textContent=q;gridCalcUpdate();renderGridActive();}
+/* ===== (6) تبويبات المحتوى: السعر/المعلومات/البيانات/Square/Trade-X ===== */
+var curCView='price';
+function switchCView(name){curCView=name;
+  var tabs=document.querySelectorAll('.ctab');[].slice.call(tabs).forEach(function(e){e.classList.toggle('on',e.dataset.cv===name);});
+  var isPrice=(name==='price');
+  var pc=$('priceChart');if(pc)pc.style.display=isPrice?'':'none';
+  var mkt=document.querySelector('.mkt');if(mkt)mkt.style.display=isPrice?'':'none';
+  var pb=$('pendBox');if(pb&&isPrice){/* تتحكم به دواله الخاصة */}else if(pb){pb.style.display='none';}
+  ['infoView','dataView','squareView','tradexView'].forEach(function(id){var el=$(id);if(el)el.style.display='none';});
+  if(name==='info'){var iv=$('infoView');if(iv)iv.style.display='';loadCoinInfo();}
+  else if(name==='data'){var dv=$('dataView');if(dv)dv.style.display='';loadDataView();}
+  else if(name==='square'){var sv=$('squareView');if(sv)sv.style.display='';}
+  else if(name==='tradex'){var tv=$('tradexView');if(tv)tv.style.display='';}
+  else if(isPrice&&pb){try{renderPending&&renderPending();}catch(e){}}}
+function fmtBig(n){n=+n;if(!isFinite(n)||n===0)return '--';var a=Math.abs(n);if(a>=1e12)return (n/1e12).toFixed(2)+'T';if(a>=1e9)return (n/1e9).toFixed(2)+'B';if(a>=1e6)return (n/1e6).toFixed(2)+'M';if(a>=1e3)return (n/1e3).toFixed(2)+'K';return n.toLocaleString('en-US',{maximumFractionDigits:2});}
+function fmtUsd(n){n=+n;if(!isFinite(n)||n===0)return '--';if(n>=1)return '$'+n.toLocaleString('en-US',{maximumFractionDigits:2});return '$'+n.toLocaleString('en-US',{maximumFractionDigits:8});}
+function fmtDate(s){if(!s)return '--';try{var d=new Date(s);if(isNaN(d))return '--';return d.toLocaleDateString('ar',{year:'numeric',month:'short',day:'numeric'});}catch(e){return '--';}}
+function fmtAmt(n){n=+n;if(!isFinite(n)||n===0)return '--';return fmtBig(n);}
+var _infoCache={};
+async function loadCoinInfo(){var sym=cur.s;var ld=$('infoLoad'),body=$('infoBody');if(!body)return;
+  if(_infoCache[sym]){if(ld)ld.style.display='none';renderInfo(_infoCache[sym]);return;}
+  if(ld){ld.style.display='';ld.textContent='جارٍ تحميل معلومات العملة…';}body.innerHTML='';
+  try{var r=await fetch(API_BASE+'/api/coininfo?symbol='+encodeURIComponent(sym),{headers:{'Accept':'application/json'}});
+    if(!r.ok){var j={};try{j=await r.json();}catch(_){}throw (j&&j.error)||('http '+r.status);}
+    var d=await r.json();if(cur.s!==sym)return;_infoCache[sym]=d;if(ld)ld.style.display='none';renderInfo(d);
+  }catch(e){if(cur.s!==sym)return;if(ld){ld.style.display='';ld.textContent=(e==='unsupported_symbol')?'معلومات هذه العملة غير متوفرة حالياً.':'تعذّر جلب المعلومات، حاول لاحقاً.';}}}
+function renderInfo(d){var body=$('infoBody');if(!body)return;var q=quoteCcy();
+  var chg=+d.change24h||0;var chgCls=chg>=0?'up':'down';
+  var icon=d.image?('<img src="'+d.image+'" alt="">'):String(d.symbol||cur.b||'?').slice(0,3);
+  var rows=[];
+  rows.push(['الترتيب السوقي', d.rank?('#'+d.rank):'--']);
+  rows.push(['القيمة السوقية', d.marketCap?('$'+fmtBig(d.marketCap)):'--']);
+  rows.push(['التقييم الكامل (FDV)', d.fdv?('$'+fmtBig(d.fdv)):'--']);
+  rows.push(['حجم التداول 24س', d.volume24h?('$'+fmtBig(d.volume24h)):'--']);
+  rows.push(['العرض المتداول', (d.circulating?fmtAmt(d.circulating):'--')+(d.symbol?(' '+d.symbol):'')]);
+  rows.push(['العرض الكلي', d.totalSupply?fmtAmt(d.totalSupply):'--']);
+  rows.push(['الحد الأقصى', d.maxSupply?fmtAmt(d.maxSupply):'— (غير محدود)']);
+  rows.push(['تاريخ الإصدار', fmtDate(d.genesisDate)]);
+  rows.push(['أعلى سعر (ATH)', (d.ath?fmtUsd(d.ath):'--')+(d.athDate?(' · '+fmtDate(d.athDate)):'')]);
+  rows.push(['أدنى سعر (ATL)', (d.atl?fmtUsd(d.atl):'--')+(d.atlDate?(' · '+fmtDate(d.atlDate)):'')]);
+  var cells=rows.map(function(r){return '<div class="info-cell"><div class="k">'+r[0]+'</div><div class="v">'+r[1]+'</div></div>';}).join('');
+  var links=[];
+  if(d.links){if(d.links.homepage)links.push('<a href="'+d.links.homepage+'" target="_blank" rel="noopener">الموقع الرسمي</a>');
+    if(d.links.explorer)links.push('<a href="'+d.links.explorer+'" target="_blank" rel="noopener">مستكشف البلوكتشين</a>');
+    if(d.links.twitter)links.push('<a href="'+d.links.twitter+'" target="_blank" rel="noopener">إكس (تويتر)</a>');
+    if(d.links.reddit)links.push('<a href="'+d.links.reddit+'" target="_blank" rel="noopener">ريديت</a>');
+    if(d.links.github)links.push('<a href="'+d.links.github+'" target="_blank" rel="noopener">جيتهاب</a>');}
+  var linksHtml=links.length?('<div class="info-links">'+links.join('')+'</div>'):'';
+  var note=d.platform?'<div class="info-note">عملة المنصة — البيانات من خادم Apex.</div>':'<div class="info-note">البيانات الأساسية عبر خادم Apex · تحديث دوري.</div>';
+  body.innerHTML='<div class="info-hero"><div class="info-ic">'+icon+'</div><div><div class="ih-nm">'+(d.name||coinName(cur.b))+'</div><div class="ih-sym">'+(d.symbol||cur.b)+'</div></div><div class="ih-px"><b>'+(mark?fmt(mark,pdec(mark)):'--')+'</b><span class="'+chgCls+'">'+(chg>=0?'+':'')+chg.toFixed(2)+'%</span></div></div>'+
+    '<div class="info-grid">'+cells+'</div>'+linksHtml+note;}
+function loadDataView(){var body=$('dataBody');if(!body)return;var q=quoteCcy();
+  var dd=pdec(mark);
+  var hi=$('hi')?$('hi').textContent:'--',lo=$('lo')?$('lo').textContent:'--',vol=$('vol')?$('vol').textContent:'--';
+  var chg=$('chg')?$('chg').textContent:'--';
+  var info=_infoCache[cur.s];
+  var g1=[['السعر الحالي',(mark?fmt(mark,dd):'--')+' '+q],['التغير 24س',chg],['أعلى 24س',hi],['أدنى 24س',lo],['حجم 24س',vol],['الزوج',cur.b+'/'+q]];
+  var cards1=g1.map(function(r){return '<div class="dv-card"><div class="k">'+r[0]+'</div><div class="v">'+r[1]+'</div></div>';}).join('');
+  var html='<div class="dv-sec"><div class="seclbl">إحصاءات السوق (24س)</div><div class="dv-grid">'+cards1+'</div></div>';
+  if(info){var g2=[['القيمة السوقية',info.marketCap?('$'+fmtBig(info.marketCap)):'--'],['الترتيب',info.rank?('#'+info.rank):'--'],['العرض المتداول',info.circulating?fmtAmt(info.circulating):'--'],['الحد الأقصى',info.maxSupply?fmtAmt(info.maxSupply):'—']];
+    var cards2=g2.map(function(r){return '<div class="dv-card"><div class="k">'+r[0]+'</div><div class="v">'+r[1]+'</div></div>';}).join('');
+    html+='<div class="dv-sec"><div class="seclbl">بيانات أساسية</div><div class="dv-grid">'+cards2+'</div></div>';}
+  else{html+='<div class="dv-sec"><div class="cv-load" style="padding:20px">افتح تبويب «المعلومات» لجلب البيانات الأساسية.</div></div>';}
+  body.innerHTML=html;}
 /* تهيئة الميزات الجديدة */
 (function(){try{buildIndTabs();}catch(e){}try{pickMkt('book');}catch(e){}try{loadPerf();}catch(e){}})();
 </script>
