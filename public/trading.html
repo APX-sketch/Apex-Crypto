@@ -590,10 +590,12 @@ html,body{margin:0;background:#05070a;color:var(--txt);font-family:'Segoe UI',Ta
       <div class="otb-tab on" data-ob="pend" onclick="obTab('pend')">الطلبات المفتوحة (<span id="obPendCnt">0</span>)</div>
       <div class="otb-tab" data-ob="bal" onclick="obTab('bal')">الأرصدة (<span id="obBalCnt">0</span>)</div>
       <div class="otb-tab" data-ob="trades" onclick="obTab('trades')">الصفقات</div>
+      <div class="otb-tab" data-ob="bots" onclick="obTab('bots')">بوتات</div>
     </div>
     <div id="obPend"></div>
     <div id="obBal" style="display:none"></div>
     <div id="obTrades" style="display:none"></div>
+    <div id="obBots" style="display:none"><div class="xempty">بوتات التداول الآلي — قريباً</div></div>
     <div class="obfund">
       <div class="obfund-row"><span>الأموال المتاحة</span><b id="obFundAmt">0.00 USDT</b></div>
       <a class="obfund-link" href="convert.html">حوّل الأموال إلى محفظتك الفورية للتداول ›</a>
@@ -1071,6 +1073,7 @@ function obTab(t){document.querySelectorAll('.otb-tab').forEach(x=>x.classList.t
   if($('obPend'))$('obPend').style.display=(t==='pend')?'block':'none';
   if($('obBal'))$('obBal').style.display=(t==='bal')?'block':'none';
   if($('obTrades'))$('obTrades').style.display=(t==='trades')?'block':'none';
+  if($('obBots'))$('obBots').style.display=(t==='bots')?'block':'none';
   if(t==='bal')renderSheetBal();}
 /* الأرصدة داخل شاشة الأمر (نمط بينانس) */
 function renderSheetBal(){
