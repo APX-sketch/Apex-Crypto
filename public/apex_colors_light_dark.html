@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ar" dir="rtl" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Apex — جدول ألوان العناصر (فاتح / داكن)</title>
+<style>
+  :root{--bg:#0e1621;--card:#141d2a;--line:#1f2b3a;--txt:#eaf0f7;--mut:#8a94a3}
+  html[data-theme="light"]{--bg:#eef1f6;--card:#ffffff;--line:#dde3ec;--txt:#222a35;--mut:#5c6675}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Segoe UI',Tahoma,Arial,sans-serif;background:var(--bg);color:var(--txt);padding:24px;transition:.25s}
+  h1{font-size:22px;margin:0 0 4px}
+  .sub{color:var(--mut);font-size:13.5px;margin-bottom:18px}
+  .tgl{display:inline-flex;gap:8px;margin-bottom:20px}
+  .tgl button{padding:9px 16px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--txt);font-weight:700;cursor:pointer;font-size:14px}
+  .tgl button.on{border-color:#c9930a;background:rgba(224,166,21,.14);color:#c9930a}
+  html[data-theme="dark"] .tgl button.on{color:#e0a615;border-color:#e0a615}
+  .wrap{max-width:860px;margin:0 auto}
+  table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  th,td{padding:12px 14px;text-align:right;border-bottom:1px solid var(--line);font-size:14px}
+  th{background:rgba(127,127,127,.08);color:var(--mut);font-weight:700}
+  tr:last-child td{border-bottom:none}
+  .sw{display:inline-flex;align-items:center;gap:9px}
+  .dot{width:20px;height:20px;border-radius:6px;border:1px solid rgba(127,127,127,.35);flex:none}
+  .hex{font-family:'Consolas','Courier New',monospace;font-size:13px;color:var(--mut)}
+  .note{color:var(--mut);font-size:12.5px;margin-top:16px;line-height:1.7}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>جدول مقارنة ألوان عناصر منصة Apex</h1>
+  <div class="sub">الألوان المستخدمة في الشارت والمؤشرات بين الوضع الداكن والفاتح — اضغط للمعاينة الحية.</div>
+  <div class="tgl">
+    <button id="bD" class="on">🌑 داكن</button>
+    <button id="bL">☀️ فاتح</button>
+  </div>
+  <table>
+    <thead><tr><th>العنصر</th><th>الوضع الداكن</th><th>الوضع الفاتح</th></tr></thead>
+    <tbody id="tb"></tbody>
+  </table>
+  <div class="note">
+    • الشموع (صاعد/هابط) تبقى بالأخضر/الأحمر القياسي في الوضعين لأنها مألوفة عالمياً.<br>
+    • ألوان المؤشرات في الوضع الفاتح تم تغميقها لتحسين التباين على الخلفية البيضاء.<br>
+    • أعمدة الحجم شفافة (0.5) بالداكن و (0.62) بالفاتح لتظهر بوضوح على الأبيض.
+  </div>
+</div>
+<script>
+var rows=[
+  ['شمعة صاعدة / هابطة','#0ecb81 / #f6465d','#0ecb81 / #f6465d'],
+  ['MA7','#e0a615','#b57e00'],
+  ['MA25','#2f83fb','#1769e0'],
+  ['MA99','#e256c9','#b81fa0'],
+  ['SAR (نقاط)','#c99bff','#7c3aed'],
+  ['أخضر عام (أرباح)','#0ecb81','#0a9d63'],
+  ['أحمر عام (خسائر)','#f6465d','#d22f46'],
+  ['ذهبي SAR / تمييز','#e0a615','#b57e00'],
+  ['حجم صاعد','rgba(14,203,129,.5)','rgba(10,157,99,.62)'],
+  ['حجم هابط','rgba(246,70,93,.5)','rgba(210,47,70,.62)'],
+  ['خلفية الشارت','#0e1621','#ffffff'],
+  ['نص / محاور','#8b97a5','#5c6675'],
+  ['خطوط الشبكة','#1b2735','#eceff4'],
+  ['الشريط السفلي .bnav','#141d2a','#ffffff'],
+  ['بطاقة الرصيد','داكن','#ffffff']
+];
+function cell(v){var m=/^(#|rgba)/i.test(v);return m?'<span class="sw"><span class="dot" style="background:'+v+'"></span><span class="hex">'+v+'</span></span>':v;}
+document.getElementById('tb').innerHTML=rows.map(function(r){return '<tr><td>'+r[0]+'</td><td>'+cell(r[1])+'</td><td>'+cell(r[2])+'</td></tr>';}).join('');
+var bD=document.getElementById('bD'),bL=document.getElementById('bL');
+function set(t){document.documentElement.setAttribute('data-theme',t);bD.classList.toggle('on',t==='dark');bL.classList.toggle('on',t==='light');}
+bD.onclick=function(){set('dark');};bL.onclick=function(){set('light');};
+</script>
+</body>
+</html>
