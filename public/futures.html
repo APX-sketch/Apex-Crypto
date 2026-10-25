@@ -11,7 +11,7 @@
 </script>
 <script>
 /* عزل الحسابات: عند تبديل الحساب على نفس المتصفح نمسح أي حالة محلية قديمة (صفقات/سجل/أوامر/عمولات/توثيق) حتى يبدأ كل حساب من الصفر ولا تتسرّب بيانات بين الحسابات */
-(function(){try{var s=JSON.parse(localStorage.getItem('skygo_session')||'null')||{};var tok=(s&&s.token)||localStorage.getItem('apex_token')||'';var owner=(((s&&s.email)||'')+'').toLowerCase()||tok||'';if(!owner)return;var prev=localStorage.getItem('apex_acct_owner')||'';if(prev!==owner){['skygo_futures_pos','skygo_futures_hist','skygo_futures_ord','apex_fees_collected','apex_kyc_status'].forEach(function(k){try{localStorage.removeItem(k);}catch(e){}});localStorage.setItem('apex_acct_owner',owner);}}catch(e){}})();
+(function(){try{var s=JSON.parse(localStorage.getItem('skygo_session')||'null')||{};var tok=(s&&s.token)||localStorage.getItem('apex_token')||'';var owner=(((s&&s.email)||'')+'').toLowerCase()||tok||'';if(!owner)return;var prev=localStorage.getItem('apex_acct_owner')||'';if(prev!==owner){var KEEP={'apex_lang':1,'apex_acct_owner':1,'apex_admin_token':1,'skygo_session':1,'apex_token':1,'apex_2fa':1,'apex_bio':1,'apex_hidebal':1,'apex_anti':1};var PFX=['skygo_wallet_','skygo_futures_','apex_apx','apex_fees_collected','apex_kyc_status','apex_favs_','apex_alerts_','apex_scan_addr','apex_sup_'];var kill=[];for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(!k||KEEP[k])continue;for(var j=0;j<PFX.length;j++){if(k.indexOf(PFX[j])===0){kill.push(k);break;}}}kill.forEach(function(k){try{localStorage.removeItem(k);}catch(e){}});localStorage.setItem('apex_acct_owner',owner);}}catch(e){}})();
 </script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
@@ -610,7 +610,20 @@ function initChart(){
     lwChart.timeScale().subscribeVisibleLogicalRangeChange(r=>{if(r&&volChart)volChart.timeScale().setVisibleLogicalRange(r);});
   }
   new ResizeObserver(()=>{if(lwChart&&el)lwChart.applyOptions({width:el.clientWidth||300,height:el.clientHeight||300});if(volChart&&vp)volChart.applyOptions({width:vp.clientWidth});}).observe(el);
+  try{apxChartTheme();}catch(e){}
 }
+function apxChartTheme(mode){
+  try{ mode = mode || (window.APEX_I18N && APEX_I18N.theme ? APEX_I18N.theme() : (document.documentElement.getAttribute('data-theme')||'dark')); }catch(e){ mode='dark'; }
+  var light = mode==='light';
+  var bg   = light ? '#ffffff' : '#0e1621';
+  var txt  = light ? '#5c6675' : '#8b97a5';
+  var grid = light ? '#eceff4' : '#1b2735';
+  var bord = light ? '#dde3ec' : '#1b2735';
+  try{ if(lwChart) lwChart.applyOptions({layout:{background:{type:'solid',color:bg},textColor:txt},grid:{vertLines:{color:grid},horzLines:{color:grid}},rightPriceScale:{borderColor:bord},timeScale:{borderColor:bord},crosshair:{vertLine:{color:light?'#9aa4b2':'#4a5563',labelBackgroundColor:light?'#5c6675':'#2b3139'},horzLine:{color:light?'#9aa4b2':'#4a5563',labelBackgroundColor:light?'#5c6675':'#2b3139'}}}); }catch(e){}
+  try{ if(volChart) volChart.applyOptions({layout:{background:{type:'solid',color:bg},textColor:txt},grid:{vertLines:{color:'transparent'},horzLines:{color:grid}},rightPriceScale:{borderColor:bord},timeScale:{borderColor:bord}}); }catch(e){}
+  try{ if(ma7) ma7.applyOptions({color:light?'#c88a00':'#e0a615'}); }catch(e){}
+}
+window.addEventListener('apextheme',function(ev){ try{ apxChartTheme(ev&&ev.detail&&ev.detail.mode); }catch(e){} });
 function toggleChartMax(btn){
   var w=btn.closest('.chartwrap');var on=w.classList.toggle('max');
   document.body.style.overflow=on?'hidden':'';

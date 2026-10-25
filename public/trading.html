@@ -1054,7 +1054,22 @@ function initChart(){
   }
   new ResizeObserver(()=>{if(lwChart)lwChart.applyOptions({width:el.clientWidth,height:(el.clientHeight||300)});if(volChart&&vp)volChart.applyOptions({width:vp.clientWidth});if(rsiChart&&rp)rsiChart.applyOptions({width:rp.clientWidth});}).observe(el);
   initDraw();
+  try{apxChartTheme();}catch(e){}
 }
+function apxChartTheme(mode){
+  try{ mode = mode || (window.APEX_I18N && APEX_I18N.theme ? APEX_I18N.theme() : (document.documentElement.getAttribute('data-theme')||'dark')); }catch(e){ mode='dark'; }
+  var light = mode==='light';
+  var bg   = light ? '#ffffff' : '#12161c';
+  var txt  = light ? '#5c6675' : '#848e9c';
+  var grid = light ? '#eceff4' : '#1f2731';
+  var bord = light ? '#dde3ec' : '#1f2731';
+  try{ if(lwChart) lwChart.applyOptions({layout:{background:{type:'solid',color:bg},textColor:txt},grid:{vertLines:{color:grid},horzLines:{color:grid}},rightPriceScale:{borderColor:bord},timeScale:{borderColor:bord},crosshair:{vertLine:{color:light?'#9aa4b2':'#4a5563',labelBackgroundColor:light?'#5c6675':'#2b3139'},horzLine:{color:light?'#9aa4b2':'#4a5563',labelBackgroundColor:light?'#5c6675':'#2b3139'}}}); }catch(e){}
+  try{ if(volChart) volChart.applyOptions({layout:{background:{type:'solid',color:bg},textColor:txt},grid:{vertLines:{color:'transparent'},horzLines:{color:grid}},rightPriceScale:{borderColor:bord},timeScale:{borderColor:bord}}); }catch(e){}
+  try{ if(rsiChart) rsiChart.applyOptions({layout:{background:{type:'solid',color:bg},textColor:txt},grid:{vertLines:{color:'transparent'},horzLines:{color:'transparent'}},rightPriceScale:{borderColor:bord},timeScale:{borderColor:bord}}); }catch(e){}
+  try{ if(rsiSeries) rsiSeries.applyOptions({color:light?'#7c3aed':'#c99bff'}); }catch(e){}
+  try{ if(ma7) ma7.applyOptions({color:light?'#c88a00':'#e0a615'}); }catch(e){}
+}
+window.addEventListener('apextheme',function(ev){ try{ apxChartTheme(ev&&ev.detail&&ev.detail.mode); }catch(e){} });
 function toggleChartMax(btn){
   var w=btn.closest('.chartwrap');var on=w.classList.toggle('max');
   document.body.style.overflow=on?'hidden':'';
