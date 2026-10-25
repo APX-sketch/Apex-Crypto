@@ -1,102 +1,485 @@
-/* Apex — shared i18n across ALL pages. Reads/writes localStorage "apex_lang". */
+/* ===================================================================
+   Apex — محرّك اللغات (i18n) + تبديل المظهر (فاتح/داكن)
+   — مشترك بين كل الصفحات. يترجم المفاتيح (data-i18n)
+     وكذلك أي نص عربي مكتوب مباشرة عبر قاموس المصدر.
+=================================================================== */
 (function(){
-var I18N={};
-I18N.ar={security:'الأمان والحماية',kyc:'توثيق الهوية (KYC)',settings:'الإعدادات واللغة',help:'المساعدة والدعم',logout:'تسجيل الخروج',changePass:'تغيير كلمة المرور',changePassSub:'حدّث كلمة المرور بانتظام',twofa:'المصادقة الثنائية 2FA',twofaSub:'حماية إضافية عند الدخول',biometric:'بصمة / وجه',biometricSub:'تسجيل دخول سريع',antiTitle:'رمز مكافحة التصيد',save:'حفظ',lastLogin:'آخر تسجيل دخول',curPass:'كلمة المرور الحالية',newPass:'كلمة المرور الجديدة',confPass:'تأكيد كلمة المرور',saveNewPass:'حفظ كلمة المرور',kycVerified:'حساب موثّق',kycDesc:'تم التحقق من هويتك بنجاح. حسابك يتمتع بكامل الصلاحيات.',docType:'نوع الوثيقة',status:'الحالة',verified2:'✓ موثّق',level:'مستوى التوثيق',language:'اللغة',faq1q:'كيف أودع الأموال؟',faq1a:'اضغط على زر "إيداع" في الصفحة الرئيسية واتبع الخطوات.',faq2q:'كيف أحمي حسابي؟',faq2a:'فعّل المصادقة الثنائية 2FA ورمز مكافحة التصيد من قسم الأمان.',faq3q:'هل المنصة حقيقية؟',faq3a:'هذه منصة تدريبية (تداول تجريبي) بأسعار حية حقيقية من السوق.',liveChat:'الدردشة المباشرة',liveChatSub:'دعم فني 24/7',email:'البريد الإلكتروني',searchPh:'بحث عن عملة (BTC، ETH)...',totalAssets:'إجمالي الأصول (USDT)',deposit:'إيداع',withdraw:'سحب',transfer:'تحويل',more:'المزيد',liveMarkets:'أبرز الأسواق الحية',viewAll:'عرض الكل ‹',copy:'نسخ',supportMsg:'سيتواصل معك فريق الدعم قريباً',kycId:'بطاقة هوية وطنية',kycPass:'جواز سفر',kycLic:'رخصة قيادة',langChanged:'تم تغيير اللغة',msgSaved:'تم الحفظ بنجاح',msg2faOn:'تم تفعيل المصادقة الثنائية',msg2faOff:'تم إيقاف المصادقة الثنائية',msgBioOn:'تم تفعيل البصمة',msgBioOff:'تم إيقاف البصمة',msgAntiEmpty:'الرجاء إدخال رمز',msgNoUser:'تعذر إيجاد المستخدم',msgPassWrong:'كلمة المرور الحالية غير صحيحة',msgPassShort:'كلمة المرور قصيرة (8 أحرف على الأقل)',msgPassMismatch:'كلمتا المرور غير متطابقتين',msgPassChanged:'تم تغيير كلمة المرور بنجاح'};
-I18N.en={security:'Security & Protection',kyc:'Identity Verification (KYC)',settings:'Settings & Language',help:'Help & Support',logout:'Log out',changePass:'Change Password',changePassSub:'Update your password regularly',twofa:'Two-Factor Auth (2FA)',twofaSub:'Extra protection on login',biometric:'Fingerprint / Face',biometricSub:'Fast sign-in',antiTitle:'Anti-Phishing Code',save:'Save',lastLogin:'Last login',curPass:'Current password',newPass:'New password',confPass:'Confirm password',saveNewPass:'Save password',kycVerified:'Verified account',kycDesc:'Your identity has been verified successfully. Your account has full access.',docType:'Document type',status:'Status',verified2:'✓ Verified',level:'Verification level',language:'Language',faq1q:'How do I deposit funds?',faq1a:'Tap the "Deposit" button on the home page and follow the steps.',faq2q:'How do I protect my account?',faq2a:'Enable 2FA and the anti-phishing code from the Security section.',faq3q:'Is the platform real?',faq3a:'This is a training platform (paper trading) with real live market prices.',liveChat:'Live Chat',liveChatSub:'24/7 technical support',email:'Email',searchPh:'Search a coin (BTC, ETH)...',totalAssets:'Total Assets (USDT)',deposit:'Deposit',withdraw:'Withdraw',transfer:'Transfer',more:'More',liveMarkets:'Top Live Markets',viewAll:'View all ›',copy:'Copy',supportMsg:'Our support team will contact you soon',kycId:'National ID Card',kycPass:'Passport',kycLic:'Driver License',langChanged:'Language changed',msgSaved:'Saved successfully',msg2faOn:'Two-factor auth enabled',msg2faOff:'Two-factor auth disabled',msgBioOn:'Biometric enabled',msgBioOff:'Biometric disabled',msgAntiEmpty:'Please enter a code',msgNoUser:'User not found',msgPassWrong:'Current password is incorrect',msgPassShort:'Password too short (min 8 chars)',msgPassMismatch:'Passwords do not match',msgPassChanged:'Password changed successfully'};
-I18N.fr={security:'Sécurité & Protection',kyc:'Vérification d\'identité (KYC)',settings:'Paramètres & Langue',help:'Aide & Support',logout:'Déconnexion',changePass:'Changer le mot de passe',changePassSub:'Mettez à jour régulièrement',twofa:'Authentification à deux facteurs',twofaSub:'Protection supplémentaire',biometric:'Empreinte / Visage',biometricSub:'Connexion rapide',antiTitle:'Code anti-hameçonnage',save:'Enregistrer',lastLogin:'Dernière connexion',curPass:'Mot de passe actuel',newPass:'Nouveau mot de passe',confPass:'Confirmer le mot de passe',saveNewPass:'Enregistrer',kycVerified:'Compte vérifié',kycDesc:'Votre identité a été vérifiée avec succès. Accès complet.',docType:'Type de document',status:'Statut',verified2:'✓ Vérifié',level:'Niveau de vérification',language:'Langue',faq1q:'Comment déposer des fonds ?',faq1a:'Appuyez sur "Dépôt" sur la page d\'accueil et suivez les étapes.',faq2q:'Comment protéger mon compte ?',faq2a:'Activez la 2FA et le code anti-hameçonnage dans Sécurité.',faq3q:'La plateforme est-elle réelle ?',faq3a:'Ceci est une plateforme d\'entraînement (trading papier) avec de vrais prix.',liveChat:'Chat en direct',liveChatSub:'Support 24/7',email:'E-mail',searchPh:'Rechercher une pièce (BTC, ETH)...',totalAssets:'Actifs totaux (USDT)',deposit:'Dépôt',withdraw:'Retrait',transfer:'Transfert',more:'Plus',liveMarkets:'Meilleurs marchés en direct',viewAll:'Tout voir ›',copy:'Copier',supportMsg:'Notre équipe vous contactera bientôt',kycId:'Carte d\'identité',kycPass:'Passeport',kycLic:'Permis de conduire',langChanged:'Langue modifiée',msgSaved:'Enregistré avec succès',msg2faOn:'2FA activée',msg2faOff:'2FA désactivée',msgBioOn:'Biométrie activée',msgBioOff:'Biométrie désactivée',msgAntiEmpty:'Veuillez saisir un code',msgNoUser:'Utilisateur introuvable',msgPassWrong:'Mot de passe actuel incorrect',msgPassShort:'Mot de passe trop court (min 8)',msgPassMismatch:'Les mots de passe ne correspondent pas',msgPassChanged:'Mot de passe modifié'};
-I18N.es={security:'Seguridad y Protección',kyc:'Verificación de identidad (KYC)',settings:'Ajustes e Idioma',help:'Ayuda y Soporte',logout:'Cerrar sesión',changePass:'Cambiar contraseña',changePassSub:'Actualiza tu contraseña con frecuencia',twofa:'Autenticación de dos factores',twofaSub:'Protección adicional al iniciar',biometric:'Huella / Rostro',biometricSub:'Inicio rápido',antiTitle:'Código anti-phishing',save:'Guardar',lastLogin:'Último inicio',curPass:'Contraseña actual',newPass:'Nueva contraseña',confPass:'Confirmar contraseña',saveNewPass:'Guardar',kycVerified:'Cuenta verificada',kycDesc:'Tu identidad se verificó con éxito. Acceso completo.',docType:'Tipo de documento',status:'Estado',verified2:'✓ Verificado',level:'Nivel de verificación',language:'Idioma',faq1q:'¿Cómo deposito fondos?',faq1a:'Toca "Depósito" en la página principal y sigue los pasos.',faq2q:'¿Cómo protejo mi cuenta?',faq2a:'Activa 2FA y el código anti-phishing en Seguridad.',faq3q:'¿La plataforma es real?',faq3a:'Es una plataforma de práctica (trading en papel) con precios reales.',liveChat:'Chat en vivo',liveChatSub:'Soporte 24/7',email:'Correo',searchPh:'Buscar moneda (BTC, ETH)...',totalAssets:'Activos totales (USDT)',deposit:'Depósito',withdraw:'Retirar',transfer:'Transferir',more:'Más',liveMarkets:'Mercados en vivo',viewAll:'Ver todo ›',copy:'Copiar',supportMsg:'Nuestro equipo te contactará pronto',kycId:'DNI / Cédula',kycPass:'Pasaporte',kycLic:'Licencia de conducir',langChanged:'Idioma cambiado',msgSaved:'Guardado con éxito',msg2faOn:'2FA activada',msg2faOff:'2FA desactivada',msgBioOn:'Biometría activada',msgBioOff:'Biometría desactivada',msgAntiEmpty:'Introduce un código',msgNoUser:'Usuario no encontrado',msgPassWrong:'Contraseña actual incorrecta',msgPassShort:'Contraseña muy corta (mín 8)',msgPassMismatch:'Las contraseñas no coinciden',msgPassChanged:'Contraseña cambiada'};
-I18N.de={security:'Sicherheit & Schutz',kyc:'Identitätsprüfung (KYC)',settings:'Einstellungen & Sprache',help:'Hilfe & Support',logout:'Abmelden',changePass:'Passwort ändern',changePassSub:'Aktualisiere dein Passwort regelmäßig',twofa:'Zwei-Faktor-Auth (2FA)',twofaSub:'Zusätzlicher Schutz beim Login',biometric:'Fingerabdruck / Gesicht',biometricSub:'Schnelle Anmeldung',antiTitle:'Anti-Phishing-Code',save:'Speichern',lastLogin:'Letzter Login',curPass:'Aktuelles Passwort',newPass:'Neues Passwort',confPass:'Passwort bestätigen',saveNewPass:'Speichern',kycVerified:'Verifiziertes Konto',kycDesc:'Deine Identität wurde erfolgreich verifiziert. Voller Zugriff.',docType:'Dokumenttyp',status:'Status',verified2:'✓ Verifiziert',level:'Verifizierungsstufe',language:'Sprache',faq1q:'Wie zahle ich ein?',faq1a:'Tippe auf "Einzahlung" auf der Startseite und folge den Schritten.',faq2q:'Wie schütze ich mein Konto?',faq2a:'Aktiviere 2FA und den Anti-Phishing-Code im Bereich Sicherheit.',faq3q:'Ist die Plattform echt?',faq3a:'Dies ist eine Übungsplattform (Paper-Trading) mit echten Marktpreisen.',liveChat:'Live-Chat',liveChatSub:'24/7 Support',email:'E-Mail',searchPh:'Münze suchen (BTC, ETH)...',totalAssets:'Gesamtvermögen (USDT)',deposit:'Einzahlen',withdraw:'Auszahlen',transfer:'Übertragen',more:'Mehr',liveMarkets:'Top Live-Märkte',viewAll:'Alle ansehen ›',copy:'Kopieren',supportMsg:'Unser Support meldet sich bald bei dir',kycId:'Personalausweis',kycPass:'Reisepass',kycLic:'Führerschein',langChanged:'Sprache geändert',msgSaved:'Erfolgreich gespeichert',msg2faOn:'2FA aktiviert',msg2faOff:'2FA deaktiviert',msgBioOn:'Biometrie aktiviert',msgBioOff:'Biometrie deaktiviert',msgAntiEmpty:'Bitte Code eingeben',msgNoUser:'Benutzer nicht gefunden',msgPassWrong:'Aktuelles Passwort falsch',msgPassShort:'Passwort zu kurz (min 8)',msgPassMismatch:'Passwörter stimmen nicht überein',msgPassChanged:'Passwort geändert'};
-I18N.tr={security:'Güvenlik & Koruma',kyc:'Kimlik Doğrulama (KYC)',settings:'Ayarlar & Dil',help:'Yardım & Destek',logout:'Çıkış yap',changePass:'Şifre değiştir',changePassSub:'Şifreni düzenli güncelle',twofa:'İki Faktörlü Doğrulama',twofaSub:'Girişte ekstra koruma',biometric:'Parmak izi / Yüz',biometricSub:'Hızlı giriş',antiTitle:'Anti-Phishing Kodu',save:'Kaydet',lastLogin:'Son giriş',curPass:'Mevcut şifre',newPass:'Yeni şifre',confPass:'Şifreyi onayla',saveNewPass:'Kaydet',kycVerified:'Doğrulanmış hesap',kycDesc:'Kimliğiniz başarıyla doğrulandı. Tam erişim.',docType:'Belge türü',status:'Durum',verified2:'✓ Doğrulandı',level:'Doğrulama seviyesi',language:'Dil',faq1q:'Nasıl para yatırırım?',faq1a:'Ana sayfada "Yatır" düğmesine dokunun ve adımları izleyin.',faq2q:'Hesabımı nasıl korurum?',faq2a:'Güvenlik bölümünden 2FA ve anti-phishing kodunu etkinleştirin.',faq3q:'Platform gerçek mi?',faq3a:'Bu, gerçek piyasa fiyatlarıyla bir eğitim platformudur (kağıt ticareti).',liveChat:'Canlı sohbet',liveChatSub:'7/24 destek',email:'E-posta',searchPh:'Coin ara (BTC, ETH)...',totalAssets:'Toplam Varlık (USDT)',deposit:'Yatır',withdraw:'Çek',transfer:'Transfer',more:'Daha',liveMarkets:'Popüler Canlı Piyasalar',viewAll:'Tümünü gör ›',copy:'Kopyala',supportMsg:'Destek ekibimiz sizinle yakında iletişime geçecek',kycId:'Kimlik Kartı',kycPass:'Pasaport',kycLic:'Sürücü belgesi',langChanged:'Dil değiştirildi',msgSaved:'Başarıyla kaydedildi',msg2faOn:'2FA etkin',msg2faOff:'2FA devre dışı',msgBioOn:'Biyometri etkin',msgBioOff:'Biyometri devre dışı',msgAntiEmpty:'Lütfen bir kod girin',msgNoUser:'Kullanıcı bulunamadı',msgPassWrong:'Mevcut şifre yanlış',msgPassShort:'Şifre çok kısa (min 8)',msgPassMismatch:'Şifreler eşleşmiyor',msgPassChanged:'Şifre değiştirildi'};
-I18N.ru={security:'Безопасность и защита',kyc:'Подтверждение личности (KYC)',settings:'Настройки и язык',help:'Помощь и поддержка',logout:'Выйти',changePass:'Сменить пароль',changePassSub:'Регулярно обновляйте пароль',twofa:'Двухфакторная (2FA)',twofaSub:'Дополнительная защита',biometric:'Отпечаток / Лицо',biometricSub:'Быстрый вход',antiTitle:'Антифишинговый код',save:'Сохранить',lastLogin:'Последний вход',curPass:'Текущий пароль',newPass:'Новый пароль',confPass:'Подтвердите пароль',saveNewPass:'Сохранить',kycVerified:'Аккаунт подтверждён',kycDesc:'Ваша личность успешно подтверждена. Полный доступ.',docType:'Тип документа',status:'Статус',verified2:'✓ Подтверждён',level:'Уровень верификации',language:'Язык',faq1q:'Как пополнить счёт?',faq1a:'Нажмите "Депозит" на главной странице и следуйте шагам.',faq2q:'Как защитить аккаунт?',faq2a:'Включите 2FA и антифишинговый код в разделе Безопасность.',faq3q:'Платформа настоящая?',faq3a:'Это учебная платформа (бумажная торговля) с реальными ценами.',liveChat:'Онлайн-чат',liveChatSub:'Поддержка 24/7',email:'Эл. почта',searchPh:'Поиск монеты (BTC, ETH)...',totalAssets:'Общие активы (USDT)',deposit:'Пополнить',withdraw:'Вывести',transfer:'Перевод',more:'Ещё',liveMarkets:'Топ рынков',viewAll:'Все ›',copy:'Копировать',supportMsg:'Наша поддержка скоро свяжется с вами',kycId:'Удостоверение личности',kycPass:'Паспорт',kycLic:'Водительское удостоверение',langChanged:'Язык изменён',msgSaved:'Успешно сохранено',msg2faOn:'2FA включена',msg2faOff:'2FA выключена',msgBioOn:'Биометрия включена',msgBioOff:'Биометрия выключена',msgAntiEmpty:'Введите код',msgNoUser:'Пользователь не найден',msgPassWrong:'Неверный текущий пароль',msgPassShort:'Пароль слишком короткий (мин 8)',msgPassMismatch:'Пароли не совпадают',msgPassChanged:'Пароль изменён'};
-I18N.zh={security:'安全与保护',kyc:'身份验证 (KYC)',settings:'设置与语言',help:'帮助与支持',logout:'退出登录',changePass:'修改密码',changePassSub:'定期更新您的密码',twofa:'双重验证 (2FA)',twofaSub:'登录时额外保护',biometric:'指纹 / 人脸',biometricSub:'快速登录',antiTitle:'反钓鱼验证码',save:'保存',lastLogin:'上次登录',curPass:'当前密码',newPass:'新密码',confPass:'确认密码',saveNewPass:'保存密码',kycVerified:'已验证账户',kycDesc:'您的身份已成功验证，账户拥有完整权限。',docType:'证件类型',status:'状态',verified2:'✓ 已验证',level:'验证级别',language:'语言',faq1q:'如何存入资金？',faq1a:'在首页点击“存款”按钮并按步骤操作。',faq2q:'如何保护我的账户？',faq2a:'在安全部分启用 2FA 和反钓鱼验证码。',faq3q:'这个平台是真的吗？',faq3a:'这是一个培训平台（模拟交易），使用真实市场价格。',liveChat:'在线客服',liveChatSub:'7×24 技术支持',email:'电子邮件',searchPh:'搜索币种 (BTC, ETH)...',totalAssets:'总资产 (USDT)',deposit:'存款',withdraw:'提现',transfer:'转账',more:'更多',liveMarkets:'热门实时行情',viewAll:'查看全部 ›',copy:'复制',supportMsg:'客服团队将尽快与您联系',kycId:'身份证',kycPass:'护照',kycLic:'驾驶证',langChanged:'语言已更改',msgSaved:'保存成功',msg2faOn:'已启用双重验证',msg2faOff:'已关闭双重验证',msgBioOn:'已启用生物识别',msgBioOff:'已关闭生物识别',msgAntiEmpty:'请输入验证码',msgNoUser:'未找到用户',msgPassWrong:'当前密码错误',msgPassShort:'密码太短（至少8位）',msgPassMismatch:'两次密码不一致',msgPassChanged:'密码修改成功'};
-I18N.hi={security:'सुरक्षा और संरक्षण',kyc:'पहचान सत्यापन (KYC)',settings:'सेटिंग्स और भाषा',help:'सहायता और समर्थन',logout:'लॉग आउट',changePass:'पासवर्ड बदलें',changePassSub:'नियमित रूप से पासवर्ड अपडेट करें',twofa:'दो-कारक प्रमाणीकरण',twofaSub:'लॉगिन पर अतिरिक्त सुरक्षा',biometric:'फ़िंगरप्रिंट / चेहरा',biometricSub:'तेज़ लॉगिन',antiTitle:'एंटी-फ़िशिंग कोड',save:'सहेजें',lastLogin:'अंतिम लॉगिन',curPass:'वर्तमान पासवर्ड',newPass:'नया पासवर्ड',confPass:'पासवर्ड की पुष्टि',saveNewPass:'पासवर्ड सहेजें',kycVerified:'सत्यापित खाता',kycDesc:'आपकी पहचान सफलतापूर्वक सत्यापित हुई। पूर्ण पहुंच।',docType:'दस्तावेज़ प्रकार',status:'स्थिति',verified2:'✓ सत्यापित',level:'सत्यापन स्तर',language:'भाषा',faq1q:'फ़ंड कैसे जमा करें?',faq1a:'होम पेज पर "जमा" बटन पर टैप करें।',faq2q:'अपना खाता कैसे सुरक्षित करें?',faq2a:'सुरक्षा अनुभाग से 2FA और एंटी-फ़िशिंग कोड सक्षम करें।',faq3q:'क्या प्लेटफ़ॉर्म वास्तविक है?',faq3a:'यह एक प्रशिक्षण प्लेटफ़ॉर्म है (पेपर ट्रेडिंग) वास्तविक कीमतों के साथ।',liveChat:'लाइव चैट',liveChatSub:'24/7 समर्थन',email:'ईमेल',searchPh:'सिक्का खोजें (BTC, ETH)...',totalAssets:'कुल संपत्ति (USDT)',deposit:'जमा',withdraw:'निकासी',transfer:'स्थानांतरण',more:'और',liveMarkets:'शीर्ष लाइव बाज़ार',viewAll:'सभी देखें ›',copy:'कॉपी',supportMsg:'हमारी सपोर्ट टीम जल्द संपर्क करेगी',kycId:'राष्ट्रीय पहचान पत्र',kycPass:'पासपोर्ट',kycLic:'ड्राइविंग लाइसेंस',langChanged:'भाषा बदल गई',msgSaved:'सफलतापूर्वक सहेजा गया',msg2faOn:'2FA सक्षम',msg2faOff:'2FA अक्षम',msgBioOn:'बायोमेट्रिक सक्षम',msgBioOff:'बायोमेट्रिक अक्षम',msgAntiEmpty:'कृपया कोड दर्ज करें',msgNoUser:'उपयोगकर्ता नहीं मिला',msgPassWrong:'वर्तमान पासवर्ड गलत',msgPassShort:'पासवर्ड बहुत छोटा (कम से कम 8)',msgPassMismatch:'पासवर्ड मेल नहीं खाते',msgPassChanged:'पासवर्ड बदल गया'};
-I18N.ur={security:'تحفظ و سيکیورٹی',kyc:'شناخت کی توثیق (KYC)',settings:'ترتیبات و زبان',help:'مدد و معاونت',logout:'لاگ آؤٹ',changePass:'پاس ورڈ تبدیل کریں',changePassSub:'اپنا پاس ورڈ باقاعدگی سے اپ ڈیٹ کریں',twofa:'دو عناصر توثیق',twofaSub:'لاگ ان پر اضافی تحفظ',biometric:'فنگر پرنٹ / چہرہ',biometricSub:'تیز لاگ ان',antiTitle:'اینٹی فشنگ کوڈ',save:'محفوظ کریں',lastLogin:'آخری لاگ ان',curPass:'موجودہ پاس ورڈ',newPass:'نیا پاس ورڈ',confPass:'پاس ورڈ کی تصدیق',saveNewPass:'پاس ورڈ محفوظ کریں',kycVerified:'تصدیق شدہ اکاؤنٹ',kycDesc:'آپ کی شناخت کامیابی سے تصدیق ہو گئی۔ مکمل رسائی۔',docType:'دستاویز کی قسم',status:'حیثیت',verified2:'✓ تصدیق شدہ',level:'توثیق کی سطح',language:'زبان',faq1q:'رقم کیسے جمع کروں؟',faq1a:'ہوم پیج پر "ڈپازٹ" بٹن دبائیں۔',faq2q:'اپنے اکاؤنٹ کو کیسے محفوظ کروں؟',faq2a:'سیکیورٹی سیکشن سے 2FA اور اینٹی فشنگ کوڈ آن کریں۔',faq3q:'کیا پلیٹ فارم اصلی ہے؟',faq3a:'یہ ایک تربیتی پلیٹ فارم ہے (پیپر ٹریڈنگ) اصل قیمتوں کے ساتھ۔',liveChat:'لائو چیٹ',liveChatSub:'24/7 معاونت',email:'ای میل',searchPh:'سکہ تلاش کریں (BTC, ETH)...',totalAssets:'کل اثاثہ (USDT)',deposit:'ڈپازٹ',withdraw:'نکالیں',transfer:'منتقلی',more:'مزید',liveMarkets:'سرفہرست لائو مارکیٹ',viewAll:'سب دیکھیں ›',copy:'کاپی',supportMsg:'ہماری ٹیم جلد رابطہ کرے گی',kycId:'قومی شناختی کارڈ',kycPass:'پاسپورٹ',kycLic:'ڈرائیونگ لائسنس',langChanged:'زبان تبدیل ہو گئی',msgSaved:'کامیابی سے محفوظ',msg2faOn:'2FA فعال',msg2faOff:'2FA غیر فعال',msgBioOn:'بائومیٹرک فعال',msgBioOff:'بائومیٹرک غیر فعال',msgAntiEmpty:'براء مہربانی کوڈ درج کریں',msgNoUser:'صارف نہیں ملا',msgPassWrong:'موجودہ پاس ورڈ غلط ہے',msgPassShort:'پاس ورڈ بہت چھوٹا (کم از کم 8)',msgPassMismatch:'پاس ورڈ میل نہیں کھاتے',msgPassChanged:'پاس ورڈ تبدیل ہو گیا'};
-I18N.pt={security:'Segurança e Proteção',kyc:'Verificação de identidade (KYC)',settings:'Configurações e Idioma',help:'Ajuda e Suporte',logout:'Sair',changePass:'Alterar senha',changePassSub:'Atualize sua senha regularmente',twofa:'Autenticação de dois fatores',twofaSub:'Proteção extra no login',biometric:'Digital / Rosto',biometricSub:'Login rápido',antiTitle:'Código anti-phishing',save:'Salvar',lastLogin:'Último login',curPass:'Senha atual',newPass:'Nova senha',confPass:'Confirmar senha',saveNewPass:'Salvar senha',kycVerified:'Conta verificada',kycDesc:'Sua identidade foi verificada com sucesso. Acesso completo.',docType:'Tipo de documento',status:'Status',verified2:'✓ Verificado',level:'Nível de verificação',language:'Idioma',faq1q:'Como deposito fundos?',faq1a:'Toque em "Depósito" na página inicial e siga os passos.',faq2q:'Como protejo minha conta?',faq2a:'Ative o 2FA e o código anti-phishing na seção Segurança.',faq3q:'A plataforma é real?',faq3a:'Esta é uma plataforma de treino (paper trading) com preços reais.',liveChat:'Chat ao vivo',liveChatSub:'Suporte 24/7',email:'E-mail',searchPh:'Buscar moeda (BTC, ETH)...',totalAssets:'Ativos totais (USDT)',deposit:'Depositar',withdraw:'Sacar',transfer:'Transferir',more:'Mais',liveMarkets:'Principais mercados ao vivo',viewAll:'Ver tudo ›',copy:'Copiar',supportMsg:'Nossa equipe entrará em contato em breve',kycId:'Documento de identidade',kycPass:'Passaporte',kycLic:'Carteira de motorista',langChanged:'Idioma alterado',msgSaved:'Salvo com sucesso',msg2faOn:'2FA ativado',msg2faOff:'2FA desativado',msgBioOn:'Biometria ativada',msgBioOff:'Biometria desativada',msgAntiEmpty:'Digite um código',msgNoUser:'Usuário não encontrado',msgPassWrong:'Senha atual incorreta',msgPassShort:'Senha muito curta (mín 8)',msgPassMismatch:'As senhas não coincidem',msgPassChanged:'Senha alterada'};
-I18N.id={security:'Keamanan & Perlindungan',kyc:'Verifikasi Identitas (KYC)',settings:'Pengaturan & Bahasa',help:'Bantuan & Dukungan',logout:'Keluar',changePass:'Ubah kata sandi',changePassSub:'Perbarui kata sandi secara berkala',twofa:'Autentikasi Dua Faktor',twofaSub:'Perlindungan ekstra saat masuk',biometric:'Sidik jari / Wajah',biometricSub:'Masuk cepat',antiTitle:'Kode anti-phishing',save:'Simpan',lastLogin:'Login terakhir',curPass:'Kata sandi saat ini',newPass:'Kata sandi baru',confPass:'Konfirmasi kata sandi',saveNewPass:'Simpan kata sandi',kycVerified:'Akun terverifikasi',kycDesc:'Identitas Anda berhasil diverifikasi. Akses penuh.',docType:'Jenis dokumen',status:'Status',verified2:'✓ Terverifikasi',level:'Tingkat verifikasi',language:'Bahasa',faq1q:'Bagaimana cara menyetor dana?',faq1a:'Ketuk tombol "Setor" di halaman utama dan ikuti langkahnya.',faq2q:'Bagaimana melindungi akun saya?',faq2a:'Aktifkan 2FA dan kode anti-phishing di bagian Keamanan.',faq3q:'Apakah platform ini nyata?',faq3a:'Ini platform pelatihan (paper trading) dengan harga pasar nyata.',liveChat:'Obrolan langsung',liveChatSub:'Dukungan 24/7',email:'Email',searchPh:'Cari koin (BTC, ETH)...',totalAssets:'Total Aset (USDT)',deposit:'Setor',withdraw:'Tarik',transfer:'Transfer',more:'Lainnya',liveMarkets:'Pasar Langsung Teratas',viewAll:'Lihat semua ›',copy:'Salin',supportMsg:'Tim dukungan kami akan segera menghubungi Anda',kycId:'Kartu Identitas',kycPass:'Paspor',kycLic:'SIM',langChanged:'Bahasa diubah',msgSaved:'Berhasil disimpan',msg2faOn:'2FA aktif',msg2faOff:'2FA nonaktif',msgBioOn:'Biometrik aktif',msgBioOff:'Biometrik nonaktif',msgAntiEmpty:'Masukkan kode',msgNoUser:'Pengguna tidak ditemukan',msgPassWrong:'Kata sandi saat ini salah',msgPassShort:'Kata sandi terlalu pendek (min 8)',msgPassMismatch:'Kata sandi tidak cocok',msgPassChanged:'Kata sandi diubah'};
-I18N.ja={security:'セキュリティと保護',kyc:'本人確認 (KYC)',settings:'設定と言語',help:'ヘルプとサポート',logout:'ログアウト',changePass:'パスワード変更',changePassSub:'定期的にパスワードを更新',twofa:'2段階認証 (2FA)',twofaSub:'ログイン時の追加保護',biometric:'指紋 / 顔認証',biometricSub:'素早いログイン',antiTitle:'アンチフィッシングコード',save:'保存',lastLogin:'最終ログイン',curPass:'現在のパスワード',newPass:'新しいパスワード',confPass:'パスワード確認',saveNewPass:'パスワードを保存',kycVerified:'認証済みアカウント',kycDesc:'本人確認が完了しました。フルアクセス可能。',docType:'書類の種類',status:'ステータス',verified2:'✓ 認証済み',level:'認証レベル',language:'言語',faq1q:'入金方法は？',faq1a:'ホーム画面の「入金」をタップし手順に従います。',faq2q:'アカウントを守るには？',faq2a:'セキュリティで 2FA とアンチフィッシングコードを有効化。',faq3q:'このプラットフォームは本物？',faq3a:'これは実際の市場価格を使う練習プラットフォーム（ペーパートレード）です。',liveChat:'ライブチャット',liveChatSub:'24時間サポート',email:'メール',searchPh:'通貨を検索 (BTC, ETH)...',totalAssets:'総資産 (USDT)',deposit:'入金',withdraw:'出金',transfer:'送金',more:'もっと',liveMarkets:'人気マーケット',viewAll:'すべて見る ›',copy:'コピー',supportMsg:'サポートチームがまもなくご連絡します',kycId:'身分証',kycPass:'パスポート',kycLic:'運転免許証',langChanged:'言語を変更しました',msgSaved:'保存しました',msg2faOn:'2FA 有効',msg2faOff:'2FA 無効',msgBioOn:'生体認証 有効',msgBioOff:'生体認証 無効',msgAntiEmpty:'コードを入力してください',msgNoUser:'ユーザーが見つかりません',msgPassWrong:'現在のパスワードが違います',msgPassShort:'パスワードが短すぎます（最少8文字）',msgPassMismatch:'パスワードが一致しません',msgPassChanged:'パスワードを変更しました'};
-I18N.ko={security:'보안 및 보호',kyc:'신원 인증 (KYC)',settings:'설정 및 언어',help:'도움말 및 지원',logout:'로그아웃',changePass:'비밀번호 변경',changePassSub:'정기적으로 비밀번호를 업데이트',twofa:'2단계 인증 (2FA)',twofaSub:'로그인 시 추가 보호',biometric:'지문 / 얼굴',biometricSub:'빠른 로그인',antiTitle:'피싱 방지 코드',save:'저장',lastLogin:'마지막 로그인',curPass:'현재 비밀번호',newPass:'새 비밀번호',confPass:'비밀번호 확인',saveNewPass:'비밀번호 저장',kycVerified:'인증된 계정',kycDesc:'신원이 성공적으로 인증되었습니다. 전체 액세스 가능.',docType:'서류 유형',status:'상태',verified2:'✓ 인증됨',level:'인증 단계',language:'언어',faq1q:'자금을 어떻게 입금하나요?',faq1a:'홈 화면에서 "입금" 버튼을 누르고 단계를 따르세요.',faq2q:'계정을 어떻게 보호하나요?',faq2a:'보안 섹션에서 2FA와 피싱 방지 코드를 활성화하세요.',faq3q:'이 플랫폼은 실제인가요?',faq3a:'실제 시장 가격을 사용하는 연습 플랫폼(모의 거래)입니다.',liveChat:'라이브 채팅',liveChatSub:'24/7 지원',email:'이메일',searchPh:'코인 검색 (BTC, ETH)...',totalAssets:'총 자산 (USDT)',deposit:'입금',withdraw:'출금',transfer:'이체',more:'더보기',liveMarkets:'인기 실시간 시장',viewAll:'전체 보기 ›',copy:'복사',supportMsg:'지원팀이 곳 연락드리겠습니다',kycId:'신분증',kycPass:'여권',kycLic:'운전면허증',langChanged:'언어가 변경됨',msgSaved:'저장됨',msg2faOn:'2FA 활성화',msg2faOff:'2FA 비활성화',msgBioOn:'생체인증 활성화',msgBioOff:'생체인증 비활성화',msgAntiEmpty:'코드를 입력하세요',msgNoUser:'사용자를 찾을 수 없음',msgPassWrong:'현재 비밀번호가 틀렸습니다',msgPassShort:'비밀번호가 너무 짧음 (최소 8자)',msgPassMismatch:'비밀번호가 일치하지 않음',msgPassChanged:'비밀번호가 변경됨'};
+'use strict';
+var LKEY='apex_lang', TKEY='apex_theme';
+var AR=/[\u0600-\u06FF]/;
 var LANGS=[
-  {c:'ar',n:'العربية',e:'Arabic',f:'🇸🇦',dir:'rtl'},
-  {c:'en',n:'English',e:'English',f:'🇬🇧',dir:'ltr'},
-  {c:'fr',n:'Français',e:'French',f:'🇫🇷',dir:'ltr'},
-  {c:'es',n:'Español',e:'Spanish',f:'🇪🇸',dir:'ltr'},
-  {c:'de',n:'Deutsch',e:'German',f:'🇩🇪',dir:'ltr'},
-  {c:'tr',n:'Türkçe',e:'Turkish',f:'🇹🇷',dir:'ltr'},
-  {c:'ru',n:'Русский',e:'Russian',f:'🇷🇺',dir:'ltr'},
-  {c:'zh',n:'中文',e:'Chinese',f:'🇨🇳',dir:'ltr'},
-  {c:'hi',n:'हिन्दी',e:'Hindi',f:'🇮🇳',dir:'ltr'},
-  {c:'ur',n:'اردو',e:'Urdu',f:'🇵🇰',dir:'rtl'},
-  {c:'pt',n:'Português',e:'Portuguese',f:'🇵🇹',dir:'ltr'},
-  {c:'id',n:'Indonesia',e:'Indonesian',f:'🇮🇩',dir:'ltr'},
-  {c:'ja',n:'日本語',e:'Japanese',f:'🇯🇵',dir:'ltr'},
-  {c:'ko',n:'한국어',e:'Korean',f:'🇰🇷',dir:'ltr'}
+  {c:'ar',n:'العربية',e:'Arabic',f:'\uD83C\uDDF8\uD83C\uDDE6',dir:'rtl'},
+  {c:'en',n:'English',e:'English',f:'\uD83C\uDDEC\uD83C\uDDE7',dir:'ltr'},
+  {c:'fr',n:'Français',e:'French',f:'\uD83C\uDDEB\uD83C\uDDF7',dir:'ltr'},
+  {c:'es',n:'Español',e:'Spanish',f:'\uD83C\uDDEA\uD83C\uDDF8',dir:'ltr'},
+  {c:'de',n:'Deutsch',e:'German',f:'\uD83C\uDDE9\uD83C\uDDEA',dir:'ltr'},
+  {c:'tr',n:'Türkçe',e:'Turkish',f:'\uD83C\uDDF9\uD83C\uDDF7',dir:'ltr'},
+  {c:'ru',n:'Русский',e:'Russian',f:'\uD83C\uDDF7\uD83C\uDDFA',dir:'ltr'},
+  {c:'zh',n:'中文',e:'Chinese',f:'\uD83C\uDDE8\uD83C\uDDF3',dir:'ltr'},
+  {c:'hi',n:'हिन्दी',e:'Hindi',f:'\uD83C\uDDEE\uD83C\uDDF3',dir:'ltr'},
+  {c:'ur',n:'اردو',e:'Urdu',f:'\uD83C\uDDF5\uD83C\uDDF0',dir:'rtl'},
+  {c:'pt',n:'Português',e:'Portuguese',f:'\uD83C\uDDF5\uD83C\uDDF9',dir:'ltr'},
+  {c:'id',n:'Indonesia',e:'Indonesian',f:'\uD83C\uDDEE\uD83C\uDDE9',dir:'ltr'},
+  {c:'ja',n:'日本語',e:'Japanese',f:'\uD83C\uDDEF\uD83C\uDDF5',dir:'ltr'},
+  {c:'ko',n:'한국어',e:'Korean',f:'\uD83C\uDDF0\uD83C\uDDF7',dir:'ltr'}
 ];
+var curLang=localStorage.getItem(LKEY)||'ar';
+var curTheme=localStorage.getItem(TKEY)||'dark';
 
-/* --- extra shared keys (nav + auth + register) for ALL pages --- */
-var EXTRA={
-ar:{navHome:'الرئيسية',navMarkets:'الأسواق',navTrading:'التداول',navFutures:'عقود آجلة',navMining:'التعدين',navWallet:'المحفظة',buy:'شراء',sell:'بيع',loginBtn:'تسجيل الدخول',registerBtn:'إنشاء حساب',password:'كلمة المرور',fullName:'الاسم الكامل',countryOpt:'الدولة (اختياري)',confirmPass:'تأكيد كلمة المرور',createAccount:'إنشاء الحساب',haveAccount:'لديك حساب بالفعل؟',regTitle:'إنشاء حساب جديد',regSub:'سيتم مراجعة طلبك من الإدارة قبل تفعيل الحساب',idType:'نوع وثيقة الهوية',idUpload:'صورة الوثيقة',idHint:'ارفع صورة واضحة للوثيقة (JPG/PNG)',loginTitle:'تسجيل الدخول',loginSub:'أدخل بياناتحسابك للمتابعة',statusPending:'قيد المراجعة',statusVerified:'موثّق',statusRejected:'مرفوض',reverifyNow:'إعادة التحقق الآن',approvedToast:'تمت الموافقة على حسابك ✅',pendingBanner:'حسابك قيد المراجعة من الإدارة',rejectedBanner:'تم رفض توثيقك. أعد رفع وثيقة صحيحة.',kycPendingTitle:'الحساب قيد المراجعة',kycPendingDesc:'تم استلام وثيقتك وهي قيد المراجعة من فريق الإدارة.',kycRejectedTitle:'تم رفض التوثيق',kycRejectedDesc:'لم يتم قبول وثيقتك. يرجى إعادة التحقق برفع وثيقة واضحة وصحيحة.',verifyTitle:'إعادة التحقق من الهوية',verifySub:'ارفع صورة واضحة لوثيقة هويتك لإعادة المراجعة',verifySubmit:'إرسال للمراجعة',verifyDone:'تم الإرسال! حسابك قيد المراجعة الآن.'},
-en:{navHome:'Home',navMarkets:'Markets',navTrading:'Trade',navFutures:'Futures',navMining:'Mining',navWallet:'Wallet',buy:'Buy',sell:'Sell',loginBtn:'Log in',registerBtn:'Sign up',password:'Password',fullName:'Full name',countryOpt:'Country (optional)',confirmPass:'Confirm password',createAccount:'Create account',haveAccount:'Already have an account?',regTitle:'Create a new account',regSub:'Your request will be reviewed by admin before activation',idType:'ID document type',idUpload:'Document photo',idHint:'Upload a clear photo of the document (JPG/PNG)',loginTitle:'Sign in',loginSub:'Enter your account details to continue',statusPending:'Under review',statusVerified:'Verified',statusRejected:'Rejected',reverifyNow:'Re-verify now',approvedToast:'Your account has been approved ✅',pendingBanner:'Your account is under admin review',rejectedBanner:'Your verification was rejected. Please upload a valid document.',kycPendingTitle:'Account under review',kycPendingDesc:'Your document has been received and is being reviewed by our team.',kycRejectedTitle:'Verification rejected',kycRejectedDesc:'Your document was not accepted. Please re-verify with a clear, valid document.',verifyTitle:'Re-verify your identity',verifySub:'Upload a clear photo of your ID document for another review',verifySubmit:'Submit for review',verifyDone:'Submitted! Your account is now under review.'},
-fr:{navHome:'Accueil',navMarkets:'Marchés',navTrading:'Trading',navFutures:'Futures',navMining:'Minage',navWallet:'Portefeuille',buy:'Acheter',sell:'Vendre',loginBtn:'Connexion',registerBtn:'Inscription',createAccount:'Créer un compte'},
-es:{navHome:'Inicio',navMarkets:'Mercados',navTrading:'Trading',navFutures:'Futuros',navMining:'Minería',navWallet:'Cartera',buy:'Comprar',sell:'Vender',loginBtn:'Entrar',registerBtn:'Registrarse',createAccount:'Crear cuenta'},
-de:{navHome:'Start',navMarkets:'Märkte',navTrading:'Handel',navFutures:'Futures',navMining:'Mining',navWallet:'Wallet',buy:'Kaufen',sell:'Verkaufen',loginBtn:'Anmelden',registerBtn:'Registrieren',createAccount:'Konto erstellen'},
-tr:{navHome:'Ana Sayfa',navMarkets:'Piyasalar',navTrading:'İşlem',navFutures:'Vadeli',navMining:'Madencilik',navWallet:'Cüzdan',buy:'Al',sell:'Sat',loginBtn:'Giriş',registerBtn:'Kayıt',createAccount:'Hesap oluştur'},
-ru:{navHome:'Главная',navMarkets:'Рынки',navTrading:'Торговля',navFutures:'Фьючерсы',navMining:'Майнинг',navWallet:'Кошелёк',buy:'Купить',sell:'Продать',loginBtn:'Войти',registerBtn:'Регистрация',createAccount:'Создать аккаунт'},
-zh:{navHome:'首页',navMarkets:'行情',navTrading:'交易',navFutures:'合约',navMining:'挖矿',navWallet:'钱包',buy:'买入',sell:'卖出',loginBtn:'登录',registerBtn:'注册',createAccount:'创建账户'},
-hi:{navHome:'होम',navMarkets:'बाज़ार',navTrading:'ट्रेड',navFutures:'फ्यूचर्स',navMining:'माइनिंग',navWallet:'वॉलेट',buy:'खरीदें',sell:'बेचें',loginBtn:'लॉगिन',registerBtn:'साइन अप',createAccount:'खाता बनाएं'},
-ur:{navHome:'ہوم',navMarkets:'مارکیٹ',navTrading:'ٹریڈنگ',navFutures:'فیوچرز',navMining:'مائننگ',navWallet:'والٹ',buy:'خریدیں',sell:'فروخت',loginBtn:'لاگ ان',registerBtn:'سائن اپ',createAccount:'اکاؤنٹ بنائیں'},
-pt:{navHome:'Início',navMarkets:'Mercados',navTrading:'Negociação',navFutures:'Futuros',navMining:'Mineração',navWallet:'Carteira',buy:'Comprar',sell:'Vender',loginBtn:'Entrar',registerBtn:'Registrar',createAccount:'Criar conta'},
-id:{navHome:'Beranda',navMarkets:'Pasar',navTrading:'Trading',navFutures:'Futures',navMining:'Mining',navWallet:'Dompet',buy:'Beli',sell:'Jual',loginBtn:'Masuk',registerBtn:'Daftar',createAccount:'Buat akun'},
-ja:{navHome:'ホーム',navMarkets:'市場',navTrading:'取引',navFutures:'先物',navMining:'マイニング',navWallet:'ウォレット',buy:'買い',sell:'売り',loginBtn:'ログイン',registerBtn:'登録',createAccount:'アカウント作成'},
-ko:{navHome:'홈',navMarkets:'시장',navTrading:'거래',navFutures:'선물',navMining:'채굴',navWallet:'지갑',buy:'매수',sell:'매도',loginBtn:'로그인',registerBtn:'가입',createAccount:'계정 생성'}
-};
-for(var _L in EXTRA){I18N[_L]=I18N[_L]||{};for(var _k in EXTRA[_L]){if(I18N[_L][_k]==null)I18N[_L][_k]=EXTRA[_L][_k];}}
+/* ===== القواميس (تُملأ أدناه) ===== */
+var KEY={ar:{
+reverifyNow:'إعادة التحقق الآن',totalAssets:'إجمالي الأصول (USDT)',deposit:'إيداع',withdraw:'سحب',transfer:'تحويل',more:'المزيد',liveMarkets:'أبرز الأسواق الحية',viewAll:'عرض الكل ›',navHome:'الرئيسية',navMarkets:'الأسواق',navTrading:'التداول',navFutures:'عقود آجلة',navWallet:'المحفظة',statusPending:'قيد المراجعة',statusVerified:'موثّق',statusRejected:'مرفوض',copy:'نسخ',security:'الأمان والحماية',kyc:'توثيق الهوية (KYC)',settings:'الإعدادات واللغة',accountSettings:'البريد والتنبيهات',help:'المساعدة والدعم',logout:'تسجيل الخروج',changePass:'تغيير كلمة المرور',changePassSub:'حدّث كلمة المرور بانتظام',twofa:'المصادقة الثنائية 2FA',twofaSub:'حماية إضافية عند الدخول',biometric:'بصمة / وجه',biometricSub:'تسجيل دخول سريع',antiTitle:'رمز مكافحة التصيد',save:'حفظ',lastLogin:'آخر تسجيل دخول',curPass:'كلمة المرور الحالية',newPass:'كلمة المرور الجديدة',confPass:'تأكيد كلمة المرور',saveNewPass:'حفظ كلمة المرور',kycPendingTitle:'الحساب قيد المراجعة',kycPendingDesc:'تم استلام وثيقتك وهي قيد المراجعة.',docType:'نوع الوثيقة',status:'الحالة',level:'مستوى التوثيق',language:'اللغة',faq1q:'كيف أودع الأموال؟',faq1a:'اضغط على زر "إيداع" في الصفحة الرئيسية واتبع الخطوات.',faq2q:'كيف أحمي حسابي؟',faq2a:'فعّل المصادقة الثنائية 2FA ورمز مكافحة التصيد من قسم الأمان.',faq3q:'هل المنصة حقيقية؟',faq3a:'هذه منصة تدريبية (تداول تجريبي) بأسعار حية حقيقية من السوق.',liveChat:'الدردشة المباشرة',liveChatSub:'دعم فني 24/7',email:'البريد الإلكتروني',buy:'شراء',sell:'بيع',mAll:'الكل',mFav:'⭐ المفضلة',mGainers:'الأكثر ربحاً',mLosers:'الأكثر خسارة',colCoin:'العملة',colPrice:'السعر',colChange:'التغير 24س',walletTitle:'المحفظة',wEstBalance:'الرصيد التقديري',aSend:'إرسال',aReceive:'استلام',aTransfer:'تحويل',aMore:'المزيد',tabCrypto:'العملات',tabCollectibles:'المقتنيات',tabFav:'المفضلة',wHideSmall:'إخفاء الأرصدة الصغيرة',wAsset:'الأصل',wValue:'الكمية / القيمة',wNoColl:'لا توجد مقتنيات بعد',tabAlerts:'التنبيهات',langChanged:'تم تغيير اللغة'
+},en:{
+reverifyNow:'Re-verify now',totalAssets:'Total Assets (USDT)',deposit:'Deposit',withdraw:'Withdraw',transfer:'Transfer',more:'More',liveMarkets:'Top Live Markets',viewAll:'View all ›',navHome:'Home',navMarkets:'Markets',navTrading:'Trade',navFutures:'Futures',navWallet:'Wallet',statusPending:'Under review',statusVerified:'Verified',statusRejected:'Rejected',copy:'Copy',security:'Security & Protection',kyc:'Identity Verification (KYC)',settings:'Settings & Language',accountSettings:'Email & Notifications',help:'Help & Support',logout:'Log out',changePass:'Change Password',changePassSub:'Update your password regularly',twofa:'Two-Factor Auth (2FA)',twofaSub:'Extra protection on login',biometric:'Fingerprint / Face',biometricSub:'Fast sign-in',antiTitle:'Anti-Phishing Code',save:'Save',lastLogin:'Last login',curPass:'Current password',newPass:'New password',confPass:'Confirm password',saveNewPass:'Save password',kycPendingTitle:'Account under review',kycPendingDesc:'Your document was received and is under review.',docType:'Document type',status:'Status',level:'Verification level',language:'Language',faq1q:'How do I deposit funds?',faq1a:'Tap the "Deposit" button on the home page and follow the steps.',faq2q:'How do I protect my account?',faq2a:'Enable 2FA and the anti-phishing code from the Security section.',faq3q:'Is the platform real?',faq3a:'This is a training platform (paper trading) with real live market prices.',liveChat:'Live Chat',liveChatSub:'24/7 technical support',email:'Email',buy:'Buy',sell:'Sell',mAll:'All',mFav:'⭐ Favorites',mGainers:'Top Gainers',mLosers:'Top Losers',colCoin:'Coin',colPrice:'Price',colChange:'24h Change',walletTitle:'Wallet',wEstBalance:'Estimated Balance',aSend:'Send',aReceive:'Receive',aTransfer:'Transfer',aMore:'More',tabCrypto:'Crypto',tabCollectibles:'Collectibles',tabFav:'Favorites',wHideSmall:'Hide small balances',wAsset:'Asset',wValue:'Amount / Value',wNoColl:'No collectibles yet',tabAlerts:'Alerts',langChanged:'Language changed'
+}};
+var PH={ar:{searchPh:'بحث عن عملة (BTC، ETH)...',searchCoin:'ابحث عن عملة...'},en:{searchPh:'Search a coin (BTC, ETH)...',searchCoin:'Search a coin...'}};
+var SRC={en:{'آخر تسجيل دخول':'Last login',
+'أدنى 24س':'24h Low',
+'أدوات':'Tools',
+'أدوات التداول المتقدمة Trade-X — قيد الإعداد وستتوفر قريباً.':'Advanced trading tools Trade-X — under construction, coming soon.',
+'أرباح وخسائر اليوم':"Today's P&L",
+'أساسي':'Basic',
+'أصغر من ≤':'Less than ≤',
+'أعلى 24س':'24h High',
+'أكاديمية':'Academy',
+'أكبر من ≥':'Greater than ≥',
+'إجمالي الأصول (USDT)':'Total Assets (USDT)',
+'إخفاء الأرصدة الصغيرة':'Hide small balances',
+'إرسال':'Send',
+'إزالة الحدود':'Remove limits',
+'إضافة الأموال':'Add funds',
+'إعادة التحقق الآن':'Re-verify now',
+'إعادة المسح':'Re-scan',
+'إعلان':'Announcement',
+'إغلاق':'Close',
+'إغلاق الصفقة':'Close position',
+'إلى':'To',
+'إنشاء شبكة':'Create grid',
+'إيداع':'Deposit',
+'إيقاف الخسارة':'Stop Loss',
+'ابحث عن أي عملة (مثال: DOGE, ADA, LINK)':'Search any coin (e.g. DOGE, ADA, LINK)',
+'ابحث عن عملة...':'Search a coin...',
+'ابحث عن لغة...':'Search a language...',
+'اسأل عن العملة وتحليلاتها...':'Ask about the coin and its analysis...',
+'استلام':'Receive',
+'اضغط على زر "إيداع" في الصفحة الرئيسية واتبع الخطوات.':'Tap the "Deposit" button on the home page and follow the steps.',
+'اكتب رسالتك أو شكواك...':'Type your message or complaint...',
+'الأرصدة':'Balances',
+'الأرصدة (':'Balances (',
+'الأسهم':'Stocks',
+'الأسواق':'Markets',
+'الأصل':'Asset',
+'الأقصى':'Max',
+'الأكثر خسارة':'Top Losers',
+'الأكثر ربحاً':'Top Gainers',
+'الأمان والحماية':'Security & Protection',
+'الأموال':'Funds',
+'الأموال المتاحة':'Available funds',
+'الأوامر المعلقة':'Pending orders',
+'الأوامر المعلّقة':'Pending orders',
+'الإجمالي':'Total',
+'الإحالة':'Referral',
+'الإشعارات':'Notifications',
+'الإعدادات واللغة':'Settings & Language',
+'الإيداعات':'Deposits',
+'الاستثمار':'Investment',
+'البريد الإلكتروني':'Email',
+'البريد والتنبيهات':'Email & Notifications',
+'البيانات':'Data',
+'التحويلات':'Transfers',
+'التداول':'Trade',
+'التداول الافتراضي':'Demo trading',
+'التداول التجريبي':'Demo trading',
+'التداول الفوري':'Spot trading',
+'التداول بالشبكة (':'Grid trading (',
+'التداولات':'Trades',
+'التعدين':'Mining',
+'التغير 24س':'24h Change',
+'التفضيلات':'Preferences',
+'التمويل':'Funding',
+'التنبيهات':'Alerts',
+'الحالة':'Status',
+'الحجم (القيمة الاسمية)':'Size (notional value)',
+'الحجم 24س':'24h Volume',
+'الحساب قيد المراجعة':'Account under review',
+'الخريطة الحرارية':'Heatmap',
+'الدردشة المباشرة':'Live Chat',
+'الدعم الفني':'Technical Support',
+'الرئيسية':'Home',
+'الرافعة المالية':'Leverage',
+'الرسوم':'Fees',
+'الرصيد':'Balance',
+'الرصيد (USDT)':'Balance (USDT)',
+'الرصيد التقديري':'Estimated Balance',
+'الرصيد المتاح للتداول':'Available trading balance',
+'السعر':'Price',
+'السعر (USDT)':'Price (USDT)',
+'السعر الحالي':'Current price',
+'السعر المحدد':'Limit price',
+'السوق':'Market',
+'السوق صاعد':'Market up',
+'السوق هابط':'Market down',
+'الشراء':'Buy',
+'الشبكة':'Network',
+'الصفقات المفتوحة':'Open positions',
+'الطاقة':'Energy',
+'العملات':'Crypto',
+'العملات الرقمية':'Cryptocurrencies',
+'العملة':'Coin',
+'العقد':'Contract',
+'العقود الآجلة':'Futures',
+'الكمية':'Amount',
+'الكمية (USDT)':'Amount (USDT)',
+'الكمية / القيمة':'Amount / Value',
+'الكل':'All',
+'اللغة':'Language',
+'المبلغ':'Amount',
+'المبلغ (USDT)':'Amount (USDT)',
+'المتاح':'Available',
+'المحفظة':'Wallet',
+'المدة':'Duration',
+'المزيد':'More',
+'المساعدة والدعم':'Help & Support',
+'المستوى':'Level',
+'المصادقة الثنائية 2FA':'Two-Factor Auth (2FA)',
+'المقتنيات':'Collectibles',
+'المفضلة':'Favorites',
+'النوع':'Type',
+'الهامش':'Margin',
+'الوضع':'Mode',
+'الوقت':'Time',
+'بالسوق':'Market',
+'بحث':'Search',
+'بحث عن عملة (BTC، ETH)...':'Search a coin (BTC, ETH)...',
+'بصمة / وجه':'Fingerprint / Face',
+'بيع':'Sell',
+'تأكيد':'Confirm',
+'تأكيد الإيداع':'Confirm deposit',
+'تأكيد السحب':'Confirm withdrawal',
+'تأكيد الطلب':'Confirm order',
+'تأكيد كلمة المرور':'Confirm password',
+'تبديل':'Switch',
+'تحديث':'Refresh',
+'تحويل':'Transfer',
+'تحويل داخلي':'Internal transfer',
+'تداول':'Trade',
+'تداول آجل':'Futures trade',
+'تحقق':'Verify',
+'تراجع':'Back',
+'تسجيل الخروج':'Log out',
+'تسجيل دخول سريع':'Fast sign-in',
+'توثيق الهوية (KYC)':'Identity Verification (KYC)',
+'تغيير كلمة المرور':'Change Password',
+'ثنائي':'Dual',
+'جارٍ':'Ongoing',
+'جميع العملات':'All coins',
+'حد الإيقاف':'Stop limit',
+'حدّث كلمة المرور بانتظام':'Update your password regularly',
+'حدود التداول':'Trading limits',
+'حركة السوق':'Market movement',
+'حسب السعر':'By price',
+'حفظ':'Save',
+'حفظ كلمة المرور':'Save password',
+'حماية إضافية عند الدخول':'Extra protection on login',
+'خسارة':'Loss',
+'دائم':'Perpetual',
+'دعم فني 24/7':'24/7 technical support',
+'ربح':'Profit',
+'ربح وخسارة':'Profit & Loss',
+'رمز التحقق':'Verification code',
+'رمز مكافحة التصيد':'Anti-Phishing Code',
+'رصيدك':'Your balance',
+'سحب':'Withdraw',
+'سجل العمليات':'Transaction history',
+'سعر الدخول':'Entry price',
+'سعر السوق':'Market price',
+'سعر التصفية':'Liquidation price',
+'سعر الوقف':'Stop price',
+'سريع':'Fast',
+'سلسلة':'Chain',
+'شراء':'Buy',
+'شراء ':'Buy ',
+'شبكة':'Network',
+'صاعد':'Up',
+'صفقة شراء':'Long position',
+'صفقة بيع':'Short position',
+'طلب شراء':'Buy order',
+'طلب بيع':'Sell order',
+'عالي':'High',
+'عدد الشبكات':'Grid count',
+'عرض الكل ›':'View all ›',
+'عرض المزيد':'View more',
+'عقد آجل':'Futures contract',
+'عقود آجلة':'Futures',
+'عمولة':'Fee',
+'عمولة التداول':'Trading fee',
+'فتح صفقة':'Open position',
+'فوري':'Spot',
+'قيد المراجعة':'Under review',
+'قيمة الصفقة':'Position value',
+'كل العملات':'All coins',
+'كلمة المرور الجديدة':'New password',
+'كلمة المرور الحالية':'Current password',
+'كيف أحمي حسابي؟':'How do I protect my account?',
+'كيف أودع الأموال؟':'How do I deposit funds?',
+'لا توجد أوامر معلقة':'No pending orders',
+'لا توجد بيانات':'No data',
+'لا توجد تنبيهات':'No alerts',
+'لا توجد صفقات مفتوحة':'No open positions',
+'لا توجد مقتنيات بعد':'No collectibles yet',
+'لوحة التحكم':'Dashboard',
+'مبادلة':'Swap',
+'متقدم':'Advanced',
+'متوسط':'Medium',
+'محفظة التمويل':'Funding wallet',
+'محفظة التداول':'Trading wallet',
+'محفظة العقود الآجلة':'Futures wallet',
+'مدّة':'Period',
+'مرفوض':'Rejected',
+'مستوى التوثيق':'Verification level',
+'موثّق':'Verified',
+'نسخ':'Copy',
+'نوع الأمر':'Order type',
+'نوع الوثيقة':'Document type',
+'هابط':'Down',
+'هذه منصة تدريبية (تداول تجريبي) بأسعار حية حقيقية من السوق.':'This is a training platform (paper trading) with real live market prices.',
+'هل المنصة حقيقية؟':'Is the platform real?',
+'وثيقة الهوية':'ID document',
+'وضع الهامش':'Margin mode',
+'يومي':'Daily',
+'أسبوعي':'Weekly',
+'شهري':'Monthly',
+'سنوي':'Yearly',
+'متاح':'Available',
+'مغلق':'Closed',
+'مفتوح':'Open',
+'نشط':'Active',
+'مكتمل':'Completed',
+'ملغي':'Cancelled',
+'إلغاء':'Cancel',
+'تم بنجاح':'Success',
+'فشل':'Failed',
+'خطأ':'Error',
+'تحذير':'Warning',
+'ملاحظة':'Note',
+'المزيد من التفاصيل':'More details',
+'تم نسخ العنوان':'Address copied',
+'العنوان':'Address',
+'المستلم':'Recipient',
+'المرسل':'Sender',
+'التاريخ':'Date',
+'المبلغ المستلم':'Amount received',
+'محفظة العملات':'Spot wallet',
+'الحد الأدنى':'Minimum',
+'الحد الأقصى':'Maximum',
+'متاح للسحب':'Available to withdraw',
+'رسوم الشبكة':'Network fee',
+'ستصل الأموال':'Funds will arrive',
+'نسخ العنوان':'Copy address',
+'امسح الرمز':'Scan the code',
+'أدخل المبلغ':'Enter amount',
+'أدخل العنوان':'Enter address',
+'اختر العملة':'Select coin',
+'اختر الشبكة':'Select network',
+'متوسط السعر':'Average price',
+'إجمالي القيمة':'Total value',
+'الربح غير المحقق':'Unrealized P&L',
+'الربح المحقق':'Realized P&L',
+'نسبة التغير':'Change %',
+'العائد':'Return',
+'تم تغيير اللغة':'Language changed',
+'اختر اللغة':'Select language',
+'المظهر':'Theme',
+'فاتح':'Light',
+'داكن':'Dark',
+'تسجيل الدخول':'Sign in',
+'إنشاء حساب':'Create account'
+}};
 
-/* --- markets + wallet shared keys --- */
-var EXTRA2={
-ar:{mAll:'الكل',mFav:'⭐ المفضلة',mGainers:'الأكثر ربحاً',mLosers:'الأكثر خسارة',colCoin:'العملة',colPriceChg:'السعر / التغير 24س',searchCoin:'ابحث عن عملة...',noResults:'لا توجد نتائج',marketsTitle:'الأسواق',wEstBalance:'الرصيد التقديري',aSend:'إرسال',aReceive:'استلام',aTransfer:'تحويل',aMore:'المزيد',tabCrypto:'العملات',tabCollectibles:'المقتنيات',tabFav:'المفضلة',tabAlerts:'التنبيهات',walletTitle:'المحفظة',wNoAssets:'لا توجد أصول',wNoColl:'لا توجد مقتنيات بعد',wAmount:'الكمية',wValue:'القيمة',wHideSmall:'إخفاء الأرصدة الصغيرة',wAsset:'الأصل',wPrice:'السعر / التغير'},
-en:{mAll:'All',mFav:'⭐ Favorites',mGainers:'Top Gainers',mLosers:'Top Losers',colCoin:'Coin',colPriceChg:'Price / 24h Change',searchCoin:'Search a coin...',noResults:'No results',marketsTitle:'Markets',wEstBalance:'Estimated Balance',aSend:'Send',aReceive:'Receive',aTransfer:'Transfer',aMore:'More',tabCrypto:'Crypto',tabCollectibles:'Collectibles',tabFav:'Favorites',tabAlerts:'Alerts',walletTitle:'Wallet',wNoAssets:'No assets',wNoColl:'No collectibles yet',wAmount:'Amount',wValue:'Value',wHideSmall:'Hide small balances',wAsset:'Asset',wPrice:'Price / Change'},
-fr:{mAll:'Tout',mFav:'⭐ Favoris',mGainers:'Hausses',mLosers:'Baisses',colCoin:'Pièce',colPriceChg:'Prix / 24h',searchCoin:'Rechercher...',noResults:'Aucun résultat',marketsTitle:'Marchés',wEstBalance:'Solde estimé',aSend:'Envoyer',aReceive:'Recevoir',aTransfer:'Transférer',aMore:'Plus',tabCrypto:'Crypto',tabCollectibles:'Objets',tabFav:'Favoris',tabAlerts:'Alertes',walletTitle:'Portefeuille',wNoAssets:'Aucun actif',wNoColl:'Aucun objet',wAmount:'Montant',wValue:'Valeur',wHideSmall:'Masquer les petits soldes',wAsset:'Actif',wPrice:'Prix / Var.'},
-es:{mAll:'Todo',mFav:'⭐ Favoritos',mGainers:'Mayores subidas',mLosers:'Mayores bajadas',colCoin:'Moneda',colPriceChg:'Precio / 24h',searchCoin:'Buscar...',noResults:'Sin resultados',marketsTitle:'Mercados',wEstBalance:'Saldo estimado',aSend:'Enviar',aReceive:'Recibir',aTransfer:'Transferir',aMore:'Más',tabCrypto:'Cripto',tabCollectibles:'Coleccionables',tabFav:'Favoritos',tabAlerts:'Alertas',walletTitle:'Cartera',wNoAssets:'Sin activos',wNoColl:'Sin coleccionables',wAmount:'Cantidad',wValue:'Valor',wHideSmall:'Ocultar saldos pequeños',wAsset:'Activo',wPrice:'Precio / Var.'},
-de:{mAll:'Alle',mFav:'⭐ Favoriten',mGainers:'Top-Gewinner',mLosers:'Top-Verlierer',colCoin:'Münze',colPriceChg:'Preis / 24h',searchCoin:'Suchen...',noResults:'Keine Ergebnisse',marketsTitle:'Märkte',wEstBalance:'Geschätztes Guthaben',aSend:'Senden',aReceive:'Empfangen',aTransfer:'Übertragen',aMore:'Mehr',tabCrypto:'Krypto',tabCollectibles:'Sammlerstücke',tabFav:'Favoriten',tabAlerts:'Alarme',walletTitle:'Wallet',wNoAssets:'Keine Vermögenswerte',wNoColl:'Keine Sammlerstücke',wAmount:'Menge',wValue:'Wert',wHideSmall:'Kleine Guthaben ausblenden',wAsset:'Vermögen',wPrice:'Preis / Änd.'},
-tr:{mAll:'Tümü',mFav:'⭐ Favoriler',mGainers:'Yükselenler',mLosers:'Düşenler',colCoin:'Coin',colPriceChg:'Fiyat / 24s',searchCoin:'Ara...',noResults:'Sonuç yok',marketsTitle:'Piyasalar',wEstBalance:'Tahmini Bakiye',aSend:'Gönder',aReceive:'Al',aTransfer:'Transfer',aMore:'Daha',tabCrypto:'Kripto',tabCollectibles:'Koleksiyon',tabFav:'Favoriler',tabAlerts:'Alarmlar',walletTitle:'Cüzdan',wNoAssets:'Varlık yok',wNoColl:'Koleksiyon yok',wAmount:'Miktar',wValue:'Değer',wHideSmall:'Küçük bakiyeleri gizle',wAsset:'Varlık',wPrice:'Fiyat / Değ.'},
-ru:{mAll:'Все',mFav:'⭐ Избранное',mGainers:'Рост',mLosers:'Падение',colCoin:'Монета',colPriceChg:'Цена / 24ч',searchCoin:'Поиск...',noResults:'Нет результатов',marketsTitle:'Рынки',wEstBalance:'Оценочный баланс',aSend:'Отправить',aReceive:'Получить',aTransfer:'Перевод',aMore:'Ещё',tabCrypto:'Крипто',tabCollectibles:'Коллекция',tabFav:'Избранное',tabAlerts:'Оповещения',walletTitle:'Кошелёк',wNoAssets:'Нет активов',wNoColl:'Нет коллекций',wAmount:'Количество',wValue:'Стоимость',wHideSmall:'Скрыть малые балансы',wAsset:'Актив',wPrice:'Цена / Изм.'},
-zh:{mAll:'全部',mFav:'⭐ 自选',mGainers:'涨幅榜',mLosers:'跌幅榜',colCoin:'币种',colPriceChg:'价格 / 24小时',searchCoin:'搜索币种...',noResults:'无结果',marketsTitle:'行情',wEstBalance:'估值资产',aSend:'发送',aReceive:'接收',aTransfer:'转账',aMore:'更多',tabCrypto:'币种',tabCollectibles:'收藏品',tabFav:'自选',tabAlerts:'提醒',walletTitle:'钱包',wNoAssets:'暂无资产',wNoColl:'暂无收藏品',wAmount:'数量',wValue:'价值',wHideSmall:'隐藏小额资产',wAsset:'资产',wPrice:'价格 / 涨跌'},
-hi:{mAll:'सभी',mFav:'⭐ पसंदीदा',mGainers:'टॉप गेनर्स',mLosers:'टॉप लूजर्स',colCoin:'सिक्का',colPriceChg:'मूल्य / 24घ',searchCoin:'खोजें...',noResults:'कोई परिणाम नहीं',marketsTitle:'बाज़ार',wEstBalance:'अनुमानित शेष',aSend:'भेजें',aReceive:'प्राप्त',aTransfer:'स्थानांतरण',aMore:'और',tabCrypto:'क्रिप्टो',tabCollectibles:'संग्रह',tabFav:'पसंदीदा',tabAlerts:'अलर्ट',walletTitle:'वॉलेट',wNoAssets:'कोई संपत्ति नहीं',wNoColl:'कोई संग्रह नहीं',wAmount:'मात्रा',wValue:'मूल्य',wHideSmall:'छोटे शेष छिपाएं',wAsset:'संपत्ति',wPrice:'मूल्य / बदलाव'},
-ur:{mAll:'سب',mFav:'⭐ پسندیدہ',mGainers:'زیادہ منافع',mLosers:'زیادہ نقصان',colCoin:'سکہ',colPriceChg:'قیمت / 24گ',searchCoin:'تلاش...',noResults:'کوئی نتیجہ نہیں',marketsTitle:'مارکیٹ',wEstBalance:'تخمینی بیلنس',aSend:'بھیجیں',aReceive:'وصول',aTransfer:'منتقلی',aMore:'مزید',tabCrypto:'کرپٹو',tabCollectibles:'نوادر',tabFav:'پسندیدہ',tabAlerts:'الرٹس',walletTitle:'والٹ',wNoAssets:'کوئی اثاثہ نہیں',wNoColl:'کوئی نوادر نہیں',wAmount:'مقدار',wValue:'قدر',wHideSmall:'چھوٹے بیلنس چھپائیں',wAsset:'اثاثہ',wPrice:'قیمت / تبدیلی'},
-pt:{mAll:'Tudo',mFav:'⭐ Favoritos',mGainers:'Maiores altas',mLosers:'Maiores baixas',colCoin:'Moeda',colPriceChg:'Preço / 24h',searchCoin:'Pesquisar...',noResults:'Sem resultados',marketsTitle:'Mercados',wEstBalance:'Saldo estimado',aSend:'Enviar',aReceive:'Receber',aTransfer:'Transferir',aMore:'Mais',tabCrypto:'Cripto',tabCollectibles:'Colecionáveis',tabFav:'Favoritos',tabAlerts:'Alertas',walletTitle:'Carteira',wNoAssets:'Sem ativos',wNoColl:'Sem colecionáveis',wAmount:'Quantidade',wValue:'Valor',wHideSmall:'Ocultar saldos pequenos',wAsset:'Ativo',wPrice:'Preço / Var.'},
-id:{mAll:'Semua',mFav:'⭐ Favorit',mGainers:'Penguat',mLosers:'Pelemah',colCoin:'Koin',colPriceChg:'Harga / 24j',searchCoin:'Cari...',noResults:'Tidak ada hasil',marketsTitle:'Pasar',wEstBalance:'Perkiraan Saldo',aSend:'Kirim',aReceive:'Terima',aTransfer:'Transfer',aMore:'Lainnya',tabCrypto:'Kripto',tabCollectibles:'Koleksi',tabFav:'Favorit',tabAlerts:'Peringatan',walletTitle:'Dompet',wNoAssets:'Tidak ada aset',wNoColl:'Tidak ada koleksi',wAmount:'Jumlah',wValue:'Nilai',wHideSmall:'Sembunyikan saldo kecil',wAsset:'Aset',wPrice:'Harga / Perub.'},
-ja:{mAll:'すべて',mFav:'⭐ お気に入り',mGainers:'値上がり',mLosers:'値下がり',colCoin:'通貨',colPriceChg:'価格 / 24h',searchCoin:'検索...',noResults:'結果なし',marketsTitle:'市場',wEstBalance:'推定残高',aSend:'送金',aReceive:'受取',aTransfer:'振替',aMore:'もっと',tabCrypto:'暗号資産',tabCollectibles:'コレクション',tabFav:'お気に入り',tabAlerts:'アラート',walletTitle:'ウォレット',wNoAssets:'資産なし',wNoColl:'コレクションなし',wAmount:'数量',wValue:'価値',wHideSmall:'少額残高を非表示',wAsset:'資産',wPrice:'価格 / 変動'},
-ko:{mAll:'전체',mFav:'⭐ 관심',mGainers:'상승',mLosers:'하락',colCoin:'코인',colPriceChg:'가격 / 24시간',searchCoin:'검색...',noResults:'결과 없음',marketsTitle:'시장',wEstBalance:'추정 잔고',aSend:'보내기',aReceive:'받기',aTransfer:'전송',aMore:'더보기',tabCrypto:'암호화',tabCollectibles:'수집품',tabFav:'관심',tabAlerts:'알림',walletTitle:'지갑',wNoAssets:'자산 없음',wNoColl:'수집품 없음',wAmount:'수량',wValue:'가치',wHideSmall:'소액 잔고 숨기기',wAsset:'자산',wPrice:'가격 / 변동'}
-};
-for(var _L2 in EXTRA2){I18N[_L2]=I18N[_L2]||{};for(var _k2 in EXTRA2[_L2]){if(I18N[_L2][_k2]==null)I18N[_L2][_k2]=EXTRA2[_L2][_k2];}}
+function dirOf(c){for(var i=0;i<LANGS.length;i++){if(LANGS[i].c===c)return LANGS[i].dir;}return 'ltr';}
+function keyT(lang,k){var d=KEY[lang]||KEY.en;return (d&&d[k])||(KEY.en&&KEY.en[k])||(KEY.ar&&KEY.ar[k])||'';}
+function phT(lang,k){var d=PH[lang]||PH.en;return (d&&d[k])||(PH.en&&PH.en[k])||'';}
+function srcT(lang,txt){if(lang==='ar')return txt;var d=SRC[lang]||SRC.en;var v=(d&&d[txt]);if(v!=null)return v;v=(SRC.en&&SRC.en[txt]);return v!=null?v:null;}
 
-var EXTRA3={
-ar:{colPrice:'السعر',colChange:'التغير 24س'},
-en:{colPrice:'Price',colChange:'24h Change'},
-fr:{colPrice:'Prix',colChange:'24h'},
-es:{colPrice:'Precio',colChange:'24h'},
-de:{colPrice:'Preis',colChange:'24h'},
-tr:{colPrice:'Fiyat',colChange:'24s'},
-ru:{colPrice:'Цена',colChange:'24ч'},
-zh:{colPrice:'价格',colChange:'24h涨跌'},
-hi:{colPrice:'मूल्य',colChange:'24घ'},
-ur:{colPrice:'قیمت',colChange:'24گ'},
-pt:{colPrice:'Preço',colChange:'24h'},
-id:{colPrice:'Harga',colChange:'24j'},
-ja:{colPrice:'価格',colChange:'24h'},
-ko:{colPrice:'가격',colChange:'24시간'}
-};
-for(var _L3 in EXTRA3){I18N[_L3]=I18N[_L3]||{};for(var _k3 in EXTRA3[_L3]){if(I18N[_L3][_k3]==null)I18N[_L3][_k3]=EXTRA3[_L3][_k3];}}
+var _busy=false;
 
-var cur=localStorage.getItem('apex_lang')||'ar';
-function meta(c){for(var i=0;i<LANGS.length;i++){if(LANGS[i].c===c)return LANGS[i];}return LANGS[0];}
-function t(k){var d=I18N[cur]||I18N.ar||{};return (d&&d[k])||(I18N.ar&&I18N.ar[k])||(I18N.en&&I18N.en[k])||k;}
-function apply(code){cur=code||cur;try{localStorage.setItem("apex_lang",cur);}catch(e){}var m=meta(cur);try{document.documentElement.lang=cur;document.documentElement.dir=m.dir;}catch(e){}
-  document.querySelectorAll("[data-i18n]").forEach(function(el){var v=t(el.getAttribute("data-i18n"));if(v)el.textContent=v;});
-  document.querySelectorAll("[data-i18n-ph]").forEach(function(el){var v=t(el.getAttribute("data-i18n-ph"));if(v)el.setAttribute("placeholder",v);});
-  if(typeof window.onApexLang==="function"){try{window.onApexLang(cur);}catch(e){}}}
-window.APEX_I18N={I18N:I18N,LANGS:LANGS,t:t,apply:apply,current:function(){return cur;}};
-function boot(){apply(cur);}
-if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot);else boot();
-window.addEventListener("storage",function(e){if(e.key==="apex_lang")apply(e.newValue||"ar");});
+/* ترجمة العناصر ذات المفتاح */
+function applyKeyed(root,lang){
+  var els=root.querySelectorAll?root.querySelectorAll('[data-i18n]'):[];
+  [].forEach.call(els,function(el){var k=el.getAttribute('data-i18n');var v=keyT(lang,k);if(v)el.textContent=v;});
+  if(root.nodeType===1&&root.hasAttribute&&root.hasAttribute('data-i18n')){var k2=root.getAttribute('data-i18n');var v2=keyT(lang,k2);if(v2)root.textContent=v2;}
+  var phs=root.querySelectorAll?root.querySelectorAll('[data-i18n-ph]'):[];
+  [].forEach.call(phs,function(el){var k=el.getAttribute('data-i18n-ph');var v=phT(lang,k);if(v)el.setAttribute('placeholder',v);});
+}
+
+/* ترجمة النصوص الحرة (المكتوبة مباشرة بالعربية) */
+function walkText(root,lang){
+  if(!root||!root.ownerDocument&&root.nodeType!==9&&root.nodeType!==1)return;
+  var doc=root.ownerDocument||document;
+  var tw=doc.createTreeWalker(root.nodeType===3?root.parentNode||root:root,NodeFilter.SHOW_TEXT,{acceptNode:function(n){
+    var p=n.parentNode;if(!p)return NodeFilter.FILTER_REJECT;
+    var tag=p.nodeName;
+    if(tag==='SCRIPT'||tag==='STYLE'||tag==='TEXTAREA'||tag==='NOSCRIPT')return NodeFilter.FILTER_REJECT;
+    if(p.closest&&p.closest('[data-i18n],.apx-i18n-skip'))return NodeFilter.FILTER_REJECT;
+    if(n.__ar!=null)return NodeFilter.FILTER_ACCEPT;
+    return AR.test(n.nodeValue||'')?NodeFilter.FILTER_ACCEPT:NodeFilter.FILTER_REJECT;
+  }},false);
+  var arr=[],n;while((n=tw.nextNode()))arr.push(n);
+  arr.forEach(function(tn){
+    if(tn.__ar==null)tn.__ar=tn.nodeValue;
+    var orig=tn.__ar;if(!AR.test(orig))return;
+    var trimmed=orig.replace(/^\s+|\s+$/g,'');
+    var lead=orig.slice(0,orig.length-orig.replace(/^\s+/,'').length);
+    var trail=orig.slice(orig.replace(/\s+$/,'').length);
+    var v;
+    if(lang==='ar')v=orig;else{var tr=srcT(lang,trimmed);v=(tr!=null)?(lead+tr+trail):orig;}
+    if(tn.nodeValue!==v)tn.nodeValue=v;
+  });
+}
+
+/* ترجمة سمات النص (placeholder/title/aria-label/alt) غير المربوطة بمفتاح */
+function walkAttrs(root,lang){
+  var els=root.querySelectorAll?root.querySelectorAll('[placeholder],[title],[aria-label],[alt]'):[];
+  [].forEach.call(els,function(el){
+    if(el.closest&&el.closest('.apx-i18n-skip'))return;
+    ['placeholder','title','aria-label','alt'].forEach(function(a){
+      if(!el.hasAttribute(a))return;
+      if(a==='placeholder'&&el.hasAttribute('data-i18n-ph'))return;
+      var store='__a_'+a;
+      if(el[store]==null){var cur=el.getAttribute(a);if(!AR.test(cur||''))return;el[store]=cur;}
+      var orig=el[store];var v=(lang==='ar')?orig:(srcT(lang,orig.replace(/^\s+|\s+$/g,''))||orig);
+      if(el.getAttribute(a)!==v)el.setAttribute(a,v);
+    });
+  });
+}
+
+function applyToRoot(root,lang){applyKeyed(root,lang);walkText(root,lang);walkAttrs(root,lang);}
+
+function apply(lang){
+  if(!lang)lang=curLang;
+  curLang=lang;try{localStorage.setItem(LKEY,lang);}catch(e){}
+  var de=document.documentElement;
+  de.lang=lang;de.dir=dirOf(lang);
+  if(document.body){
+    _busy=true;
+    try{applyToRoot(document.body,lang);}finally{setTimeout(function(){_busy=false;},0);}
+  }
+  updateCtrl();
+  if(typeof window.onApexLang==='function'){try{window.onApexLang(lang);}catch(e){}}
+}
+
+/* ===== المظهر ===== */
+function applyTheme(mode){
+  curTheme=(mode==='light')?'light':'dark';
+  try{localStorage.setItem(TKEY,curTheme);}catch(e){}
+  document.documentElement.setAttribute('data-theme',curTheme);
+  updateCtrl();
+}
+function toggleTheme(){applyTheme(curTheme==='light'?'dark':'light');}
+
+/* ===== شريط التحكم (أيقونتي اللغة والمظهر) + نافذة اختيار اللغة ===== */
+var SUN='<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.6M12 19.4V22M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2 12h2.6M19.4 12H22M4.2 19.8L6 18M18 6l1.8-1.8"/></svg>';
+var MOON='<svg viewBox="0 0 24 24"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a6.6 6.6 0 0 0 9.8 9.8z"/></svg>';
+var GLOBE='<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>';
+
+function injectStyle(){
+  if(document.getElementById('apxI18nStyle'))return;
+  var st=document.createElement('style');st.id='apxI18nStyle';
+  st.textContent=[
+   'html[data-theme="light"]{--bg:#f4f6f9;--card:#ffffff;--card2:#eef1f5;--line:#e5e9ef;--txt:#1b2026;--mut:#6b7686;--yellow:#b8860b;--panel:#ffffff;--panel2:#eef1f5;--border:#e5e9ef;--muted:#6b7686;--gold1:#d9a406;--gold2:#b8860b;--green:#0ba360;--red:#e23b52;}',
+   'html[data-theme="light"] body{background:var(--bg);color:var(--txt);}',
+   'html[data-theme="light"] .apx-ctrl .apx-cbtn{background:#fff;border-color:#e5e9ef;color:#1b2026;box-shadow:0 2px 10px rgba(0,0,0,.08)}',
+   '.apx-ctrl{position:fixed;inset-inline-start:12px;bottom:74px;z-index:99990;display:flex;flex-direction:column;gap:8px}',
+   '.apx-ctrl .apx-cbtn{width:42px;height:42px;border-radius:50%;border:1px solid var(--line,#1f2731);background:var(--card,#12161c);color:var(--txt,#eaecef);display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.35);padding:0}',
+   '.apx-ctrl .apx-cbtn svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}',
+   '.apx-ctrl .apx-cbtn:active{transform:scale(.92)}',
+   '.apx-lov{position:fixed;inset:0;z-index:99991;background:rgba(0,0,0,.55);display:none;align-items:flex-end;justify-content:center}',
+   '.apx-lov.on{display:flex}',
+   '.apx-lsheet{width:100%;max-width:460px;max-height:80vh;background:var(--card,#12161c);color:var(--txt,#eaecef);border-radius:18px 18px 0 0;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 -8px 30px rgba(0,0,0,.4)}',
+   '.apx-lshd{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line,#1f2731);font-weight:800}',
+   '.apx-lshd button{margin-inline-start:auto;background:none;border:none;color:var(--mut,#848e9c);font-size:22px;cursor:pointer;line-height:1}',
+   '.apx-lsrch{padding:10px 16px}',
+   '.apx-lsrch input{width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid var(--line,#1f2731);background:var(--card2,#161b22);color:var(--txt,#eaecef);font-size:14px;outline:none}',
+   '.apx-llist{overflow:auto;padding:4px 8px 16px}',
+   '.apx-lrow{display:flex;align-items:center;gap:12px;padding:12px;border-radius:12px;cursor:pointer}',
+   '.apx-lrow:hover{background:var(--card2,#161b22)}',
+   '.apx-lrow.sel{background:rgba(224,166,21,.14)}',
+   '.apx-lrow .fl{font-size:22px}',
+   '.apx-lrow .ln{display:flex;flex-direction:column}',
+   '.apx-lrow .ln b{font-size:14.5px}',
+   '.apx-lrow .ln span{font-size:11.5px;color:var(--mut,#848e9c)}',
+   '.apx-lrow .tk{margin-inline-start:auto;color:var(--gold2,#e0a615);font-weight:800;display:none}',
+   '.apx-lrow.sel .tk{display:block}'
+  ].join('\n');
+  document.head.appendChild(st);
+}
+
+function buildCtrl(){
+  if(document.getElementById('apxCtrl'))return;
+  var wrap=document.createElement('div');wrap.id='apxCtrl';wrap.className='apx-ctrl apx-i18n-skip';
+  var bt=document.createElement('button');bt.className='apx-cbtn';bt.id='apxThemeBtn';bt.type='button';
+  bt.setAttribute('aria-label','Theme');bt.onclick=function(){toggleTheme();};
+  var bl=document.createElement('button');bl.className='apx-cbtn';bl.id='apxLangBtn';bl.type='button';
+  bl.setAttribute('aria-label','Language');bl.innerHTML=GLOBE;bl.onclick=function(){openPicker();};
+  wrap.appendChild(bt);wrap.appendChild(bl);
+  document.body.appendChild(wrap);
+
+  var ov=document.createElement('div');ov.className='apx-lov apx-i18n-skip';ov.id='apxLov';
+  ov.innerHTML='<div class="apx-lsheet"><div class="apx-lshd"><span id="apxLovTtl">Language · اللغة</span><button type="button" id="apxLovX">×</button></div><div class="apx-lsrch"><input id="apxLovSearch" type="text" placeholder="Search · بحث"></div><div class="apx-llist" id="apxLovList"></div></div>';
+  document.body.appendChild(ov);
+  ov.addEventListener('click',function(e){if(e.target===ov)closePicker();});
+  document.getElementById('apxLovX').onclick=closePicker;
+  document.getElementById('apxLovSearch').addEventListener('input',renderList);
+  updateCtrl();
+}
+
+function updateCtrl(){
+  var bt=document.getElementById('apxThemeBtn');
+  if(bt)bt.innerHTML=(curTheme==='light')?MOON:SUN;
+}
+
+function renderList(){
+  var box=document.getElementById('apxLovList');if(!box)return;
+  var q=((document.getElementById('apxLovSearch')||{}).value||'').trim().toLowerCase();
+  var html=LANGS.filter(function(l){return !q||l.n.toLowerCase().indexOf(q)>=0||l.e.toLowerCase().indexOf(q)>=0||l.c.indexOf(q)>=0;}).map(function(l){
+    var sel=l.c===curLang;
+    return '<div class="apx-lrow'+(sel?' sel':'')+'" data-c="'+l.c+'"><span class="fl">'+l.f+'</span><div class="ln"><b>'+l.n+'</b><span>'+l.e+'</span></div><span class="tk">✓</span></div>';
+  }).join('');
+  box.innerHTML=html||'<div style="padding:20px;text-align:center;color:#7a8794">—</div>';
+  [].forEach.call(box.querySelectorAll('.apx-lrow'),function(r){r.onclick=function(){pick(r.getAttribute('data-c'));};});
+}
+function openPicker(){var ov=document.getElementById('apxLov');if(!ov)return;renderList();ov.classList.add('on');var s=document.getElementById('apxLovSearch');if(s){s.value='';}}
+function closePicker(){var ov=document.getElementById('apxLov');if(ov)ov.classList.remove('on');}
+function pick(c){apply(c);renderList();setTimeout(closePicker,220);}
+
+/* مراقب لترجمة المحتوى المُضاف ديناميكياً */
+function startObserver(){
+  if(!window.MutationObserver||!document.body)return;
+  var mo=new MutationObserver(function(muts){
+    if(_busy)return;_busy=true;
+    try{
+      muts.forEach(function(m){
+        if(m.type!=='childList')return;
+        [].forEach.call(m.addedNodes,function(nn){
+          if(nn.nodeType===1){applyToRoot(nn,curLang);}
+          else if(nn.nodeType===3){walkText(nn,curLang);}
+        });
+      });
+    }finally{setTimeout(function(){_busy=false;},0);}
+  });
+  mo.observe(document.body,{childList:true,subtree:true});
+}
+
+window.APEX_I18N={apply:apply,t:function(k){return keyT(curLang,k);},langs:LANGS,current:function(){return curLang;},setTheme:applyTheme,toggleTheme:toggleTheme,theme:function(){return curTheme;},open:openPicker};
+
+function boot(){
+  document.documentElement.setAttribute('data-theme',curTheme);
+  injectStyle();
+  buildCtrl();
+  apply(curLang);
+  startObserver();
+}
+/* تطبيق المظهر فوراً لتجنّب ومضة الألوان */
+document.documentElement.setAttribute('data-theme',curTheme);
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();
