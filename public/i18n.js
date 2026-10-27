@@ -917,6 +917,13 @@ function apply(lang){
 function applyTheme(mode){
   curTheme=(mode==='light')?'light':'dark';
   try{localStorage.setItem(TKEY,curTheme);}catch(e){}
+  /* تأثير حركي ناعم عند تبديل المظهر: نفعّل انتقالات CSS مؤقتاً فقط أثناء التبديل */
+  try{
+    var de=document.documentElement;
+    de.classList.add('apx-theming');
+    if(applyTheme._tt)clearTimeout(applyTheme._tt);
+    applyTheme._tt=setTimeout(function(){de.classList.remove('apx-theming');},460);
+  }catch(e){}
   document.documentElement.setAttribute('data-theme',curTheme);
   updateCtrl();
   try{window.dispatchEvent(new CustomEvent('apextheme',{detail:{mode:curTheme}}));}catch(e){}
@@ -933,6 +940,18 @@ function injectStyle(){
   if(document.getElementById('apxI18nStyle'))return;
   var st=document.createElement('style');st.id='apxI18nStyle';
   st.textContent=[
+   /* ===== الوضع الداكن: تعزيز تباين النصوص والحدود (مشترك لكل الصفحات) ===== */
+   'html[data-theme="dark"]{--txt:#f3f5f9;--mut:#a7b2c2;--muted:#a7b2c2;--sub:#a7b2c2;--line:#2a333f;--border:#303a48;--card2:#1b212a;}',
+   'html[data-theme="dark"] body{color:var(--txt)}',
+   /* نصوص ثانوية أوضح بالداكن */
+   'html[data-theme="dark"] .mut,html[data-theme="dark"] .sub,html[data-theme="dark"] .hint,html[data-theme="dark"] .val,html[data-theme="dark"] .cur,html[data-theme="dark"] .dfoot,html[data-theme="dark"] .ln span,html[data-theme="dark"] .apx-lrow .ln span{color:#a7b2c2 !important}',
+   'html[data-theme="dark"] .bnav a{color:#9aa6b6 !important}',
+   'html[data-theme="dark"] .bnav a.active,html[data-theme="dark"] .bnav a.on,html[data-theme="dark"] .bnav a[aria-current],html[data-theme="dark"] .bnav a.sel{color:var(--txt) !important}',
+   /* ===== انتقال حركي ناعم عند تبديل المظهر (يُفعّل مؤقتاً فقط) ===== */
+   'html.apx-theming,html.apx-theming body{transition:background-color .4s ease,color .4s ease}',
+   'html.apx-theming *,html.apx-theming *::before,html.apx-theming *::after{transition:background-color .4s ease,color .4s ease,border-color .4s ease,box-shadow .4s ease,fill .4s ease,stroke .4s ease !important}',
+   /* لا نُحرّك العناصر التي لها رسومات/انتقالات خاصة (شارت/شموع) */
+   'html.apx-theming #chart,html.apx-theming #chart *,html.apx-theming canvas,html.apx-theming svg.chart,html.apx-theming .chart-wrap *{transition:none !important}',
    'html[data-theme="light"]{--bg:#f4f6fb;--card:#ffffff;--card2:#f1f4f9;--line:#e4e8f0;--txt:#131a26;--mut:#64707f;--yellow:#b07d05;--panel:#ffffff;--panel2:#f1f4f9;--border:#e4e8f0;--muted:#64707f;--gold1:#d99e0a;--gold2:#b07d05;--green:#0a9d63;--red:#d22f46;}',
    'html[data-theme="light"] body{background:linear-gradient(180deg,#f7f9fc 0%,#eef2f8 100%);background-attachment:fixed;color:var(--txt);}',
    'html[data-theme="light"] ::selection{background:rgba(217,158,10,.18)}',

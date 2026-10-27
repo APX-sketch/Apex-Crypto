@@ -1020,7 +1020,7 @@ function initChart(){
   if(typeof LightweightCharts==='undefined'){$('chartLd').textContent='تعذّر تحميل مكتبة الرسم (/lib/lightweight-charts.js)';return;}
   lwChart=LightweightCharts.createChart(el,{
     width:el.clientWidth,height:(el.clientHeight||300),
-    layout:{background:{type:'solid',color:'#12161c'},textColor:'#848e9c',fontFamily:'Segoe UI'},
+    layout:{background:{type:'solid',color:'#12161c'},textColor:'#a7b2c2',fontFamily:'Segoe UI'},
     grid:{vertLines:{color:'#1f2731'},horzLines:{color:'#1f2731'}},
     rightPriceScale:{borderColor:'#1f2731'},
     timeScale:{borderColor:'#1f2731',timeVisible:true,secondsVisible:false},
@@ -1034,7 +1034,7 @@ function initChart(){
   const vp=$('volpane');
   if(vp){vp.innerHTML='';vp.style.height='70px';
     volChart=LightweightCharts.createChart(vp,{width:vp.clientWidth,height:70,
-      layout:{background:{type:'solid',color:'#12161c'},textColor:'#848e9c',fontFamily:'Segoe UI'},
+      layout:{background:{type:'solid',color:'#12161c'},textColor:'#a7b2c2',fontFamily:'Segoe UI'},
       grid:{vertLines:{color:'transparent'},horzLines:{color:'#1f2731'}},
       rightPriceScale:{borderColor:'#1f2731'},timeScale:{visible:false,borderColor:'#1f2731'},crosshair:{mode:0}});
     volSeries=volChart.addHistogramSeries({priceFormat:{type:'volume'},priceScaleId:''});
@@ -1044,7 +1044,7 @@ function initChart(){
   const rp=$('rsipane');
   if(rp){rp.innerHTML='';
     rsiChart=LightweightCharts.createChart(rp,{width:rp.clientWidth,height:72,
-      layout:{background:{type:'solid',color:'#12161c'},textColor:'#848e9c',fontFamily:'Segoe UI'},
+      layout:{background:{type:'solid',color:'#12161c'},textColor:'#a7b2c2',fontFamily:'Segoe UI'},
       grid:{vertLines:{color:'transparent'},horzLines:{color:'transparent'}},
       rightPriceScale:{borderColor:'#1f2731'},timeScale:{visible:false,borderColor:'#1f2731'},crosshair:{mode:1}});
     rsiSeries=rsiChart.addLineSeries({color:'#c99bff',lineWidth:1,priceLineVisible:false,lastValueVisible:true});
@@ -1068,7 +1068,7 @@ function apxChartTheme(mode){
   try{ mode = mode || (window.APEX_I18N && APEX_I18N.theme ? APEX_I18N.theme() : (document.documentElement.getAttribute('data-theme')||'dark')); }catch(e){ mode='dark'; }
   var light = mode==='light';
   var bg   = light ? '#ffffff' : '#12161c';
-  var txt  = light ? '#5c6675' : '#848e9c';
+  var txt  = light ? '#5c6675' : '#a7b2c2';
   var grid = light ? '#eceff4' : '#1f2731';
   var bord = light ? '#dde3ec' : '#1f2731';
   try{ if(lwChart) lwChart.applyOptions({layout:{background:{type:'solid',color:bg},textColor:txt},grid:{vertLines:{color:grid},horzLines:{color:grid}},rightPriceScale:{borderColor:bord},timeScale:{borderColor:bord},crosshair:{vertLine:{color:light?'#9aa4b2':'#4a5563',labelBackgroundColor:light?'#5c6675':'#2b3139'},horzLine:{color:light?'#9aa4b2':'#4a5563',labelBackgroundColor:light?'#5c6675':'#2b3139'}}}); }catch(e){}

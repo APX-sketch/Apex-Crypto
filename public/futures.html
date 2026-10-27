@@ -589,7 +589,7 @@ function initChart(){
   if(typeof LightweightCharts==='undefined'){$('chartLd').textContent='تعذّر تحميل مكتبة الرسم (/lib/lightweight-charts.js)';return;}
   lwChart=LightweightCharts.createChart(el,{
     width:el.clientWidth,height:(el.clientHeight||300),
-    layout:{background:{type:'solid',color:'#0e1621'},textColor:'#8b97a5',fontFamily:'Segoe UI'},
+    layout:{background:{type:'solid',color:'#0e1621'},textColor:'#a7b2c2',fontFamily:'Segoe UI'},
     grid:{vertLines:{color:'#1b2735'},horzLines:{color:'#1b2735'}},
     rightPriceScale:{borderColor:'#1b2735'},
     timeScale:{borderColor:'#1b2735',timeVisible:true,secondsVisible:false},
@@ -602,7 +602,7 @@ function initChart(){
   const vp=$('volpane');
   if(vp){vp.innerHTML='';vp.style.height='90px';
     volChart=LightweightCharts.createChart(vp,{width:vp.clientWidth,height:90,
-      layout:{background:{type:'solid',color:'#0e1621'},textColor:'#8b97a5',fontFamily:'Segoe UI'},
+      layout:{background:{type:'solid',color:'#0e1621'},textColor:'#a7b2c2',fontFamily:'Segoe UI'},
       grid:{vertLines:{color:'transparent'},horzLines:{color:'#1b2735'}},
       rightPriceScale:{borderColor:'#1b2735'},timeScale:{visible:false,borderColor:'#1b2735'},crosshair:{mode:0}});
     volSeries=volChart.addHistogramSeries({priceFormat:{type:'volume'},priceScaleId:''});
@@ -625,7 +625,7 @@ function apxChartTheme(mode){
   try{ mode = mode || (window.APEX_I18N && APEX_I18N.theme ? APEX_I18N.theme() : (document.documentElement.getAttribute('data-theme')||'dark')); }catch(e){ mode='dark'; }
   var light = mode==='light';
   var bg   = light ? '#ffffff' : '#0e1621';
-  var txt  = light ? '#5c6675' : '#8b97a5';
+  var txt  = light ? '#5c6675' : '#a7b2c2';
   var grid = light ? '#eceff4' : '#1b2735';
   var bord = light ? '#dde3ec' : '#1b2735';
   try{ if(lwChart) lwChart.applyOptions({layout:{background:{type:'solid',color:bg},textColor:txt},grid:{vertLines:{color:grid},horzLines:{color:grid}},rightPriceScale:{borderColor:bord},timeScale:{borderColor:bord},crosshair:{vertLine:{color:light?'#9aa4b2':'#4a5563',labelBackgroundColor:light?'#5c6675':'#2b3139'},horzLine:{color:light?'#9aa4b2':'#4a5563',labelBackgroundColor:light?'#5c6675':'#2b3139'}}}); }catch(e){}

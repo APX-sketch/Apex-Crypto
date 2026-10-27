@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Apex — جدول ألوان العناصر (فاتح / داكن)</title>
 <style>
-  :root{--bg:#0e1621;--card:#141d2a;--line:#1f2b3a;--txt:#eaf0f7;--mut:#8a94a3}
-  html[data-theme="light"]{--bg:#eef1f6;--card:#ffffff;--line:#dde3ec;--txt:#222a35;--mut:#5c6675}
+  :root{--bg:#0e1621;--card:#141d2a;--line:#2a333f;--txt:#f3f5f9;--mut:#a7b2c2}
+  html[data-theme="light"]{--bg:#eef1f6;--card:#ffffff;--line:#dde3ec;--txt:#131a26;--mut:#64707f}
   *{box-sizing:border-box}
   body{margin:0;font-family:'Segoe UI',Tahoma,Arial,sans-serif;background:var(--bg);color:var(--txt);padding:24px;transition:.25s}
   h1{font-size:22px;margin:0 0 4px}
@@ -41,11 +41,16 @@
   <div class="note">
     • الشموع (صاعد/هابط) تبقى بالأخضر/الأحمر القياسي في الوضعين لأنها مألوفة عالمياً.<br>
     • ألوان المؤشرات في الوضع الفاتح تم تغميقها لتحسين التباين على الخلفية البيضاء.<br>
+    • <b>الوضع الداكن تحسّن تباينه:</b> النص الثانوي أصبح <span class="hex">#a7b2c2</span> (بدل #848e9c) والنص الأساسي <span class="hex">#f3f5f9</span> والحدود <span class="hex">#2a333f</span> — أوضح وأريح للعين.<br>
+    • التبديل بين الوضعين يتم بانتقال حركي ناعم (تدرّج لوني ~0.4ث).<br>
     • أعمدة الحجم شفافة (0.5) بالداكن و (0.62) بالفاتح لتظهر بوضوح على الأبيض.
   </div>
 </div>
 <script>
 var rows=[
+  ['نص أساسي (--txt)','#f3f5f9','#131a26'],
+  ['نص ثانوي / باهت (--mut)','#a7b2c2','#64707f'],
+  ['حدود وفواصل (--line/--border)','#2a333f','#e4e8f0'],
   ['شمعة صاعدة / هابطة','#0ecb81 / #f6465d','#0ecb81 / #f6465d'],
   ['MA7','#e0a615','#b57e00'],
   ['MA25','#2f83fb','#1769e0'],
@@ -57,8 +62,8 @@ var rows=[
   ['حجم صاعد','rgba(14,203,129,.5)','rgba(10,157,99,.62)'],
   ['حجم هابط','rgba(246,70,93,.5)','rgba(210,47,70,.62)'],
   ['خلفية الشارت','#0e1621','#ffffff'],
-  ['نص / محاور','#8b97a5','#5c6675'],
-  ['خطوط الشبكة','#1b2735','#eceff4'],
+  ['نص / محاور','#a7b2c2','#64707f'],
+  ['خطوط الشبكة','#2a333f','#eceff4'],
   ['الشريط السفلي .bnav','#141d2a','#ffffff'],
   ['بطاقة الرصيد','داكن','#ffffff']
 ];
