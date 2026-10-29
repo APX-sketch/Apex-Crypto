@@ -29,6 +29,14 @@ input{font-size:16px}
 .chip{flex:0 0 auto;display:flex;align-items:center;gap:7px;padding:9px 13px;border-radius:12px;background:var(--panel);border:1px solid var(--border);cursor:pointer;font-weight:800;font-size:13px}
 .chip img{width:20px;height:20px;border-radius:50%}
 .chip.sel{border-color:var(--gold2);background:rgba(224,166,21,.1)}
+.nets{display:flex;flex-direction:column;gap:8px}
+.net{display:flex;align-items:center;gap:11px;padding:12px 14px;border-radius:13px;background:var(--panel);border:1px solid var(--border);cursor:pointer}
+.net .nt{flex:1}
+.net .nt b{display:block;font-size:13.5px;font-weight:800}
+.net .nt span{font-size:11px;color:var(--muted)}
+.net .rd{width:18px;height:18px;border-radius:50%;border:2px solid var(--border);flex:0 0 auto}
+.net.sel{border-color:var(--gold2);background:rgba(224,166,21,.08)}
+.net.sel .rd{border-color:var(--gold2);background:radial-gradient(circle,var(--gold2) 0 5px,transparent 6px)}
 .card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:16px;margin-top:8px}
 .amtbox{display:flex;align-items:center;gap:10px;background:var(--panel2);border:1px solid var(--border);border-radius:14px;padding:14px 15px}
 .amtbox input{flex:1;background:none;border:0;color:var(--txt);font-family:inherit;font-size:22px;font-weight:900;outline:none;min-width:0}
@@ -65,6 +73,9 @@ input{font-size:16px}
 <div class="wrap">
   <div class="lbl">اختر العملة</div>
   <div class="coins" id="coins"></div>
+
+  <div class="lbl">الشبكة</div>
+  <div class="nets" id="nets"></div>
 
   <div class="lbl">المبلغ</div>
   <div class="card">
@@ -124,6 +135,29 @@ function authHeaders(extra){var h=extra||{};h['Authorization']='Bearer '+TOKEN;r
 function logout(){location.replace('login.html?next=withdraw.html');}
 
 const CATALOG=['USDT','BTC','ETH','BNB','SOL','XRP','ADA','DOGE','TRX','LTC'];
+const NETWORKS={
+  USDT:[['TRC20','TRON (TRC20)','≈ 1 USDT رسوم — الأسرع والأرخص'],['BEP20','BNB Smart Chain (BEP20)','رسوم منخفضة'],['ERC20','Ethereum (ERC20)','رسوم شبكة أعلى'],['MATIC','Polygon','رسوم منخفضة'],['ARBITRUM','Arbitrum One',''],['OP','Optimism',''],['SOL','Solana','']],
+  USDC:[['ERC20','Ethereum (ERC20)',''],['BEP20','BNB Smart Chain (BEP20)',''],['MATIC','Polygon',''],['ARBITRUM','Arbitrum One',''],['OP','Optimism',''],['SOL','Solana','']],
+  BTC:[['BTC','Bitcoin','الشبكة الأصلية'],['BEP20','BNB Smart Chain (BEP20)','BTCB'],['LIGHTNING','Lightning Network','فوري']],
+  ETH:[['ERC20','Ethereum (ERC20)','الشبكة الأصلية'],['BEP20','BNB Smart Chain (BEP20)',''],['ARBITRUM','Arbitrum One',''],['OP','Optimism','']],
+  BNB:[['BEP20','BNB Smart Chain (BEP20)','الموصى به'],['BEP2','BNB Beacon Chain (BEP2)','']],
+  SOL:[['SOL','Solana','الشبكة الأصلية'],['BEP20','BNB Smart Chain (BEP20)','']],
+  XRP:[['XRP','XRP Ledger','يتطلّب Memo/Tag'],['BEP20','BNB Smart Chain (BEP20)','']],
+  ADA:[['ADA','Cardano','الشبكة الأصلية'],['BEP20','BNB Smart Chain (BEP20)','']],
+  DOGE:[['DOGE','Dogecoin','الشبكة الأصلية'],['BEP20','BNB Smart Chain (BEP20)','']],
+  TRX:[['TRC20','TRON (TRC20)','الشبكة الأصلية'],['BEP20','BNB Smart Chain (BEP20)','']],
+  LTC:[['LTC','Litecoin','الشبكة الأصلية'],['BEP20','BNB Smart Chain (BEP20)','']]
+};
+function netsFor(b){return NETWORKS[b]||[['BEP20','BNB Smart Chain (BEP20)',''],['ERC20','Ethereum (ERC20)','']];}
+var selNet='';
+function renderNets(){
+  var list=netsFor(sel);
+  if(!list.some(function(n){return n[0]===selNet;}))selNet=list[0][0];
+  $('nets').innerHTML=list.map(function(n){
+    return '<div class="net'+(n[0]===selNet?' sel':'')+'" onclick="pickNet(\''+n[0]+'\')"><div class="rd"></div><div class="nt"><b>'+n[0]+'</b><span>'+n[1]+(n[2]?' · '+n[2]:'')+'</span></div></div>';
+  }).join('');
+}
+function pickNet(code){selNet=code;renderNets();}
 var wallet={}, locked={}, priceMap={}, sel='USDT';
 function priceOf(b){return b==='USDT'?1:(priceMap[b+'USDT']||0);}
 function avail(b){return Math.max(0,(Number(wallet[b])||0)-(Number(locked[b])||0));}
@@ -135,7 +169,7 @@ function renderCoins(){
   }).join('');
 }
 function syncBal(){$('curBal').textContent=fmt(avail(sel),avail(sel)>=1?4:6);}
-function pickCoin(b){sel=b;renderCoins();$('curLbl').textContent=b;syncBal();$('amt').value='';onAmt();}
+function pickCoin(b){sel=b;renderCoins();$('curLbl').textContent=b;syncBal();$('amt').value='';renderNets();onAmt();}
 function setMax(){$('amt').value=avail(sel);onAmt();}
 function setPct(p){var bal=avail(sel);var v=bal*p;$('amt').value=p===1?bal:parseFloat(v.toFixed(bal>=1?6:8));onAmt();}
 function onAmt(){
@@ -170,7 +204,7 @@ async function startWithdraw(){
   if(v<=0){toast('أدخل مبلغاً صحيحاً','err');return;}
   if(v>bal){toast('الرصيد غير كافٍ','err');return;}
   if(addr.length<6){toast('أدخل عنوان محفظة صحيح','err');return;}
-  _pendingWd={amount:v,currency:sel,address:addr};
+  _pendingWd={amount:v,currency:sel,address:addr,network:selNet};
   await requestOtp(false);
 }
 

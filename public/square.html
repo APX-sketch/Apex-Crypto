@@ -72,6 +72,12 @@ html[data-theme=light] .post{border-bottom:8px solid #e9edf3}
 .tg{padding:6px 12px;border-radius:999px;background:var(--panel2);border:1px solid var(--border);color:var(--gold2);font-size:12.5px;font-weight:800;cursor:pointer}
 .btn{width:100%;padding:13px;border-radius:12px;border:0;background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#231a02;font-size:15px;font-weight:900;cursor:pointer;font-family:inherit}
 .btn:disabled{opacity:.5}
+.attachrow{display:flex;gap:10px;align-items:center;margin:12px 0}
+.attachbtn{display:inline-flex;align-items:center;gap:7px;padding:9px 14px;border-radius:12px;background:var(--panel2);border:1px solid var(--border);color:var(--txt);font-size:13px;font-weight:800;cursor:pointer;font-family:inherit}
+.attachbtn svg{width:18px;height:18px;stroke:var(--gold2);fill:none;stroke-width:1.9}
+.imgprev{position:relative;margin-bottom:12px}
+.imgprev img{width:100%;border-radius:12px;display:block}
+.imgprev .rm{position:absolute;top:8px;left:8px;width:30px;height:30px;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;border:0;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .cmt{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
 .cmt .av{width:34px;height:34px;font-size:14px}
 .cmt .cb{flex:1}
@@ -107,7 +113,11 @@ html[data-theme=light] .bnav{background:#fff}
   <div class="sheet">
     <h3>منشور جديد <span class="x" onclick="closeCompose()">×</span></h3>
     <textarea class="ta" id="ta" placeholder="شارك خبراً أو تحليلاً أو رأيك في السوق... استخدم $BTC لذكر عملة"></textarea>
-    <div class="tagrow" id="tagrow"></div>
+    <div class="attachrow">
+      <button class="attachbtn" onclick="document.getElementById('imgInput').click()"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.6"/><path d="M21 15l-5-5L5 21"/></svg>إضافة صورة</button>
+      <input type="file" id="imgInput" accept="image/*" hidden>
+    </div>
+    <div class="imgprev" id="imgPreview"></div>
     <button class="btn" id="pubBtn" onclick="publish()">نشر</button>
   </div>
 </div>
@@ -152,7 +162,7 @@ function seed(){const now=Date.now();return [
   {id:uid(),author:'Apex News',handle:'@apex_news',vf:true,t:now-1000*60*120,text:'📰 عاجل: ارتفاع حجم التداول على منصّة Apex بنسبة 34% خلال 24 ساعة مع إطلاق صفحة Square الجديدة. $APX يسجّل أعلى سيولة منذ الإدراج.',tag:'APX',likes:356,shares:71,news:true,cmts:[{a:'CryptoLina',t:'أخيراً صار في مجتمع داخل المنصة 🔥',at:now-1000*60*80}]},
   {id:uid(),author:'CryptoLina',handle:'@lina_charts',vf:false,t:now-1000*60*200,text:'$SOL يبني قاعدة جميلة على الفريم اليومي. الحجم يتراكم بهدوء. صبر = أرباح. ليس نصيحة استثمارية.',tag:'SOL',chart:[40,38,44,41,48,46,52,50,58,62,66],likes:143,shares:20,cmts:[]}
 ];}
-let FEED=loadFeed();let MYLIKES=loadLikes();let FILTER='hot',QSTR='',CUR=null;
+let FEED=loadFeed();let MYLIKES=loadLikes();let FILTER='hot',QSTR='',CUR=null;let PENDING_IMG=null;
 </script>
 <script>
 function fmtText(s){
@@ -180,6 +190,7 @@ function render(){
       '<div class="phead">'+avatar(p.author)+
       '<div class="who"><b>'+esc(p.author)+(p.vf?VBADGE:'')+'</b><span>'+esc(p.handle)+' • '+timeAgo(p.t)+'</span></div></div>'+
       '<div class="ptext">'+fmtText(p.text)+'</div>'+
+      (p.img?'<img class="pimg" src="'+p.img+'">':'')+
       (p.chart?chartHtml(p.chart):'')+
       '<div class="pacts">'+
         '<div class="pact like'+(liked?' liked':'')+'" onclick="like(\''+p.id+'\')">'+heart()+'<span>'+(p.likes||0)+'</span></div>'+
@@ -200,13 +211,17 @@ function closeCmt(){$('cmtMask').classList.remove('on');}
 function addCmt(){const v=$('cmtInput').value.trim();if(!v||!CUR)return;const p=FEED.find(x=>x.id===CUR);if(!p)return;p.cmts=p.cmts||[];p.cmts.push({a:MENAME,t:v,at:Date.now()});saveFeed();$('cmtInput').value='';openCmt(CUR);render();}
 window.openCmt=openCmt;window.closeCmt=closeCmt;window.addCmt=addCmt;
 /* إنشاء منشور */
-function openCompose(){$('ta').value='';$('composeMask').classList.add('on');setTimeout(()=>$('ta').focus(),120);}
+function openCompose(){$('ta').value='';PENDING_IMG=null;$('imgPreview').innerHTML='';$('composeMask').classList.add('on');setTimeout(()=>$('ta').focus(),120);}
 function closeCompose(){$('composeMask').classList.remove('on');}
-function publish(){const v=$('ta').value.trim();if(!v)return;const m=v.match(/\$([A-Za-z]{2,10})/);const post={id:uid(),author:MENAME,handle:'@'+ME,vf:false,mine:true,t:Date.now(),text:v,tag:m?m[1].toUpperCase():null,likes:0,shares:0,cmts:[]};FEED.unshift(post);saveFeed();closeCompose();FILTER='new';document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('active',c.dataset.f==='new'));render();}
+function publish(){const v=$('ta').value.trim();if(!v&&!PENDING_IMG)return;const m=v.match(/\$([A-Za-z]{2,10})/);const post={id:uid(),author:MENAME,handle:'@'+ME,vf:false,mine:true,t:Date.now(),text:v,img:PENDING_IMG||null,tag:m?m[1].toUpperCase():null,likes:0,shares:0,cmts:[]};FEED.unshift(post);saveFeed();PENDING_IMG=null;closeCompose();FILTER='new';document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('active',c.dataset.f==='new'));render();}
 window.closeCompose=closeCompose;window.publish=publish;
 /* أحداث */
 $('fab').onclick=openCompose;
-$('tagrow').innerHTML=['BTC','ETH','APX','SOL','XRP','BNB'].map(t=>'<span class="tg" onclick="var a=document.getElementById(\'ta\');a.value+=(a.value&&!a.value.endsWith(\' \')?\' \':\'\')+\'$'+t+' \';a.focus();">$'+t+'</span>').join('');
+/* إرفاق صورة مع المنشور: نصغّر الصورة قبل الحفظ محلياً */
+function handleImg(file){if(!file)return;const rd=new FileReader();rd.onload=function(ev){const img=new Image();img.onload=function(){const mx=1000;let w=img.width,h=img.height;if(w>mx){h=Math.round(h*mx/w);w=mx;}const cv=document.createElement('canvas');cv.width=w;cv.height=h;cv.getContext('2d').drawImage(img,0,0,w,h);PENDING_IMG=cv.toDataURL('image/jpeg',0.82);$('imgPreview').innerHTML='<img src="'+PENDING_IMG+'"><button class="rm" onclick="removeImg()">\u00d7</button>';};img.src=ev.target.result;};rd.readAsDataURL(file);}
+function removeImg(){PENDING_IMG=null;$('imgPreview').innerHTML='';$('imgInput').value='';}
+window.removeImg=removeImg;
+$('imgInput').addEventListener('change',e=>{handleImg(e.target.files&&e.target.files[0]);});
 $('chips').addEventListener('click',e=>{const b=e.target.closest('.chip');if(!b)return;document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));b.classList.add('active');FILTER=b.dataset.f;render();});
 $('q').addEventListener('input',e=>{QSTR=e.target.value.trim();render();});
 [$('composeMask'),$('cmtMask')].forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('on');}));

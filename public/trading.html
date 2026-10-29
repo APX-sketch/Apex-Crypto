@@ -360,6 +360,27 @@ html,body{margin:0;background:#05070a;color:var(--txt);font-family:'Segoe UI',Ta
 .ob-row .ob-p,.ob-row .ob-q{flex:1}
 .ob-row .ob-q{text-align:end}
 .mk-empty{padding:24px;text-align:center;color:var(--mut);font-size:12px}
+/* ===== دفتر الأوامر — مظهر احترافي ===== */
+.ob-head{display:flex;color:var(--mut);font-size:10px;padding:2px 10px 5px;font-weight:700}
+.ob-head span{flex:1}.ob-head span:nth-child(2){text-align:center}.ob-head span:last-child{text-align:end}
+.ob-row{position:relative;display:flex;align-items:center;font-size:11.5px;padding:3px 10px;font-weight:600;cursor:pointer;transition:background .1s}
+.ob-row:hover{background:rgba(255,255,255,.045)}
+.ob-row .ob-p,.ob-row .ob-q,.ob-row .ob-t{z-index:1;flex:1;font-variant-numeric:tabular-nums}
+.ob-row .ob-p{text-align:start;font-weight:700}
+.ob-row .ob-q{text-align:center;color:var(--mut)}
+.ob-row .ob-t{text-align:end;color:var(--mut);opacity:.82}
+.ob-row .ob-bg{position:absolute;top:0;bottom:0;inset-inline-end:0;opacity:.2;border-radius:3px 0 0 3px}
+.ob-row.bid .ob-p{color:var(--green)}.ob-row.bid .ob-bg{background:linear-gradient(270deg,rgba(14,203,129,.55),transparent)}
+.ob-row.ask .ob-p{color:var(--red)}.ob-row.ask .ob-bg{background:linear-gradient(270deg,rgba(246,70,93,.55),transparent)}
+.ob-mid{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-block:1px solid var(--line);margin:4px 0;background:var(--card2,#1a1d26)}
+.ob-mid .obm-px{font-size:17px;font-weight:900;font-variant-numeric:tabular-nums}
+.ob-mid.up .obm-px{color:var(--green)}.ob-mid.down .obm-px{color:var(--red)}
+.ob-mid .obm-sp{font-size:10.5px;color:var(--mut);font-weight:700}
+/* ===== مخطط العمق ===== */
+.dpchart{padding:8px 6px 2px}
+.dpchart svg{width:100%;height:160px;display:block}
+.dp-axis{display:flex;justify-content:space-between;font-size:10px;color:var(--mut);padding:5px 6px 2px;font-variant-numeric:tabular-nums;font-weight:700}
+.dp-axis .up{color:var(--green)}.dp-axis .down{color:var(--red)}
 /* ===== شريط أقسام التداول (تحويل/فوري/أسهم/توقع + القائمة) ===== */
 .ttabs{display:flex;align-items:center;gap:4px;padding:8px 10px;border-bottom:1px solid var(--line);background:var(--bg);overflow-x:auto;scrollbar-width:none}
 .ttabs::-webkit-scrollbar{display:none}
@@ -2150,16 +2171,34 @@ function pickMkt(k){curMkt=k;var tabs=document.querySelectorAll('.mkt-tab');[].s
   renderMkt();}
 function renderMkt(){if(curMkt==='book')renderMkBook();else if(curMkt==='depth')renderMkDepth();else if(curMkt==='trades')renderMkTrades();else if(curMkt==='grid')renderGrid();}
 function renderMkBook(){var el=$('mkBook');if(!el)return;if(!lastBook||!lastBook.asks){el.innerHTML='<div class="mk-empty">جارٍ تحميل دفتر الأوامر...</div>';return;}
-  var dd=pdec(mark);var asks=lastBook.asks.slice(0,10).reverse(),bids=lastBook.bids.slice(0,10);
-  var maxQ=Math.max.apply(null,asks.concat(bids).map(function(x){return +x[1];}))||1;
-  function row(x,cls){return '<div class="ob-row '+cls+'" onclick="fillPrice('+(+x[0])+')"><span class="ob-bg" style="width:'+(+x[1]/maxQ*100).toFixed(0)+'%"></span><span class="ob-p">'+fmt(+x[0],dd)+'</span><span class="ob-q">'+fmt(+x[1],4)+'</span></div>';}
-  el.innerHTML='<div class="ob-head"><span>السعر('+quoteCcy()+')</span><span>الكمية('+cur.b+')</span></div>'+asks.map(function(a){return row(a,'ask');}).join('')+'<div class="ob-mid '+(lastUp?'up':'down')+'">'+fmt(mark,dd)+'</div>'+bids.map(function(b){return row(b,'bid');}).join('');}
-function renderMkDepth(){var el=$('mkDepth');if(!el)return;if(!lastBook||!lastBook.asks){el.innerHTML='<div class="mk-empty">جارٍ التحميل...</div>';return;}
-  var dd=pdec(mark);var bids=lastBook.bids.slice(0,20),asks=lastBook.asks.slice(0,20);
-  var cb=0,ca=0,bb=[],aa=[];bids.forEach(function(x){cb+=+x[1];bb.push({p:+x[0],c:cb});});asks.forEach(function(x){ca+=+x[1];aa.push({p:+x[0],c:ca});});
-  var mx=Math.max(cb,ca)||1;
-  var html='<div class="dp-wrap"><div class="dp-col bids">'+bb.map(function(o){return '<div class="dp-row"><span class="dp-bg" style="width:'+(o.c/mx*100).toFixed(0)+'%"></span><span class="dp-p up">'+fmt(o.p,dd)+'</span><span class="dp-c">'+fmt(o.c,3)+'</span></div>';}).join('')+'</div><div class="dp-col asks">'+aa.map(function(o){return '<div class="dp-row"><span class="dp-bg ask" style="width:'+(o.c/mx*100).toFixed(0)+'%"></span><span class="dp-p down">'+fmt(o.p,dd)+'</span><span class="dp-c">'+fmt(o.c,3)+'</span></div>';}).join('')+'</div></div>';
-  el.innerHTML=html;}
+  var dd=pdec(mark);var N=10;
+  var asks=lastBook.asks.slice(0,N),bids=lastBook.bids.slice(0,N);
+  var ca=0,cb=0,aCum=[],bCum=[];
+  asks.forEach(function(x){ca+=+x[1];aCum.push(ca);});
+  bids.forEach(function(x){cb+=+x[1];bCum.push(cb);});
+  var maxCum=Math.max(ca,cb)||1;
+  function cmp(v){v=+v;if(v>=1e6)return (v/1e6).toFixed(2)+'M';if(v>=1e3)return (v/1e3).toFixed(2)+'K';return v.toFixed(3);}
+  function row(x,cum,cls){var w=(cum/maxCum*100).toFixed(1);return '<div class="ob-row '+cls+'" onclick="fillPrice('+(+x[0])+')"><span class="ob-bg" style="width:'+w+'%"></span><span class="ob-p">'+fmt(+x[0],dd)+'</span><span class="ob-q">'+fmt(+x[1],4)+'</span><span class="ob-t">'+cmp(cum)+'</span></div>';}
+  var asksHtml='';for(var i=asks.length-1;i>=0;i--){asksHtml+=row(asks[i],aCum[i],'ask');}
+  var bidsHtml='';for(var j=0;j<bids.length;j++){bidsHtml+=row(bids[j],bCum[j],'bid');}
+  var bestAsk=asks.length?+asks[0][0]:mark,bestBid=bids.length?+bids[0][0]:mark;
+  var spread=bestAsk-bestBid,spPct=bestBid>0?(spread/bestBid*100):0;
+  el.innerHTML='<div class="ob-head"><span>السعر('+quoteCcy()+')</span><span>الكمية('+cur.b+')</span><span>الإجمالي</span></div>'+asksHtml+'<div class="ob-mid '+(lastUp?'up':'down')+'"><span class="obm-px">'+(lastUp?'▲':'▼')+' '+fmt(mark,dd)+'</span><span class="obm-sp">السبريد '+fmt(spread,dd)+' ('+spPct.toFixed(2)+'٪)</span></div>'+bidsHtml;}
+function renderMkDepth(){var el=$('mkDepth');if(!el)return;if(!lastBook||!lastBook.asks||!lastBook.bids){el.innerHTML='<div class="mk-empty">جارٍ التحميل...</div>';return;}
+  var dd=pdec(mark);var bidsR=lastBook.bids.slice(0,30),asksR=lastBook.asks.slice(0,30);
+  var cb=0,ca=0,bb=[],aa=[];bidsR.forEach(function(x){cb+=+x[1];bb.push({p:+x[0],c:cb});});asksR.forEach(function(x){ca+=+x[1];aa.push({p:+x[0],c:ca});});
+  if(!bb.length||!aa.length){el.innerHTML='<div class="mk-empty">جارٍ التحميل...</div>';return;}
+  var mx=Math.max(cb,ca)||1,W=320,H=160,pad=16;
+  var loP=bb[bb.length-1].p,hiP=aa[aa.length-1].p,span=(hiP-loP)||1;
+  function X(p){return (pad+((p-loP)/span)*(W-2*pad)).toFixed(1);}
+  function Y(c){return (H-pad-(c/mx)*(H-2*pad)).toFixed(1);}
+  var bAsc=bb.slice().reverse();
+  var bPts=bAsc.map(function(o){return X(o.p)+','+Y(o.c);});
+  var bPoly=X(bAsc[0].p)+','+(H-pad)+' '+bPts.join(' ')+' '+X(bAsc[bAsc.length-1].p)+','+(H-pad);
+  var aPts=aa.map(function(o){return X(o.p)+','+Y(o.c);});
+  var aPoly=X(aa[0].p)+','+(H-pad)+' '+aPts.join(' ')+' '+X(aa[aa.length-1].p)+','+(H-pad);
+  var midX=X(mark);
+  el.innerHTML='<div class="dpchart"><svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none"><defs><linearGradient id="gBid" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0ecb81" stop-opacity=".45"/><stop offset="1" stop-color="#0ecb81" stop-opacity="0"/></linearGradient><linearGradient id="gAsk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f6465d" stop-opacity=".45"/><stop offset="1" stop-color="#f6465d" stop-opacity="0"/></linearGradient></defs><polygon points="'+bPoly+'" fill="url(#gBid)" stroke="#0ecb81" stroke-width="1.6"/><polygon points="'+aPoly+'" fill="url(#gAsk)" stroke="#f6465d" stroke-width="1.6"/><line x1="'+midX+'" y1="'+pad+'" x2="'+midX+'" y2="'+(H-pad)+'" stroke="#8a94a3" stroke-width="1" stroke-dasharray="3 3"/></svg><div class="dp-axis"><span class="up">'+fmt(loP,dd)+'</span><span class="mid">'+fmt(mark,dd)+'</span><span class="down">'+fmt(hiP,dd)+'</span></div></div>';}
 function renderMkTrades(){var el=$('mkTrades');if(!el)return;if(!tape.length){el.innerHTML='<div class="mk-empty">لا توجد تداولات بعد</div>';return;}
   var dd=pdec(mark);el.innerHTML='<div class="tr-head"><span>السعر('+quoteCcy()+')</span><span>الكمية('+cur.b+')</span><span>الوقت</span></div>'+tape.slice(0,30).map(function(x){return '<div class="tr-row"><span class="'+(x.buy?'up':'down')+'">'+fmt(x.p,dd)+'</span><span>'+fmt(x.q,qdec())+'</span><span class="tr-t">'+timeStr(x.t)+'</span></div>';}).join('');}
 /* ===== (5) التداول بالشبكة (Grid) — محلي عبر localStorage ===== */
