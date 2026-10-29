@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<script>
+(function(){try{var s=JSON.parse(localStorage.getItem('skygo_session')||'null');if(!s||!s.email){location.replace('login.html?next=square.html');}}catch(e){location.replace('login.html');}})();
+</script>
+<meta charset="UTF-8">
+<script src="i18n.js"></script>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Apex — Square</title>
+<style>
+:root{--bg:#0b0e11;--panel:#141920;--panel2:#1c232c;--border:#252d38;--txt:#eef2f6;--muted:#8a94a3;--gold1:#f8d979;--gold2:#e0a615;--green:#0ecb81;--red:#f6465d;}
+html[data-theme=light]{--bg:#f6f8fb;--panel:#ffffff;--panel2:#eef1f6;--border:#e2e7ef;--txt:#0d1421;--muted:#6b7686;}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);color:var(--txt);max-width:480px;margin:0 auto;padding-bottom:76px;min-height:100vh;position:relative;overflow-x:hidden}
+.hdr{display:flex;align-items:center;gap:10px;padding:calc(12px + env(safe-area-inset-top)) 14px 10px;background:linear-gradient(135deg,#1b1f24,#0f1216);position:sticky;top:0;z-index:20;border-bottom:1px solid var(--border)}
+html[data-theme=light] .hdr{background:linear-gradient(135deg,#fff,#eef1f6)}
+.hdr .brand{font-size:20px;font-weight:900;letter-spacing:.5px}
+.hdr .brand b{background:linear-gradient(90deg,var(--gold1),var(--gold2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.hsearch{flex:1;display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--border);border-radius:11px;padding:0 12px;height:36px}
+.hsearch svg{width:15px;height:15px;stroke:var(--muted);fill:none;stroke-width:2}
+.hsearch input{flex:1;background:none;border:0;color:var(--txt);font-family:inherit;font-size:13px;outline:none}
+.hsearch input::placeholder{color:#5c6675}
+.chips{display:flex;gap:8px;padding:12px 14px;overflow-x:auto;scrollbar-width:none;border-bottom:1px solid var(--border)}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:0 0 auto;padding:7px 15px;border-radius:999px;background:var(--panel);border:1px solid var(--border);color:var(--muted);font-size:12.5px;font-weight:800;cursor:pointer;white-space:nowrap;font-family:inherit}
+.chip.active{background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#231a02;border-color:transparent}
+.feed{padding:4px 0}
+.post{padding:14px;border-bottom:8px solid rgba(0,0,0,.18)}
+html[data-theme=light] .post{border-bottom:8px solid #e9edf3}
+.phead{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+.av{width:42px;height:42px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:17px;color:#fff}
+.who{flex:1;min-width:0}
+.who b{font-size:14px;font-weight:800;display:flex;align-items:center;gap:4px}
+.who b .vf{width:14px;height:14px;fill:var(--gold2)}
+.who span{font-size:11.5px;color:var(--muted);display:block}
+.follow{flex:0 0 auto;padding:6px 14px;border-radius:999px;border:1px solid var(--gold2);background:none;color:var(--gold2);font-size:12px;font-weight:800;cursor:pointer;font-family:inherit}
+.follow.on{background:var(--panel2);border-color:var(--border);color:var(--muted)}
+.ptext{font-size:14px;line-height:1.75;white-space:pre-wrap;word-break:break-word}
+.ptext .cashtag{color:var(--gold2);font-weight:800}
+.ptext .up{color:var(--green);font-weight:800}
+.ptext .dn{color:var(--red);font-weight:800}
+.pimg{margin-top:10px;width:100%;border-radius:12px;display:block}
+.pchart{margin-top:10px;height:120px;border-radius:12px;background:linear-gradient(180deg,rgba(14,203,129,.12),transparent);border:1px solid var(--border);display:flex;align-items:flex-end;gap:3px;padding:10px;overflow:hidden}
+.pchart i{flex:1;border-radius:2px 2px 0 0;background:linear-gradient(180deg,var(--green),rgba(14,203,129,.35))}
+</style>
+</head>
+<body>
+<style>
+.pacts{display:flex;align-items:center;gap:18px;margin-top:12px;color:var(--muted)}
+.pact{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12.5px;font-weight:700}
+.pact svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.8}
+.pact.liked{color:var(--red)}
+.pact.liked svg{fill:var(--red);stroke:var(--red)}
+.pact.shared{color:var(--green)}
+/* FAB */
+.fab{position:fixed;bottom:calc(86px + env(safe-area-inset-bottom));left:50%;transform:translateX(calc(-50% - 180px));
+  width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,var(--gold1),var(--gold2));border:0;color:#231a02;
+  font-size:30px;font-weight:900;cursor:pointer;z-index:40;box-shadow:0 8px 22px rgba(224,166,21,.45);display:flex;align-items:center;justify-content:center}
+@media(max-width:470px){.fab{left:auto;right:18px;transform:none}}
+/* modal / sheet */
+.mask{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:50;display:none;align-items:flex-end;justify-content:center}
+.mask.on{display:flex}
+.sheet{width:100%;max-width:480px;background:var(--panel);border-radius:18px 18px 0 0;border:1px solid var(--border);border-bottom:0;padding:16px 16px calc(16px + env(safe-area-inset-bottom));max-height:88vh;overflow:auto;animation:up .22s ease}
+@keyframes up{from{transform:translateY(40px);opacity:.4}to{transform:translateY(0);opacity:1}}
+.sheet h3{font-size:16px;font-weight:900;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between}
+.sheet h3 .x{cursor:pointer;color:var(--muted);font-size:22px;line-height:1}
+.ta{width:100%;min-height:120px;background:var(--panel2);border:1px solid var(--border);border-radius:12px;padding:12px;color:var(--txt);font-family:inherit;font-size:14px;line-height:1.7;outline:none;resize:vertical}
+.ta::placeholder{color:#5c6675}
+.tagrow{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.tg{padding:6px 12px;border-radius:999px;background:var(--panel2);border:1px solid var(--border);color:var(--gold2);font-size:12.5px;font-weight:800;cursor:pointer}
+.btn{width:100%;padding:13px;border-radius:12px;border:0;background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#231a02;font-size:15px;font-weight:900;cursor:pointer;font-family:inherit}
+.btn:disabled{opacity:.5}
+.cmt{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+.cmt .av{width:34px;height:34px;font-size:14px}
+.cmt .cb{flex:1}
+.cmt .cb b{font-size:13px}
+.cmt .cb p{font-size:13px;color:var(--txt);line-height:1.6;margin-top:2px}
+.cmt .cb span{font-size:10.5px;color:var(--muted)}
+.cmtbar{display:flex;gap:8px;margin-top:12px}
+.cmtbar input{flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:999px;padding:0 14px;height:40px;color:var(--txt);font-family:inherit;font-size:13px;outline:none}
+.cmtbar button{flex:0 0 auto;padding:0 16px;border-radius:999px;border:0;background:var(--gold2);color:#231a02;font-weight:900;cursor:pointer;font-family:inherit}
+.bnav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;display:grid;grid-template-columns:repeat(6,1fr);background:#0f1216;border-top:1px solid var(--border);padding:8px 0 calc(8px + env(safe-area-inset-bottom));z-index:30}
+html[data-theme=light] .bnav{background:#fff}
+.bnav a{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--muted);text-decoration:none;font-size:10px;font-weight:700}
+.bnav a svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8}
+.bnav a.active{color:var(--gold2)}
+</style>
+<div class="hdr">
+  <div class="brand">Apex<b>Square</b></div>
+  <div class="hsearch">
+    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+    <input id="q" type="text" placeholder="ابحث في الأخبار والمنشورات...">
+  </div>
+</div>
+<div class="chips" id="chips">
+  <button class="chip active" data-f="hot">🔥 الرائج</button>
+  <button class="chip" data-f="new">الأحدث</button>
+  <button class="chip" data-f="news">📰 الأخبار</button>
+  <button class="chip" data-f="mine">منشوراتي</button>
+</div>
+<div class="feed" id="feed"></div>
+<button class="fab" id="fab" aria-label="منشور جديد">+</button>
+<!-- COMPOSE MODAL -->
+<div class="mask" id="composeMask">
+  <div class="sheet">
+    <h3>منشور جديد <span class="x" onclick="closeCompose()">×</span></h3>
+    <textarea class="ta" id="ta" placeholder="شارك خبراً أو تحليلاً أو رأيك في السوق... استخدم $BTC لذكر عملة"></textarea>
+    <div class="tagrow" id="tagrow"></div>
+    <button class="btn" id="pubBtn" onclick="publish()">نشر</button>
+  </div>
+</div>
+<!-- COMMENTS SHEET -->
+<div class="mask" id="cmtMask">
+  <div class="sheet">
+    <h3>التعليقات <span class="x" onclick="closeCmt()">×</span></h3>
+    <div id="cmtList"></div>
+    <div class="cmtbar"><input id="cmtInput" placeholder="أضف تعليقاً..."><button onclick="addCmt()">إرسال</button></div>
+  </div>
+</div>
+<nav class="bnav">
+  <a href="index.html"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h14V10"/></svg><span>الرئيسية</span></a>
+  <a href="markets.html"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M21 7v5h-5"/></svg><span>الأسواق</span></a>
+  <a href="trading.html"><svg viewBox="0 0 24 24"><path d="M7 8h13l-3-3M17 16H4l3 3"/></svg><span>التداول</span></a>
+  <a href="futures.html"><svg viewBox="0 0 24 24"><path d="M3 3v18h18M8 14l3-3 3 3 4-5"/></svg><span>عقود آجلة</span></a>
+  <a href="square.html" class="active"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg><span>Square</span></a>
+  <a href="wallet.html"><svg viewBox="0 0 24 24"><path d="M3 7h16a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2zM16 13h.01"/></svg><span>المحفظة</span></a>
+</nav>
+<script>
+const $=id=>document.getElementById(id);
+const SESS=JSON.parse(localStorage.getItem('skygo_session')||'{}');
+const ME=(SESS.email||'').split('@')[0]||'trader';
+const MENAME=SESS.name||ME;
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+const AVC=['#e0a615','#2f83fb','#e256c9','#0ecb81','#f6465d','#7c3aed','#ff7a45','#11b5c9'];
+function avColor(s){let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return AVC[h%AVC.length];}
+function avatar(name,cls){const c=avColor(name||'?');return '<div class="av'+(cls?' '+cls:'')+'" style="background:'+c+'">'+esc((name||'?').charAt(0).toUpperCase())+'</div>';}
+function timeAgo(t){const s=Math.floor((Date.now()-t)/1000);if(s<60)return 'الآن';if(s<3600)return Math.floor(s/60)+' د';if(s<86400)return Math.floor(s/3600)+' س';return Math.floor(s/86400)+' ي';}
+const VBADGE='<svg class="vf" viewBox="0 0 24 24"><path d="M12 2l2.4 2.1 3.1-.5 1 3 2.9 1.3-1 3 1 3-2.9 1.3-1 3-3.1-.5L12 22l-2.4-2.1-3.1.5-1-3L2.6 15.5l1-3-1-3 2.9-1.3 1-3 3.1.5z"/></svg>';
+/* ===== التخزين ===== */
+const FEEDKEY='apex_squarefeed_v1';
+const LIKEKEY='apex_sqlike_'+ME;
+function uid(){return 'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+function loadFeed(){try{const a=JSON.parse(localStorage.getItem(FEEDKEY)||'null');if(Array.isArray(a))return a;}catch(e){}return seed();}
+function saveFeed(){localStorage.setItem(FEEDKEY,JSON.stringify(FEED));}
+function loadLikes(){try{return JSON.parse(localStorage.getItem(LIKEKEY)||'[]');}catch(e){return[];}}
+function saveLikes(){localStorage.setItem(LIKEKEY,JSON.stringify(MYLIKES));}
+function seed(){const now=Date.now();return [
+  {id:uid(),author:'BlockchainMafiaaa',handle:'@mafia_signals',vf:true,t:now-1000*60*18,text:'$BTC كسر مقاومة 80K بوضوح 🚀 الهدف القادم 84K إذا ثبت فوق هالمستوى. من كان ينتظر تأكيد — هذا هو. السيولة تدخل بقوة.',chart:[30,42,38,55,60,52,70,78,74,88,95],tag:'BTC',likes:214,shares:38,cmts:[{a:'Abu Fahad',t:'تحليل ممتاز، أنا داخل من 79.2',at:now-1000*60*9}]},
+  {id:uid(),author:'Abu Fahad',handle:'@abufahad_crypto',vf:false,t:now-1000*60*52,text:'تذكير مهم ⚠️ لا تطارد الشمعة الخضراء. $ETH عند مقاومة قوية، انتظروا إعادة اختبار 3100 قبل الدخول. إدارة رأس المال أهم من التوقّع.',tag:'ETH',likes:97,shares:12,cmts:[]},
+  {id:uid(),author:'Apex News',handle:'@apex_news',vf:true,t:now-1000*60*120,text:'📰 عاجل: ارتفاع حجم التداول على منصّة Apex بنسبة 34% خلال 24 ساعة مع إطلاق صفحة Square الجديدة. $APX يسجّل أعلى سيولة منذ الإدراج.',tag:'APX',likes:356,shares:71,news:true,cmts:[{a:'CryptoLina',t:'أخيراً صار في مجتمع داخل المنصة 🔥',at:now-1000*60*80}]},
+  {id:uid(),author:'CryptoLina',handle:'@lina_charts',vf:false,t:now-1000*60*200,text:'$SOL يبني قاعدة جميلة على الفريم اليومي. الحجم يتراكم بهدوء. صبر = أرباح. ليس نصيحة استثمارية.',tag:'SOL',chart:[40,38,44,41,48,46,52,50,58,62,66],likes:143,shares:20,cmts:[]}
+];}
+let FEED=loadFeed();let MYLIKES=loadLikes();let FILTER='hot',QSTR='',CUR=null;
+</script>
+<script>
+function fmtText(s){
+  s=esc(s);
+  s=s.replace(/\$([A-Za-z]{2,10})/g,'<span class="cashtag">$$$1</span>');
+  return s;
+}
+function chartHtml(arr){if(!arr||!arr.length)return '';const mx=Math.max.apply(null,arr)||1;return '<div class="pchart">'+arr.map(v=>'<i style="height:'+Math.max(8,v/mx*100)+'%"></i>').join('')+'</div>';}
+function heart(f){return '<svg viewBox="0 0 24 24"><path d="M12 21s-7-4.5-9.5-9A5 5 0 0112 5a5 5 0 019.5 7c-2.5 4.5-9.5 9-9.5 9z"/></svg>';}
+function listFor(){
+  let out=FEED.slice();
+  if(FILTER==='new')out.sort((a,b)=>b.t-a.t);
+  else if(FILTER==='hot')out.sort((a,b)=>(b.likes+b.shares*2)-(a.likes+a.shares*2));
+  else if(FILTER==='news')out=out.filter(p=>p.news);
+  else if(FILTER==='mine')out=out.filter(p=>p.handle==='@'+ME||p.mine);
+  if(QSTR){const s=QSTR.toLowerCase();out=out.filter(p=>p.text.toLowerCase().includes(s)||(p.author||'').toLowerCase().includes(s));}
+  return out;
+}
+function render(){
+  const feed=$('feed');const list=listFor();
+  if(!list.length){feed.innerHTML='<div style="padding:54px 24px;text-align:center;color:var(--muted)"><div style="font-size:40px;margin-bottom:10px">📝</div><b style="display:block;color:var(--txt);margin-bottom:6px">لا منشورات بعد</b><p style="font-size:12.5px">كن أول من ينشر خبراً — اضغط زر +</p></div>';return;}
+  feed.innerHTML=list.map(p=>{
+    const liked=MYLIKES.includes(p.id);
+    return '<div class="post">'+
+      '<div class="phead">'+avatar(p.author)+
+      '<div class="who"><b>'+esc(p.author)+(p.vf?VBADGE:'')+'</b><span>'+esc(p.handle)+' • '+timeAgo(p.t)+'</span></div></div>'+
+      '<div class="ptext">'+fmtText(p.text)+'</div>'+
+      (p.chart?chartHtml(p.chart):'')+
+      '<div class="pacts">'+
+        '<div class="pact like'+(liked?' liked':'')+'" onclick="like(\''+p.id+'\')">'+heart()+'<span>'+(p.likes||0)+'</span></div>'+
+        '<div class="pact" onclick="openCmt(\''+p.id+'\')"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg><span>'+((p.cmts&&p.cmts.length)||0)+'</span></div>'+
+        '<div class="pact" onclick="share(\''+p.id+'\')"><svg viewBox="0 0 24 24"><path d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7M16 6l-4-4-4 4M12 2v14"/></svg><span>'+(p.shares||0)+'</span></div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+function like(id){const p=FEED.find(x=>x.id===id);if(!p)return;const i=MYLIKES.indexOf(id);if(i>=0){MYLIKES.splice(i,1);p.likes=Math.max(0,(p.likes||1)-1);}else{MYLIKES.push(id);p.likes=(p.likes||0)+1;}saveLikes();saveFeed();render();}
+function share(id){const p=FEED.find(x=>x.id===id);if(!p)return;p.shares=(p.shares||0)+1;saveFeed();render();if(navigator.share){navigator.share({title:'Apex Square',text:p.text}).catch(()=>{});}}
+window.like=like;window.share=share;
+/* تعليقات */
+function openCmt(id){CUR=id;const p=FEED.find(x=>x.id===id);const box=$('cmtList');const cs=(p&&p.cmts)||[];
+  box.innerHTML=cs.length?cs.map(c=>'<div class="cmt">'+avatar(c.a,'av')+'<div class="cb"><b>'+esc(c.a)+'</b><p>'+fmtText(c.t||c.text||'')+'</p><span>'+timeAgo(c.at||Date.now())+'</span></div></div>').join(''):'<div style="color:var(--muted);text-align:center;padding:20px 0;font-size:13px">لا تعليقات بعد — كن الأول</div>';
+  $('cmtMask').classList.add('on');}
+function closeCmt(){$('cmtMask').classList.remove('on');}
+function addCmt(){const v=$('cmtInput').value.trim();if(!v||!CUR)return;const p=FEED.find(x=>x.id===CUR);if(!p)return;p.cmts=p.cmts||[];p.cmts.push({a:MENAME,t:v,at:Date.now()});saveFeed();$('cmtInput').value='';openCmt(CUR);render();}
+window.openCmt=openCmt;window.closeCmt=closeCmt;window.addCmt=addCmt;
+/* إنشاء منشور */
+function openCompose(){$('ta').value='';$('composeMask').classList.add('on');setTimeout(()=>$('ta').focus(),120);}
+function closeCompose(){$('composeMask').classList.remove('on');}
+function publish(){const v=$('ta').value.trim();if(!v)return;const m=v.match(/\$([A-Za-z]{2,10})/);const post={id:uid(),author:MENAME,handle:'@'+ME,vf:false,mine:true,t:Date.now(),text:v,tag:m?m[1].toUpperCase():null,likes:0,shares:0,cmts:[]};FEED.unshift(post);saveFeed();closeCompose();FILTER='new';document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('active',c.dataset.f==='new'));render();}
+window.closeCompose=closeCompose;window.publish=publish;
+/* أحداث */
+$('fab').onclick=openCompose;
+$('tagrow').innerHTML=['BTC','ETH','APX','SOL','XRP','BNB'].map(t=>'<span class="tg" onclick="var a=document.getElementById(\'ta\');a.value+=(a.value&&!a.value.endsWith(\' \')?\' \':\'\')+\'$'+t+' \';a.focus();">$'+t+'</span>').join('');
+$('chips').addEventListener('click',e=>{const b=e.target.closest('.chip');if(!b)return;document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));b.classList.add('active');FILTER=b.dataset.f;render();});
+$('q').addEventListener('input',e=>{QSTR=e.target.value.trim();render();});
+[$('composeMask'),$('cmtMask')].forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('on');}));
+render();
+</script>
+</body>
+</html>
