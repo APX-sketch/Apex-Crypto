@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<script>
+(function(){try{var s=JSON.parse(localStorage.getItem('skygo_session')||'null');if(!s||!s.email){location.replace('login.html?next=copy.html');}}catch(e){location.replace('login.html');}})();
+</script>
+<meta charset="UTF-8">
+<script src="i18n.js"></script>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Apex — نسخ التداول</title>
+<style>
+:root{--bg:#0b0e11;--panel:#141920;--panel2:#1c232c;--border:#252d38;--txt:#eef2f6;--muted:#8a94a3;--gold1:#f8d979;--gold2:#e0a615;--green:#0ecb81;--red:#f6465d}
+html[data-theme=light]{--bg:#f6f8fb;--panel:#ffffff;--panel2:#eef1f6;--border:#e2e7ef;--txt:#0d1421;--muted:#6b7686;}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);color:var(--txt);max-width:480px;margin:0 auto;min-height:100vh;position:relative;overflow-x:hidden;padding-bottom:80px}
+.hdr{display:flex;align-items:center;gap:10px;padding:calc(12px + env(safe-area-inset-top)) 14px 12px;background:linear-gradient(135deg,#1b1f24,#0f1216);position:sticky;top:0;z-index:20;border-bottom:1px solid var(--border)}
+html[data-theme=light] .hdr{background:linear-gradient(135deg,#ffffff,#eef1f6)}
+.icobtn{width:38px;height:38px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:var(--panel2);border:1px solid var(--border);border-radius:11px;cursor:pointer;color:var(--txt)}
+.icobtn svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:2}
+.hdr h1{flex:1;font-size:17px;font-weight:900}
+.tabs{display:flex;gap:6px;padding:12px 14px 4px}
+.tab{flex:1;text-align:center;padding:10px 0;border-radius:11px;background:var(--panel);border:1px solid var(--border);color:var(--muted);font-weight:800;font-size:13px;cursor:pointer;font-family:inherit}
+.tab.on{background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#231a02;border-color:transparent}
+.hero{margin:12px 14px;padding:16px;border-radius:16px;background:linear-gradient(120deg,#1e2530,#141920);border:1px solid var(--border)}
+html[data-theme=light] .hero{background:linear-gradient(120deg,#fff,#eef1f6)}
+.hero b{display:block;font-size:15px;font-weight:900;margin-bottom:5px}
+.hero p{font-size:12px;color:var(--muted);line-height:1.6}
+.hero .row{display:flex;gap:10px;margin-top:12px}
+.hero .st{flex:1;background:var(--panel2);border-radius:12px;padding:10px;text-align:center}
+.hero .st b{font-size:16px;color:var(--gold2);margin:0}
+.hero .st span{font-size:10px;color:var(--muted)}
+.wrap{padding:4px 14px}
+.sortrow{display:flex;gap:7px;overflow-x:auto;padding:8px 14px;scrollbar-width:none}
+.sortrow::-webkit-scrollbar{display:none}
+.sortrow button{flex:0 0 auto;border:1px solid var(--border);background:var(--panel);color:var(--muted);font-family:inherit;font-weight:800;font-size:11.5px;padding:7px 13px;border-radius:999px;cursor:pointer;white-space:nowrap}
+.sortrow button.on{border-color:var(--gold2);color:var(--gold2);background:rgba(224,166,21,.08)}
+.tcard{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:14px;margin-bottom:12px}
+.tc-top{display:flex;align-items:center;gap:11px;margin-bottom:12px}
+.tc-av{width:46px;height:46px;border-radius:14px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:19px;color:#231a02}
+.tc-nm{flex:1;min-width:0}
+.tc-nm b{font-size:15px;font-weight:900;display:flex;align-items:center;gap:6px}
+.tc-nm .vrf{color:var(--gold2);font-size:13px}
+.tc-nm span{font-size:11px;color:var(--muted);display:block;margin-top:2px}
+.badge{display:inline-block;font-size:9.5px;font-weight:800;padding:2px 7px;border-radius:6px;margin-inline-start:4px}
+.badge.low{background:rgba(14,203,129,.15);color:var(--green)}
+.badge.mid{background:rgba(224,166,21,.15);color:var(--gold2)}
+.badge.high{background:rgba(246,70,93,.15);color:var(--red)}
+.tc-roi{text-align:end;flex:0 0 auto}
+.tc-roi b{font-size:20px;font-weight:900;color:var(--green);display:block;direction:ltr}
+.tc-roi span{font-size:10px;color:var(--muted)}
+.tc-chart{height:56px;margin:4px 0 12px}
+.tc-chart svg{width:100%;height:56px;display:block}
+.tc-stats{display:flex;gap:4px;margin-bottom:12px}
+.tc-stats .s{flex:1;text-align:center}
+.tc-stats .s b{font-size:13px;font-weight:900;display:block}
+.tc-stats .s span{font-size:10px;color:var(--muted)}
+.tc-btn{width:100%;border:0;border-radius:12px;font-family:inherit;font-weight:900;font-size:14px;padding:12px 0;cursor:pointer;background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#231a02}
+.tc-btn:active{transform:scale(.98)}
+.tc-btn.copying{background:var(--panel2);color:var(--muted);border:1px solid var(--border)}
+.empty{padding:54px 24px;text-align:center;color:var(--muted)}
+.empty .big{font-size:40px;margin-bottom:10px}
+.empty b{display:block;color:var(--txt);font-size:15px;margin-bottom:6px}
+.empty p{font-size:12.5px;line-height:1.7}
+/* my copies */
+.mc{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:14px;margin-bottom:12px}
+.mc-top{display:flex;align-items:center;gap:11px}
+.mc-top .tc-av{width:40px;height:40px;font-size:16px;border-radius:12px}
+.mc-top .nm{flex:1}
+.mc-top .nm b{font-size:14px;font-weight:900}
+.mc-top .nm span{font-size:11px;color:var(--muted)}
+.mc-pnl{text-align:end}
+.mc-pnl b{font-size:16px;font-weight:900;direction:ltr;display:block}
+.mc-pnl.up b{color:var(--green)}.mc-pnl.dn b{color:var(--red)}
+.mc-pnl span{font-size:10px;color:var(--muted)}
+.mc-info{display:flex;gap:4px;margin:12px 0}
+.mc-info .s{flex:1;text-align:center;background:var(--panel2);border-radius:10px;padding:8px 4px}
+.mc-info .s b{font-size:13px;font-weight:900;display:block}
+.mc-info .s span{font-size:9.5px;color:var(--muted)}
+.mc-stop{width:100%;border:1px solid var(--red);background:rgba(246,70,93,.1);color:var(--red);border-radius:11px;font-family:inherit;font-weight:800;font-size:13px;padding:10px 0;cursor:pointer}
+/* modal */
+.mdl{position:fixed;inset:0;z-index:999;display:none;background:rgba(0,0,0,.55);backdrop-filter:blur(3px)}
+.mdl.on{display:block}
+.mdl-sheet{position:absolute;left:0;right:0;bottom:0;max-width:480px;margin:0 auto;background:var(--panel);border-top-left-radius:22px;border-top-right-radius:22px;padding:20px 18px calc(26px + env(safe-area-inset-bottom));box-shadow:0 -8px 30px rgba(0,0,0,.4)}
+.mdl-grip{width:42px;height:4px;border-radius:4px;background:var(--border);margin:0 auto 16px}
+.mdl-h{font-size:17px;font-weight:900;margin-bottom:4px}
+.mdl-sub{font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.6}
+.lbl{font-size:12px;font-weight:800;color:var(--muted);margin:14px 2px 7px}
+.mdl-amt{display:flex;align-items:center;gap:10px;background:var(--panel2);border:1px solid var(--border);border-radius:14px;padding:13px 15px}
+.mdl-amt input{flex:1;background:none;border:0;color:var(--txt);font-family:inherit;font-size:20px;font-weight:900;outline:none;min-width:0}
+.mdl-amt .cur{font-size:13px;font-weight:800;color:var(--muted)}
+.mdl-quick{display:flex;gap:8px;margin-top:10px}
+.mdl-quick button{flex:1;background:var(--panel2);border:1px solid var(--border);color:var(--txt);font-family:inherit;font-weight:800;font-size:12px;padding:9px 0;border-radius:10px;cursor:pointer}
+.mult{display:flex;gap:8px}
+.mult button{flex:1;background:var(--panel2);border:1px solid var(--border);color:var(--txt);font-family:inherit;font-weight:800;font-size:13px;padding:10px 0;border-radius:11px;cursor:pointer}
+.mult button.on{border-color:var(--gold2);color:var(--gold2);background:rgba(224,166,21,.1)}
+.mdl-row{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);padding:7px 2px}
+.mdl-row b{color:var(--txt);font-weight:800}
+.mdl-go{width:100%;border:0;border-radius:14px;font-family:inherit;font-size:15px;font-weight:900;padding:15px 0;margin-top:16px;cursor:pointer;background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#231a02}
+.mdl-x{width:100%;margin-top:9px;background:none;border:0;color:var(--muted);font-family:inherit;font-size:14px;cursor:pointer;padding:6px}
+.toast{position:fixed;bottom:90px;left:50%;transform:translate(-50%,20px);background:#20272f;color:#fff;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;opacity:0;transition:.3s;z-index:1000;pointer-events:none;border:1px solid var(--border);max-width:88%;text-align:center}
+.toast.show{transform:translate(-50%,0);opacity:1}
+.bnav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;display:grid;grid-template-columns:repeat(6,1fr);background:#0f1216;border-top:1px solid var(--border);padding:8px 0 calc(8px + env(safe-area-inset-bottom));z-index:30}
+html[data-theme=light] .bnav{background:#fff}
+.bnav a{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--muted);text-decoration:none;font-size:10px;font-weight:700}
+.bnav a svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8}
+.bnav a.active{color:var(--gold2)}
+</style>
+</head>
+<body>
+<div class="hdr">
+  <div class="icobtn" onclick="location.href='futures.html'"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
+  <h1>نسخ التداول</h1>
+</div>
+<div class="tabs">
+  <div class="tab on" data-t="traders" onclick="setTab('traders')">أفضل المتداولين</div>
+  <div class="tab" data-t="mine" onclick="setTab('mine')">نسخي <span id="mineCnt"></span></div>
+</div>
+<div id="paneTraders">
+  <div class="hero">
+    <b>🔥 انسخِ المحترفين تلقائياً</b>
+    <p>اختر متداولاً ناجحاً وستُنسخ صفقاته على حسابك آلياً بنفس النسبة — تماماً مثل نظام Binance Copy Trading.</p>
+    <div class="row"><div class="st"><b>128ك+</b><span>ناسخ</span></div><div class="st"><b>$42م+</b><span>تحت الإدارة</span></div><div class="st"><b>87%</b><span>متوسط النجاح</span></div></div>
+  </div>
+  <div class="sortrow" id="sortrow">
+    <button class="on" data-k="roi">الأعلى عائداً</button>
+    <button data-k="win">نسبة النجاح</button>
+    <button data-k="followers">الأكثر متابعة</button>
+    <button data-k="aum">الأكبر إدارة</button>
+  </div>
+  <div class="wrap" id="tradersList"></div>
+</div>
+<div id="paneMine" style="display:none"><div class="wrap" id="mineList"></div></div>
+<div class="mdl" id="mdl"><div class="mdl-sheet" id="mdlSheet"></div></div>
+<div class="toast" id="toast"></div>
+<nav class="bnav">
+  <a href="index.html"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h14V10"/></svg><span>الرئيسية</span></a>
+  <a href="markets.html"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M21 7v5h-5"/></svg><span>الأسواق</span></a>
+  <a href="trading.html"><svg viewBox="0 0 24 24"><path d="M7 8h13l-3-3M17 16H4l3 3"/></svg><span>التداول</span></a>
+  <a href="futures.html" class="active"><svg viewBox="0 0 24 24"><path d="M3 3v18h18M8 14l3-3 3 3 4-5"/></svg><span>عقود آجلة</span></a>
+  <a href="square.html"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg><span>Square</span></a>
+  <a href="wallet.html"><svg viewBox="0 0 24 24"><path d="M3 7h16a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2zM16 13h.01"/></svg><span>المحفظة</span></a>
+</nav>
+<script>
+const $=id=>document.getElementById(id);
+const fmt=(n,d=2)=>Number(n).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+function fmtK(v){v=+v;if(v>=1e9)return (v/1e9).toFixed(2)+'B';if(v>=1e6)return (v/1e6).toFixed(2)+'M';if(v>=1e3)return (v/1e3).toFixed(1)+'K';return String(Math.round(v));}
+function toast(m){var e=$('toast');e.textContent=m;e.className='toast show';clearTimeout(window._t);window._t=setTimeout(function(){e.className='toast';},2400);}
+const SESS=JSON.parse(localStorage.getItem('skygo_session')||'{}');
+function _uid(e){var h=0;e=(e||'').toLowerCase();for(var i=0;i<e.length;i++){h=(h*31+e.charCodeAt(i))>>>0;}return(100000000+(h%900000000));}
+const CKEY='apex_copies_'+_uid(SESS.email);
+
+const TRADERS=[
+  {id:'t1',name:'CryptoFalcon',roi:287.4,win:91,followers:12480,aum:4.2e6,risk:'mid',pairs:'BTC · ETH · SOL',color:'#f0b90b'},
+  {id:'t2',name:'WhaleHunter',roi:214.8,win:88,followers:9830,aum:6.1e6,risk:'high',pairs:'BTC · PEPE · WIF',color:'#5e7cff'},
+  {id:'t3',name:'SteadyGains',roi:142.5,win:95,followers:18200,aum:3.4e6,risk:'low',pairs:'BTC · ETH · BNB',color:'#0ecb81'},
+  {id:'t4',name:'AltKing',roi:318.9,win:82,followers:7640,aum:2.2e6,risk:'high',pairs:'SOL · ARB · SUI',color:'#f6465d'},
+  {id:'t5',name:'DeltaNeutral',roi:96.3,win:97,followers:21050,aum:8.9e6,risk:'low',pairs:'BTC · ETH',color:'#19c2c2'},
+  {id:'t6',name:'MomentumMax',roi:176.2,win:85,followers:6120,aum:1.8e6,risk:'mid',pairs:'DOGE · SHIB · XRP',color:'#b06df0'},
+  {id:'t7',name:'GridMaster',roi:124.7,win:93,followers:14320,aum:5.5e6,risk:'low',pairs:'BTC · ETH · LINK',color:'#e0a615'},
+  {id:'t8',name:'ScalpPro',roi:203.1,win:80,followers:5480,aum:1.3e6,risk:'high',pairs:'BTC · 1000PEPE',color:'#ff8a3d'}
+];
+const RISK={low:['مخاطر منخفضة','low'],mid:['مخاطر متوسطة','mid'],high:['مخاطر عالية','high']};
+
+function seedRand(str){var h=2166136261;for(var i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619);}return function(){h+=0x6D2B79F5;var t=Math.imul(h^h>>>15,1|h);t^=t+Math.imul(t^t>>>7,61|t);return ((t^t>>>14)>>>0)/4294967296;};}
+function spark(id,color){
+  var r=seedRand(id),n=24,pts=[],v=50;
+  for(var i=0;i<n;i++){v+=(r()-0.42)*14;v=Math.max(8,Math.min(92,v));pts.push(v);}
+  var W=300,H=56,mn=Math.min.apply(null,pts),mx=Math.max.apply(null,pts),sp=(mx-mn)||1;
+  var line=pts.map(function(p,i){return (i/(n-1)*W).toFixed(1)+','+(H-2-((p-mn)/sp)*(H-6)).toFixed(1);});
+  var area=line.join(' ')+' '+W+','+H+' 0,'+H;
+  var gid='g'+id;
+  return '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none"><defs><linearGradient id="'+gid+'" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="'+color+'" stop-opacity=".35"/><stop offset="1" stop-color="'+color+'" stop-opacity="0"/></linearGradient></defs><polygon points="'+area+'" fill="url(#'+gid+')"/><polyline points="'+line.join(' ')+'" fill="none" stroke="'+color+'" stroke-width="2"/></svg>';
+}
+
+function loadCopies(){try{return JSON.parse(localStorage.getItem(CKEY)||'[]');}catch(e){return [];}}
+function saveCopies(a){localStorage.setItem(CKEY,JSON.stringify(a));}
+function isCopying(id){return loadCopies().some(function(c){return c.tid===id;});}
+
+let SORT='roi',TAB='traders';
+function setTab(t){
+  TAB=t;
+  document.querySelectorAll('.tab').forEach(function(x){x.classList.toggle('on',x.dataset.t===t);});
+  $('paneTraders').style.display=(t==='traders')?'block':'none';
+  $('paneMine').style.display=(t==='mine')?'block':'none';
+  if(t==='mine')renderMine();else renderTraders();
+}
+$('sortrow').addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;document.querySelectorAll('#sortrow button').forEach(function(x){x.classList.remove('on');});b.classList.add('on');SORT=b.dataset.k;renderTraders();});
+
+function renderTraders(){
+  var list=TRADERS.slice().sort(function(a,b){return b[SORT]-a[SORT];});
+  $('tradersList').innerHTML=list.map(function(t){
+    var rk=RISK[t.risk];
+    var copying=isCopying(t.id);
+    return '<div class="tcard">'+
+      '<div class="tc-top"><div class="tc-av" style="background:linear-gradient(135deg,'+t.color+',#231a02)">'+t.name.charAt(0)+'</div>'+
+        '<div class="tc-nm"><b>'+t.name+' <span class="vrf">✔</span></b><span>'+t.pairs+'<span class="badge '+rk[1]+'">'+rk[0]+'</span></span></div>'+
+        '<div class="tc-roi"><b>+'+t.roi.toFixed(1)+'%</b><span>عائد 30 يوم</span></div></div>'+
+      '<div class="tc-chart">'+spark(t.id,t.color)+'</div>'+
+      '<div class="tc-stats"><div class="s"><b>'+t.win+'%</b><span>نسبة نجاح</span></div>'+
+        '<div class="s"><b>'+fmtK(t.followers)+'</b><span>ناسخ</span></div>'+
+        '<div class="s"><b>$'+fmtK(t.aum)+'</b><span>تحت الإدارة</span></div></div>'+
+      '<button class="tc-btn'+(copying?' copying':'')+'" onclick="'+(copying?('goMine()'):('openCopy(\''+t.id+'\')'))+'">'+(copying?'✓ تنسخه الآن — إدارة':'نسخ')+'</button>'+
+    '</div>';
+  }).join('');
+  var n=loadCopies().length;$('mineCnt').textContent=n?('('+n+')'):'';
+}
+function goMine(){setTab('mine');}
+
+let CUR=null,MULT=1;
+function openCopy(id){
+  var t=TRADERS.find(function(x){return x.id===id;});if(!t)return;CUR=t;MULT=1;
+  var sheet=$('mdlSheet');
+  sheet.innerHTML='<div class="mdl-grip"></div>'+
+    '<div class="mdl-h">نسخ '+t.name+'</div>'+
+    '<div class="mdl-sub">ستُنسخ صفقات '+t.name+' آلياً على حسابك بنفس النسبة. حدّد مبلغ النسخ ومضاعف الحجم.</div>'+
+    '<div class="lbl">مبلغ النسخ (USDT)</div>'+
+    '<div class="mdl-amt"><input id="cAmt" type="text" inputmode="decimal" placeholder="0.00" oninput="cCalc()"><span class="cur">USDT</span></div>'+
+    '<div class="mdl-quick"><button onclick="cSet(50)">50</button><button onclick="cSet(100)">100</button><button onclick="cSet(500)">500</button><button onclick="cSet(1000)">1000</button></div>'+
+    '<div class="lbl">مضاعف حجم الصفقة</div>'+
+    '<div class="mult" id="multRow"><button class="on" onclick="cMult(1)">1x</button><button onclick="cMult(2)">2x</button><button onclick="cMult(5)">5x</button><button onclick="cMult(10)">10x</button></div>'+
+    '<div class="mdl-row" style="margin-top:14px"><span>عائد المتداول (30ي)</span><b style="color:var(--green)">+'+t.roi.toFixed(1)+'%</b></div>'+
+    '<div class="mdl-row"><span>العائد التقديري (30ي)</span><b id="cEst">—</b></div>'+
+    '<div class="mdl-row"><span>رسوم الأداء</span><b>10% من الأرباح</b></div>'+
+    '<button class="mdl-go" onclick="doCopy()">تأكيد النسخ</button>'+
+    '<button class="mdl-x" onclick="closeMdl()">إلغاء</button>';
+  $('mdl').classList.add('on');
+  setTimeout(function(){try{$('cAmt').focus();}catch(e){}},200);
+}
+function cSet(v){var a=$('cAmt');if(a){a.value=v;cCalc();}}
+function cMult(m){MULT=m;document.querySelectorAll('#multRow button').forEach(function(b){b.classList.toggle('on',b.textContent===m+'x');});cCalc();}
+function cCalc(){var a=$('cAmt');var v=a?(parseFloat(a.value)||0):0;var est=$('cEst');if(!est||!CUR)return;var g=v*MULT*(CUR.roi/100);est.textContent=(g>=0?'+':'')+'$'+fmt(g,2);est.style.color=g>=0?'var(--green)':'var(--red)';}
+function doCopy(){
+  var a=$('cAmt');var v=a?(parseFloat(a.value)||0):0;
+  if(v<=0){toast('أدخل مبلغ النسخ');return;}
+  if(!CUR)return;
+  var arr=loadCopies();
+  if(arr.some(function(c){return c.tid===CUR.id;})){toast('أنت تنسخ هذا المتداول بالفعل');closeMdl();return;}
+  arr.push({tid:CUR.id,name:CUR.name,color:CUR.color,roi:CUR.roi,amount:v,mult:MULT,ts:Date.now(),pnl:0});
+  saveCopies(arr);closeMdl();
+  toast('✓ بدأت نسخ '+CUR.name+' بمبلغ $'+fmt(v,2));
+  renderTraders();
+}
+function closeMdl(){$('mdl').classList.remove('on');CUR=null;}
+$('mdl').addEventListener('click',function(e){if(e.target===$('mdl'))closeMdl();});
+
+function renderMine(){
+  var arr=loadCopies();
+  if(!arr.length){$('mineList').innerHTML='<div class="empty"><div class="big">📋</div><b>لا تنسخ أحداً بعد</b><p>اختر متداولاً من تبويب «أفضل المتداولين» وابدأ النسخ.</p></div>';return;}
+  var now=Date.now();
+  $('mineList').innerHTML=arr.map(function(c,idx){
+    var days=Math.max(0.02,(now-c.ts)/86400000);
+    var daily=(c.roi/100)/30;
+    var r=seedRand(c.tid+c.ts);
+    var drift=(r()-0.42);
+    var pnl=c.amount*c.mult*daily*days*(1+drift*0.5);
+    var pct=c.amount>0?(pnl/c.amount*100):0;
+    var up=pnl>=0;
+    return '<div class="mc"><div class="mc-top"><div class="tc-av" style="background:linear-gradient(135deg,'+c.color+',#231a02)">'+c.name.charAt(0)+'</div>'+
+      '<div class="nm"><b>'+c.name+'</b><span>منذ '+days.toFixed(1)+' يوم · '+c.mult+'x</span></div>'+
+      '<div class="mc-pnl '+(up?'up':'dn')+'"><b>'+(up?'+':'')+'$'+fmt(pnl,2)+'</b><span>'+(up?'+':'')+pct.toFixed(2)+'%</span></div></div>'+
+      '<div class="mc-info"><div class="s"><b>$'+fmt(c.amount,2)+'</b><span>مبلغ النسخ</span></div>'+
+        '<div class="s"><b>$'+fmt(c.amount+pnl,2)+'</b><span>القيمة الحالية</span></div>'+
+        '<div class="s"><b style="color:var(--green)">+'+c.roi.toFixed(0)+'%</b><span>عائد المتداول</span></div></div>'+
+      '<button class="mc-stop" onclick="stopCopy('+idx+')">إيقاف النسخ وسحب $'+fmt(c.amount+pnl,2)+'</button></div>';
+  }).join('');
+}
+function stopCopy(i){
+  var arr=loadCopies();var c=arr[i];if(!c)return;
+  if(!confirm('إيقاف نسخ '+c.name+'؟'))return;
+  arr.splice(i,1);saveCopies(arr);
+  toast('تم إيقاف النسخ');
+  renderMine();
+}
+window.setTab=setTab;window.openCopy=openCopy;window.cSet=cSet;window.cMult=cMult;window.cCalc=cCalc;window.doCopy=doCopy;window.closeMdl=closeMdl;window.stopCopy=stopCopy;window.goMine=goMine;
+renderTraders();
+setInterval(function(){if(TAB==='mine')renderMine();},5000);
+</script>
+</body>
+</html>
