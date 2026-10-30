@@ -364,6 +364,19 @@ async function ensureSchema() {
     ' created_at BIGINT NOT NULL DEFAULT 0,' +
     ' INDEX idx_post (post_id)' +
     ')');
+  // ===== تقييمات ومراجعات المتداولين (نظام الثقة) — صف واحد لكل (متداول، مُقيِّم) =====
+  await pool.query(
+    'CREATE TABLE IF NOT EXISTS copy_reviews (' +
+    ' id INT AUTO_INCREMENT PRIMARY KEY,' +
+    ' trader_id INT NOT NULL,' +
+    ' user_id INT NOT NULL,' +
+    ' author VARCHAR(120) NOT NULL,' +
+    ' rating TINYINT NOT NULL DEFAULT 5,' +
+    ' comment VARCHAR(600) NULL,' +
+    ' created_at BIGINT NOT NULL DEFAULT 0,' +
+    ' UNIQUE KEY uq_review (trader_id, user_id),' +
+    ' INDEX idx_trader (trader_id)' +
+    ')');
 }
 ensureSchema()
   .then(() => console.log('[schema] ensured OK'))
@@ -1942,7 +1955,7 @@ app.get('/api/notifications', requireUser, (req, res) => {
   // إشعارات الأموال (kind='money'): الإيداعات والسحوبات والتحويلات
   // بين الفوري والعقود — تظهر كلها في جرس صفحة المحفظة.
   const all = store.getNotifications(req.user.id) || [];
-  const list = all.filter((n) => n && (n.kind === 'admin' || n.kind === 'money'));
+  const list = all.filter((n) => n && (n.kind === 'admin' || n.kind === 'money' || n.kind === 'social'));
   res.json({ ok: true, notifications: list, unread: list.filter((n) => !n.read).length });
 });
 
@@ -2681,7 +2694,9 @@ app.get('/api/copy/traders', requireUser, async (req, res) => {
       'SELECT t.user_id, t.display_name, t.bio, t.strategy, t.risk, t.roi30, t.win_rate, t.created_at, ' +
       ' (SELECT COUNT(*) FROM copy_relations r WHERE r.trader_id = t.user_id) AS followers, ' +
       ' (SELECT COALESCE(SUM(r.amount),0) FROM copy_relations r WHERE r.trader_id = t.user_id) AS aum, ' +
-      ' (SELECT COUNT(*) FROM copy_relations r WHERE r.trader_id = t.user_id AND r.copier_id = ?) AS iCopy ' +
+      ' (SELECT COUNT(*) FROM copy_relations r WHERE r.trader_id = t.user_id AND r.copier_id = ?) AS iCopy, ' +
+      ' (SELECT COALESCE(AVG(rv.rating),0) FROM copy_reviews rv WHERE rv.trader_id = t.user_id) AS rating, ' +
+      ' (SELECT COUNT(*) FROM copy_reviews rv WHERE rv.trader_id = t.user_id) AS reviews ' +
       "FROM copy_traders t WHERE t.status = 'active' ORDER BY t.roi30 DESC",
       [me]);
     const [[mine]] = await pool.query('SELECT user_id FROM copy_traders WHERE user_id = ?', [me]);
@@ -2747,6 +2762,61 @@ app.post('/api/copy/stop', requireUser, async (req, res) => {
   } catch (e) { console.error('[copy/stop]', e.message); res.status(500).json({ error: 'server_error' }); }
 });
 
+// ---- لوحة الأداء: إحصائيات المنصة + أكثر المتداولين نسخاً (مشترك للجميع) ----
+app.get('/api/copy/stats', requireUser, async (req, res) => {
+  try {
+    const [[agg]] = await pool.query(
+      "SELECT (SELECT COUNT(*) FROM copy_traders WHERE status='active') AS traders, " +
+      ' (SELECT COUNT(*) FROM copy_relations) AS copies, ' +
+      ' (SELECT COUNT(DISTINCT copier_id) FROM copy_relations) AS copiers, ' +
+      ' (SELECT COALESCE(SUM(amount),0) FROM copy_relations) AS aum');
+    const [top] = await pool.query(
+      'SELECT t.user_id, t.display_name, t.strategy, t.risk, t.roi30, t.win_rate, ' +
+      ' (SELECT COUNT(*) FROM copy_relations r WHERE r.trader_id = t.user_id) AS followers, ' +
+      ' (SELECT COALESCE(SUM(r.amount),0) FROM copy_relations r WHERE r.trader_id = t.user_id) AS aum, ' +
+      ' (SELECT COALESCE(AVG(rv.rating),0) FROM copy_reviews rv WHERE rv.trader_id = t.user_id) AS rating, ' +
+      ' (SELECT COUNT(*) FROM copy_reviews rv WHERE rv.trader_id = t.user_id) AS reviews ' +
+      "FROM copy_traders t WHERE t.status = 'active' " +
+      'ORDER BY followers DESC, aum DESC LIMIT 20');
+    res.json({ ok: true, stats: agg || {}, top });
+  } catch (e) { console.error('[copy/stats]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+// ---- تقييمات ومراجعات متداول معيّن (قراءة) ----
+app.get('/api/copy/traders/:id/reviews', requireUser, async (req, res) => {
+  try {
+    const tid = Number(req.params.id);
+    if (!tid) return res.status(400).json({ error: 'bad_id' });
+    const [rows] = await pool.query('SELECT id, user_id, author, rating, comment, created_at FROM copy_reviews WHERE trader_id = ? ORDER BY created_at DESC LIMIT 200', [tid]);
+    const [[a]] = await pool.query('SELECT COALESCE(AVG(rating),0) AS avg, COUNT(*) AS n FROM copy_reviews WHERE trader_id = ?', [tid]);
+    const [[mine]] = await pool.query('SELECT id, rating, comment FROM copy_reviews WHERE trader_id = ? AND user_id = ?', [tid, req.user.uid]);
+    res.json({ ok: true, reviews: rows, avg: Number(a.avg) || 0, count: a.n || 0, mine: mine || null });
+  } catch (e) { console.error('[copy/reviews]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+// ---- إضافة/تعديل تقييم (نجوم 1-5 + مراجعة نصية) — صف واحد لكل مُقيِّم ----
+app.post('/api/copy/traders/:id/reviews', requireUser, async (req, res) => {
+  try {
+    const tid = Number(req.params.id);
+    if (!tid) return res.status(400).json({ error: 'bad_id' });
+    if (tid === req.user.uid) return res.status(400).json({ error: 'cannot_review_self' });
+    const b = req.body || {};
+    const rating = Math.max(1, Math.min(5, Math.round(Number(b.rating) || 0)));
+    if (!rating) return res.status(400).json({ error: 'rating_required' });
+    const comment = String(b.comment || '').trim().slice(0, 600) || null;
+    const [[t]] = await pool.query("SELECT user_id FROM copy_traders WHERE user_id = ? AND status='active'", [tid]);
+    if (!t) return res.status(404).json({ error: 'trader_not_found' });
+    const author = req.user.name || req.user.username || req.user.email;
+    await pool.query(
+      'INSERT INTO copy_reviews (trader_id, user_id, author, rating, comment, created_at) VALUES (?, ?, ?, ?, ?, ?) ' +
+      'ON DUPLICATE KEY UPDATE rating=VALUES(rating), comment=VALUES(comment), author=VALUES(author), created_at=VALUES(created_at)',
+      [tid, req.user.uid, author, rating, comment, Date.now()]);
+    // تنبيه للمتداول بوصول تقييم جديد
+    try { store.addNotification(String(tid), { title: '\u2b50 تقييم جديد لملفك', kind: 'social', body: author + ' قيّمك بـ ' + rating + '/5' + (comment ? ('\u060c: ' + comment) : '') }); } catch (e) {}
+    res.json({ ok: true });
+  } catch (e) { console.error('[copy/review]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
 // ============================================================
 //  SQUARE (الأخبار والمنشورات — مخزّنة على السيرفر ليراها الجميع)
 // ============================================================
@@ -2785,6 +2855,20 @@ app.post('/api/square/posts', requireUser, async (req, res) => {
     const [r] = await pool.query(
       'INSERT INTO square_posts (user_id, author, content, image, tag, created_at) VALUES (?, ?, ?, ?, ?, ?)',
       [req.user.uid, author, content, image || null, tag, Date.now()]);
+    // ---- تنبيه لحظي للمتابعين (الناسخين) عند نشر صاحبهم خبراً جديداً ----
+    try {
+      const [followers] = await pool.query('SELECT copier_id FROM copy_relations WHERE trader_id = ?', [req.user.uid]);
+      const snippet = content ? (content.slice(0, 80) + (content.length > 80 ? '\u2026' : '')) : '\ud83d\udcf7 صورة';
+      for (const f of followers) {
+        try {
+          store.addNotification(String(f.copier_id), {
+            title: '\ud83d\udcf0 خبر جديد من ' + author,
+            kind: 'social',
+            body: snippet,
+          });
+        } catch (e) {}
+      }
+    } catch (e) { console.warn('[square/notify]', e.message); }
     res.json({ ok: true, id: r.insertId });
   } catch (e) { console.error('[square/create]', e.message); res.status(500).json({ error: 'server_error' }); }
 });
