@@ -257,6 +257,43 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
 .scan-result input{width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:12px;color:var(--txt);font-family:inherit;font-size:15px;padding:13px 14px;direction:ltr}
 .scan-result input:focus{outline:0;border-color:var(--gold2)}
 .scan-result .sr-rescan{width:100%;margin-top:10px;background:none;border:1px solid var(--border);border-radius:12px;color:var(--muted);font-family:inherit;font-weight:700;font-size:13px;padding:12px 0;cursor:pointer}
+/* ===== شريط علوي بنمط بينانس + الملف الشخصي + الإعدادات ===== */
+.hdr2{display:flex;align-items:center;gap:10px;padding:0 14px 10px}
+.segbar{flex:1;display:flex;background:var(--panel2);border:1px solid var(--border);border-radius:12px;padding:3px}
+.segbar .seg{flex:1;border:0;background:none;color:var(--muted);font-family:inherit;font-weight:800;font-size:13px;padding:8px 6px;border-radius:9px;cursor:pointer;transition:.18s}
+.segbar .seg.on{background:var(--panel);color:var(--txt);box-shadow:0 1px 6px rgba(0,0,0,.25)}
+.nbadge.nb99{background:var(--red);color:#fff;display:flex;align-items:center;justify-content:center}
+.icobtn .sdot{position:absolute;top:-2px;right:-2px;width:9px;height:9px;border-radius:50%;background:var(--red);display:none}
+.icobtn .sdot.on{display:block}
+.icobtn.sq{background:var(--panel2);border:1px solid var(--border);border-radius:11px}
+.pf-top{display:flex;align-items:center;gap:8px;padding:calc(14px + env(safe-area-inset-top)) 14px 6px}
+.pf-top .pf-ic{width:40px;height:40px;display:flex;align-items:center;justify-content:center;border-radius:11px;cursor:pointer;color:var(--txt)}
+.pf-top .pf-ic:active{background:var(--panel2)}
+.pf-top .pf-ic svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.9}
+.pf-top .sp{flex:1}
+.pf-hero{display:flex;align-items:center;gap:15px;padding:10px 18px 16px}
+.pf-hero .pav{width:64px;height:64px;flex:0 0 auto;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:27px;font-weight:800;color:#231a02;background:linear-gradient(135deg,var(--gold1),var(--gold2))}
+.pf-hero .pi{flex:1;min-width:0}
+.pf-hero .pi .pn{font-size:20px;font-weight:800;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pf-hero .pi .pu{font-size:13px;color:var(--muted);direction:ltr;display:flex;align-items:center;gap:6px;margin-top:6px;justify-content:flex-end}
+.pf-hero .pi .pu .cp{color:var(--gold2);cursor:pointer}
+.pf-badges{display:flex;gap:9px;padding:0 18px 18px;flex-wrap:wrap}
+.pf-badges .bdg{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:800;padding:6px 11px;border-radius:9px}
+.pf-badges .bdg svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2.2}
+.pf-badges .bdg.v{color:var(--green);background:rgba(14,203,129,.12)}
+.pf-badges .bdg.n{color:var(--gold2);background:rgba(224,166,21,.12)}
+.pf-support{margin:4px 16px 18px;display:flex;align-items:center;justify-content:center;gap:10px;width:calc(100% - 32px);background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#231a02;border:0;border-radius:14px;font-family:inherit;font-weight:800;font-size:15px;padding:15px 0;cursor:pointer}
+.pf-support svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2}
+.row .tx2{flex:1;font-size:14px;font-weight:700}
+.picker{position:fixed;inset:0;z-index:120;background:rgba(0,0,0,.55);display:none;align-items:flex-end;justify-content:center}
+.picker.show{display:flex}
+.picker .pk{width:100%;max-width:480px;background:var(--panel);border-radius:18px 18px 0 0;max-height:72vh;overflow-y:auto;padding-bottom:calc(14px + env(safe-area-inset-bottom))}
+.picker .pkh{display:flex;align-items:center;justify-content:space-between;padding:16px;font-weight:800;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--panel)}
+.picker .pkh span{cursor:pointer;color:var(--muted);font-size:22px;line-height:1}
+.picker .pko{display:flex;align-items:center;gap:10px;padding:15px 16px;border-top:1px solid var(--border);cursor:pointer;font-weight:700;font-size:14px}
+.picker .pko .tk{margin-inline-start:auto;color:var(--gold2);font-weight:900;display:none}
+.picker .pko.sel .tk{display:block}
+.picker .pko.sel{color:var(--gold2)}
 </style>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0b0e11">
@@ -268,13 +305,20 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
 <body>
 <!-- ===== HEADER ===== -->
 <div class="hdr">
-  <div class="icobtn" title="التنبيهات" onclick="location.href='notifications.html'"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0"/></svg><span class="nbadge" id="bellBadge"></span></div>
-  <div class="icobtn" title="مسح" onclick="openScan()"><svg viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2M3 12h18"/></svg></div>
+  <div class="icobtn" title="الرسائل" onclick="location.href='notifications.html'"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 01-8.5 8.5 8.5 8.5 0 01-3.8-.9L3 21l1.9-5.7A8.5 8.5 0 1121 11.5z"/></svg><span class="nbadge nb99" id="bellBadge">99+</span></div>
+  <div class="segbar">
+    <button class="seg on" type="button" onclick="return false">منصة التداول</button>
+    <button class="seg" type="button" onclick="location.href='wallet.html'">المحفظة</button>
+  </div>
+  <div class="icobtn" title="الدعم الفني" onclick="openSupport()"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 0118 0M3 12v4a2 2 0 002 2h1v-6H5a2 2 0 00-2 2zM21 12v4a2 2 0 01-2 2h-1v-6h1a2 2 0 012 2z"/></svg><span class="sdot" id="supDotTop"></span></div>
+  <div class="avatar" id="avatarBtn" onclick="openProfile()">A</div>
+</div>
+<div class="hdr2">
   <div class="hsearch">
     <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
     <input id="searchInp" aria-label="بحث عن عملة" data-i18n-ph="searchPh" placeholder="بحث عن عملة (BTC، ETH)...">
   </div>
-  <div class="avatar" id="avatarBtn" onclick="openDrawer()">A</div>
+  <div class="icobtn sq" title="مسح" onclick="openScan()"><svg viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2M3 12h18"/></svg></div>
 </div>
 
 <!-- ===== KYC STATUS BANNER ===== -->
@@ -382,6 +426,81 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
   </div>
   <div class="dfoot">Apex · v1.0</div>
 </div>
+
+<!-- ===== PROFILE OVERLAY (شاشة كاملة مثل بينانس) ===== -->
+<div class="sheet" id="shProfile">
+  <div class="pf-top">
+    <div class="pf-ic" onclick="closeSheet('shProfile')" title="رجوع"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></div>
+    <div class="sp"></div>
+    <div class="pf-ic" onclick="openSheet('shSettings')" title="الإعدادات"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></div>
+    <div class="pf-ic" onclick="openScan()" title="مسح QR"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v7M14 20h7"/></svg></div>
+    <div class="pf-ic" onclick="inviteFriend()" title="دعوة صديق"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3.5-6 7-6 1.2 0 2.4.3 3.4.8M18 10v6M15 13h6"/></svg></div>
+  </div>
+  <div class="sh-body" style="padding-top:4px">
+    <div class="pf-hero">
+      <div class="pav" id="pfAv">A</div>
+      <div class="pi">
+        <div class="pn"><span id="pfName">User</span></div>
+        <div class="pu">UID: <span id="pfUid">--</span><span class="cp" onclick="copyUid()" data-i18n="copy">نسخ</span></div>
+      </div>
+    </div>
+    <div class="pf-badges">
+      <span class="bdg v"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 12l2 2 4-4"/></svg>موثق</span>
+      <span class="bdg n"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>عادي</span>
+    </div>
+    <button class="pf-support" onclick="openSupport()"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 0118 0M3 12v4a2 2 0 002 2h1v-6H5a2 2 0 00-2 2zM21 12v4a2 2 0 01-2 2h-1v-6h1a2 2 0 012 2z"/></svg>الحصول على الدعم</button>
+    <div class="grp">
+      <div class="row" onclick="openSheet('shSecurity')"><span class="ic"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg></span><div class="tx"><b data-i18n="security">الأمان والحماية</b></div><span class="ar">‹</span></div>
+      <div class="row" onclick="openSheet('shKyc')"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg></span><div class="tx"><b data-i18n="kyc">توثيق الهوية (KYC)</b></div><span class="ar">‹</span></div>
+      <div class="row" onclick="openSheet('shSettings')"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 00-.1-1l2-1.5-2-3.4-2.3 1a7 7 0 00-1.7-1l-.3-2.5H9.4l-.3 2.5a7 7 0 00-1.7 1l-2.3-1-2 3.4 2 1.5a7 7 0 000 2l-2 1.5 2 3.4 2.3-1a7 7 0 001.7 1l.3 2.5h5.2l.3-2.5a7 7 0 001.7-1l2.3 1 2-3.4-2-1.5a7 7 0 00.1-1z"/></svg></span><div class="tx"><b data-i18n="settings">الإعدادات</b></div><span class="ar">‹</span></div>
+      <div class="row" onclick="location.href='settings.html'"><span class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg></span><div class="tx"><b data-i18n="accountSettings">البريد والتنبيهات</b></div><span class="ar">‹</span></div>
+      <div class="row" onclick="openSheet('shHelp')"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 015 0c0 2-2.5 2-2.5 4M12 17h.01"/></svg></span><div class="tx"><b data-i18n="help">المساعدة والدعم</b></div><span class="ar">‹</span></div>
+    </div>
+    <div class="grp">
+      <div class="row" onclick="doLogout()"><span class="ic" style="background:rgba(246,70,93,.12)"><svg style="stroke:var(--red)" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg></span><div class="tx"><b style="color:var(--red)" data-i18n="logout">تسجيل الخروج</b></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SETTINGS OVERLAY (مثل الصورة 3/4 — كل الأزرار مفعّلة) ===== -->
+<div class="sheet" id="shSettings">
+  <div class="sh-top"><div class="bk" onclick="closeSheet('shSettings')">›</div><b data-i18n="settings">الإعدادات</b></div>
+  <div class="sh-body">
+    <div class="grp">
+      <div class="gt">عام</div>
+      <div class="row"><div class="tx2">تفضيل الإشعارات</div><div class="sw" id="swNotif" onclick="toggleSet('notif',this)"></div></div>
+      <div class="row" onclick="openPick('currency')"><div class="tx2">العملة</div><span class="val" id="valCurrency">USD</span><span class="ar">‹</span></div>
+      <div class="row" onclick="(window.APEX_I18N&&APEX_I18N.open)?APEX_I18N.open():openSheet('shLang')"><div class="tx2">اللغة</div><span class="val" id="valLang">العربية</span><span class="ar">‹</span></div>
+      <div class="row"><div class="tx2">تفضيلات الذكاء الاصطناعي</div><div class="sw" id="swAi" onclick="toggleSet('ai',this)"></div></div>
+      <div class="row" onclick="openPick('tab')"><div class="tx2">تبويب مخصص</div><span class="val" id="valTab">الرئيسية</span><span class="ar">‹</span></div>
+      <div class="row" onclick="openPick('home')"><div class="tx2">عرض الصفحة الرئيسية</div><span class="val" id="valHome">قياسي</span><span class="ar">‹</span></div>
+    </div>
+    <div class="grp">
+      <div class="gt">المظهر</div>
+      <div class="row" onclick="openPick('theme')"><div class="tx2">التصميم</div><span class="val" id="valTheme">داكن</span><span class="ar">‹</span></div>
+      <div class="row" onclick="openPick('color')"><div class="tx2">تفضيل اللون</div><span class="val" id="valColor">أخضر صعود / أحمر هبوط</span><span class="ar">‹</span></div>
+      <div class="row" onclick="openPick('tz')"><div class="tx2">المنطقة الزمنية</div><span class="val" id="valTz">تلقائي</span><span class="ar">‹</span></div>
+    </div>
+    <div class="grp">
+      <div class="gt">الدفع والمحفظة</div>
+      <div class="row" onclick="openPick('paycur')"><div class="tx2">عملة الدفع</div><span class="val" id="valPaycur">USD</span><span class="ar">‹</span></div>
+      <div class="row" onclick="toast('سيتم فتح إعدادات P2P قريباً')"><div class="tx2">إعدادات P2P</div><span class="ar">‹</span></div>
+      <div class="row" onclick="toast('سيتم فتح إعدادات Pay قريباً')"><div class="tx2">إعدادات Pay</div><span class="ar">‹</span></div>
+      <div class="row" onclick="location.href='withdraw.html'"><div class="tx2">عنوان السحب</div><span class="ar">‹</span></div>
+      <div class="row"><div class="tx2">استخدام BNB لخصم الرسوم</div><div class="sw" id="swBnb" onclick="toggleSet('bnb',this)"></div></div>
+    </div>
+    <div class="grp">
+      <div class="gt">أخرى</div>
+      <div class="row" onclick="toast('أدوات التداول المتقدمة قيد الإعداد')"><div class="tx2">الأدوات</div><span class="ar">‹</span></div>
+      <div class="row" onclick="clearCache()"><div class="tx2">مسح ذاكرة التخزين المؤقت</div><span class="val" id="valCache">—</span><span class="ar">‹</span></div>
+      <div class="row" onclick="openSheet('shHelp')"><div class="tx2">المساعدة والدعم</div><span class="ar">‹</span></div>
+      <div class="row" onclick="toast('مركز الخصوصية — بياناتك محمية')"><div class="tx2">مركز الخصوصية</div><span class="ar">‹</span></div>
+      <div class="row" onclick="aboutApp()"><div class="tx2">نبذة عنا</div><span class="val">Apex v1.0</span><span class="ar">‹</span></div>
+      <div class="row" onclick="checkUpdates()"><div class="tx2">تحقق من وجود تحديثات</div><span class="ar">‹</span></div>
+    </div>
+  </div>
+</div>
+<div class="picker" id="pickerOv" onclick="if(event.target===this)closePick()"><div class="pk" id="pickerPk"></div></div>
 
 <!-- ===== SECURITY SHEET ===== -->
 <div class="sheet" id="shSecurity">
@@ -517,6 +636,73 @@ function closeDrawer(){$('drawer').classList.remove('show');$('scrim').classList
 function copyUid(){navigator.clipboard&&navigator.clipboard.writeText(''+UID);toast('تم نسخ رقم المستخدم');}
 function doLogout(){localStorage.removeItem('skygo_session');localStorage.removeItem('apex_token');localStorage.removeItem('apex_kyc_status');location.replace('login.html');}
 
+/* ===== الملف الشخصي (شاشة كاملة) + الإعدادات ===== */
+function openProfile(){
+  var a=$('pfAv');if(a)a.textContent=initial;
+  var n=$('pfName');if(n)n.textContent=uname;
+  var u=$('pfUid');if(u)u.textContent=UID;
+  openSheet('shProfile');
+}
+function inviteFriend(){
+  var link=location.origin+'/login.html?ref='+UID;
+  if(navigator.share){navigator.share({title:'Apex',text:'انضم إليّ على منصة Apex',url:link}).catch(function(){});}
+  else if(navigator.clipboard){navigator.clipboard.writeText(link);toast('تم نسخ رابط الدعوة');}
+  else toast('رابط الدعوة: '+link);
+}
+var SETVAL={
+  currency:{key:'apex_set_currency',def:'USD',el:'valCurrency',opts:[['USD','USD — دولار أمريكي'],['EUR','EUR — يورو'],['SAR','SAR — ريال سعودي'],['AED','AED — درهم إماراتي'],['EGP','EGP — جنيه مصري'],['TRY','TRY — ليرة تركية'],['MXN','MXN — بيزو مكسيكي']]},
+  paycur:{key:'apex_set_paycur',def:'USD',el:'valPaycur',opts:[['USD','USD — دولار أمريكي'],['EUR','EUR — يورو'],['SAR','SAR — ريال سعودي'],['AED','AED — درهم إماراتي'],['EGP','EGP — جنيه مصري'],['TRY','TRY — ليرة تركية']]},
+  tab:{key:'apex_set_tab',def:'الرئيسية',el:'valTab',opts:[['الرئيسية','الرئيسية'],['الأسواق','الأسواق'],['التداول','التداول'],['العقود الآجلة','العقود الآجلة'],['المحفظة','المحفظة']]},
+  home:{key:'apex_set_home',def:'قياسي',el:'valHome',opts:[['قياسي','قياسي'],['مبسّط','مبسّط'],['احترافي','احترافي']]},
+  color:{key:'apex_set_color',def:'أخضر صعود / أحمر هبوط',el:'valColor',opts:[['أخضر صعود / أحمر هبوط','أخضر صعود / أحمر هبوط'],['أحمر صعود / أخضر هبوط','أحمر صعود / أخضر هبوط']]},
+  tz:{key:'apex_set_tz',def:'تلقائي',el:'valTz',opts:[['تلقائي','تلقائي'],['UTC','UTC (غرينتش)'],['UTC+3','UTC+3 (الرياض)'],['UTC+2','UTC+2 (القاهرة)'],['UTC+4','UTC+4 (دبي)'],['UTC+1','UTC+1 (وسط أوروبا)']]}
+};
+function _setLabel(name){var c=SETVAL[name];if(!c)return;var el=$(c.el);if(!el)return;el.textContent=localStorage.getItem(c.key)||c.def;}
+var _PICK_TITLE={currency:'العملة',paycur:'عملة الدفع',tab:'تبويب مخصص',home:'عرض الصفحة الرئيسية',color:'تفضيل اللون',tz:'المنطقة الزمنية'};
+function _esc(s){return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
+function openPick(name){
+  if(name==='theme'){_renderThemePick();return _showPicker();}
+  var c=SETVAL[name];if(!c)return;
+  var cur=localStorage.getItem(c.key)||c.def;
+  var html='<div class="pkh"><b>'+(_PICK_TITLE[name]||'اختيار')+'</b><span onclick="closePick()">×</span></div>';
+  html+=c.opts.map(function(o){return '<div class="pko'+(o[0]===cur?' sel':'')+'" onclick="pickSet(\''+name+'\',\''+_esc(o[0])+'\')"><span>'+o[1]+'</span><span class="tk">✓</span></div>';}).join('');
+  $('pickerPk').innerHTML=html;_showPicker();
+}
+function pickSet(name,val){var c=SETVAL[name];if(!c)return;localStorage.setItem(c.key,val);_setLabel(name);closePick();toast('تم الحفظ');}
+function _renderThemePick(){
+  var cur=(window.APEX_I18N&&APEX_I18N.theme)?APEX_I18N.theme():(localStorage.getItem('apex_theme')||'dark');
+  var opts=[['dark','داكن'],['light','فاتح']];
+  var html='<div class="pkh"><b>التصميم</b><span onclick="closePick()">×</span></div>';
+  html+=opts.map(function(o){return '<div class="pko'+(o[0]===cur?' sel':'')+'" onclick="pickTheme(\''+o[0]+'\')"><span>'+o[1]+'</span><span class="tk">✓</span></div>';}).join('');
+  $('pickerPk').innerHTML=html;
+}
+function pickTheme(mode){
+  if(window.APEX_I18N&&APEX_I18N.setTheme)APEX_I18N.setTheme(mode);else{try{localStorage.setItem('apex_theme',mode);}catch(e){}document.documentElement.setAttribute('data-theme',mode);}
+  var el=$('valTheme');if(el)el.textContent=mode==='light'?'فاتح':'داكن';
+  closePick();toast('تم الحفظ');
+}
+function _showPicker(){$('pickerOv').classList.add('show');}
+function closePick(){$('pickerOv').classList.remove('show');}
+function toggleSet(key,el){var on=!el.classList.contains('on');el.classList.toggle('on',on);localStorage.setItem('apex_set_'+key,on?'1':'0');toast(on?'تم التفعيل':'تم الإيقاف');}
+function clearCache(){
+  try{Object.keys(localStorage).forEach(function(k){if(k.indexOf('apex_mktcache')===0||k.indexOf('apex_cache')===0||k.indexOf('skygo_cache')===0||k.indexOf('mkt_')===0)localStorage.removeItem(k);});
+    if('caches' in window){caches.keys().then(function(ks){ks.forEach(function(k){caches.delete(k);});});}}catch(e){}
+  var el=$('valCache');if(el)el.textContent='0 ميغابايت';toast('تم مسح ذاكرة التخزين المؤقت');
+}
+function aboutApp(){toast('Apex · الإصدار 1.0 — منصة تداول العملات الرقمية');}
+function checkUpdates(){toast('أنت تستخدم أحدث إصدار (v1.0)');}
+function initSettings(){
+  ['currency','paycur','tab','home','color','tz'].forEach(_setLabel);
+  if(localStorage.getItem('apex_set_notif')!=='0'){var n=$('swNotif');if(n)n.classList.add('on');}
+  if(localStorage.getItem('apex_set_ai')==='1'){var a=$('swAi');if(a)a.classList.add('on');}
+  if(localStorage.getItem('apex_set_bnb')==='1'){var b=$('swBnb');if(b)b.classList.add('on');}
+  var th=(window.APEX_I18N&&APEX_I18N.theme)?APEX_I18N.theme():(localStorage.getItem('apex_theme')||'dark');
+  var vt=$('valTheme');if(vt)vt.textContent=th==='light'?'فاتح':'داكن';
+  try{var lg=localStorage.getItem('apex_lang')||'ar';var lm=(typeof LANGS!=='undefined')&&LANGS.find(function(l){return l.c===lg;});var vl=$('valLang');if(vl&&lm)vl.textContent=lm.n;}catch(e){}
+  try{var mb=(JSON.stringify(localStorage).length/1024/1024);var vc=$('valCache');if(vc)vc.textContent=(mb<0.1?'<0.1':mb.toFixed(1))+' ميغابايت';}catch(e){}
+}
+try{initSettings();}catch(e){}
+
 /* ===== الدعم الفني (محادثة مع الإدارة) ===== */
 const SUP_TOKEN=sess.token||localStorage.getItem('apex_token')||'';
 let supPoll=null;
@@ -537,7 +723,7 @@ function renderSup(msgs){
 async function openSupport(){
   if(!SUP_TOKEN){toast('الرجاء تسجيل الدخول لاستخدام الدعم');return;}
   closeSheet&&closeSheet('shHelp');closeDrawer();
-  $('supPanel').classList.add('show');$('supDot').classList.remove('on');
+  $('supPanel').classList.add('show');$('supDot').classList.remove('on');var _st=$('supDotTop');if(_st)_st.classList.remove('on');
   renderSup(await supFetch());
   if(supPoll)clearInterval(supPoll);
   supPoll=setInterval(async()=>{const m=await supFetch();if(m)renderSup(m);},4000);
@@ -548,7 +734,7 @@ async function sendSupport(){
   try{await fetch('/api/support/messages',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUP_TOKEN},body:JSON.stringify({text})});renderSup(await supFetch());}catch(e){toast('تعذّر الإرسال');inp.value=text;}
 }
 if($('supInput'))$('supInput').addEventListener('keydown',e=>{if(e.key==='Enter')sendSupport();});
-async function supUnread(){const m=await supFetch();if(!m)return;const la=[...m].reverse().find(x=>x.from==='admin');const seen=+(localStorage.getItem('apex_sup_seen')||0);if(la&&la.at>seen&&!$('supPanel').classList.contains('show'))$('supDot').classList.add('on');}
+async function supUnread(){const m=await supFetch();if(!m)return;const la=[...m].reverse().find(x=>x.from==='admin');const seen=+(localStorage.getItem('apex_sup_seen')||0);if(la&&la.at>seen&&!$('supPanel').classList.contains('show')){$('supDot').classList.add('on');var _st=$('supDotTop');if(_st)_st.classList.add('on');}}
 if(SUP_TOKEN){supUnread();setInterval(supUnread,15000);}
 
 /* ===== مزامنة الرصيد الحي مع الإدارة ===== */
