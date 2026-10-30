@@ -311,6 +311,59 @@ async function ensureSchema() {
     ' locked_balance DECIMAL(30,8) NOT NULL DEFAULT 0,' +
     ' UNIQUE KEY uq_user_cur (user_id, currency)' +
     ')');
+  // ===== نسخ التداول (Copy Trading) — مشترك على السيرفر =====
+  // بطاقة المتداول: صف واحد لكل مستخدم قدّم طلباً ليصبح متداولاً يُنسخ.
+  await pool.query(
+    'CREATE TABLE IF NOT EXISTS copy_traders (' +
+    ' user_id INT NOT NULL PRIMARY KEY,' +
+    ' display_name VARCHAR(120) NOT NULL,' +
+    ' bio VARCHAR(400) NULL,' +
+    ' strategy VARCHAR(120) NULL,' +
+    ' risk VARCHAR(10) NOT NULL DEFAULT \'mid\',' +
+    ' roi30 DECIMAL(10,2) NOT NULL DEFAULT 0,' +
+    ' win_rate DECIMAL(5,2) NOT NULL DEFAULT 0,' +
+    ' status VARCHAR(20) NOT NULL DEFAULT \'active\',' +
+    ' created_at BIGINT NOT NULL DEFAULT 0' +
+    ')');
+  // علاقات النسخ: مَن يَنسخ مَن (مشترك على السيرفر ليراه الجميع)
+  await pool.query(
+    'CREATE TABLE IF NOT EXISTS copy_relations (' +
+    ' id INT AUTO_INCREMENT PRIMARY KEY,' +
+    ' copier_id INT NOT NULL,' +
+    ' trader_id INT NOT NULL,' +
+    ' amount DECIMAL(30,8) NOT NULL DEFAULT 0,' +
+    ' multiplier INT NOT NULL DEFAULT 1,' +
+    ' created_at BIGINT NOT NULL DEFAULT 0,' +
+    ' UNIQUE KEY uq_copy (copier_id, trader_id)' +
+    ')');
+  // ===== صفحة Square (الأخبار والمنشورات) — مشتركة على السيرفر =====
+  await pool.query(
+    'CREATE TABLE IF NOT EXISTS square_posts (' +
+    ' id INT AUTO_INCREMENT PRIMARY KEY,' +
+    ' user_id INT NOT NULL,' +
+    ' author VARCHAR(120) NOT NULL,' +
+    ' content TEXT NOT NULL,' +
+    ' image LONGTEXT NULL,' +
+    ' tag VARCHAR(20) NULL,' +
+    ' created_at BIGINT NOT NULL DEFAULT 0,' +
+    ' INDEX idx_created (created_at)' +
+    ')');
+  await pool.query(
+    'CREATE TABLE IF NOT EXISTS square_likes (' +
+    ' post_id INT NOT NULL,' +
+    ' user_id INT NOT NULL,' +
+    ' PRIMARY KEY (post_id, user_id)' +
+    ')');
+  await pool.query(
+    'CREATE TABLE IF NOT EXISTS square_comments (' +
+    ' id INT AUTO_INCREMENT PRIMARY KEY,' +
+    ' post_id INT NOT NULL,' +
+    ' user_id INT NOT NULL,' +
+    ' author VARCHAR(120) NOT NULL,' +
+    ' content TEXT NOT NULL,' +
+    ' created_at BIGINT NOT NULL DEFAULT 0,' +
+    ' INDEX idx_post (post_id)' +
+    ')');
 }
 ensureSchema()
   .then(() => console.log('[schema] ensured OK'))
@@ -2616,6 +2669,168 @@ app.get('/api/admin/apx/notifications', requireAdmin, (req, res) => {
 });
 app.post('/api/admin/apx/notifications/read', requireAdmin, (req, res) => {
   res.json(apx.markRead((req.body && req.body.ids) || null));
+});
+
+// ============================================================
+//  COPY TRADING (نسخ التداول — مخزّن على السيرفر ويراه الجميع)
+// ============================================================
+app.get('/api/copy/traders', requireUser, async (req, res) => {
+  try {
+    const me = req.user.uid;
+    const [traders] = await pool.query(
+      'SELECT t.user_id, t.display_name, t.bio, t.strategy, t.risk, t.roi30, t.win_rate, t.created_at, ' +
+      ' (SELECT COUNT(*) FROM copy_relations r WHERE r.trader_id = t.user_id) AS followers, ' +
+      ' (SELECT COALESCE(SUM(r.amount),0) FROM copy_relations r WHERE r.trader_id = t.user_id) AS aum, ' +
+      ' (SELECT COUNT(*) FROM copy_relations r WHERE r.trader_id = t.user_id AND r.copier_id = ?) AS iCopy ' +
+      "FROM copy_traders t WHERE t.status = 'active' ORDER BY t.roi30 DESC",
+      [me]);
+    const [[mine]] = await pool.query('SELECT user_id FROM copy_traders WHERE user_id = ?', [me]);
+    res.json({ ok: true, traders, isTrader: !!mine });
+  } catch (e) { console.error('[copy/traders]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+app.post('/api/copy/apply', requireUser, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const name = String(b.display_name || req.user.name || req.user.username || '').trim().slice(0, 120);
+    if (!name) return res.status(400).json({ error: 'name_required' });
+    const bio = String(b.bio || '').trim().slice(0, 400);
+    const strategy = String(b.strategy || '').trim().slice(0, 120);
+    const risk = ['low', 'mid', 'high'].includes(String(b.risk)) ? String(b.risk) : 'mid';
+    const roi30 = Math.max(-100, Math.min(100000, Number(b.roi30) || 0));
+    const win = Math.max(0, Math.min(100, Number(b.win_rate) || 0));
+    await pool.query(
+      'INSERT INTO copy_traders (user_id, display_name, bio, strategy, risk, roi30, win_rate, status, created_at) ' +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?) " +
+      'ON DUPLICATE KEY UPDATE display_name=VALUES(display_name), bio=VALUES(bio), strategy=VALUES(strategy), ' +
+      "risk=VALUES(risk), roi30=VALUES(roi30), win_rate=VALUES(win_rate), status='active'",
+      [req.user.uid, name, bio, strategy, risk, roi30, win, Date.now()]);
+    res.json({ ok: true });
+  } catch (e) { console.error('[copy/apply]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+app.get('/api/copy/mine', requireUser, async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      'SELECT r.trader_id, r.amount, r.multiplier, r.created_at, t.display_name, t.risk, t.roi30, t.win_rate ' +
+      'FROM copy_relations r JOIN copy_traders t ON t.user_id = r.trader_id WHERE r.copier_id = ? ORDER BY r.created_at DESC',
+      [req.user.uid]);
+    res.json({ ok: true, copies: rows });
+  } catch (e) { console.error('[copy/mine]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+app.post('/api/copy/start', requireUser, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const traderId = Number(b.trader_id);
+    const amount = Math.max(0, Number(b.amount) || 0);
+    const mult = [1, 2, 5, 10].includes(Number(b.multiplier)) ? Number(b.multiplier) : 1;
+    if (!traderId) return res.status(400).json({ error: 'trader_required' });
+    if (traderId === req.user.uid) return res.status(400).json({ error: 'cannot_copy_self' });
+    if (amount <= 0) return res.status(400).json({ error: 'amount_required' });
+    const [[t]] = await pool.query("SELECT user_id FROM copy_traders WHERE user_id = ? AND status = 'active'", [traderId]);
+    if (!t) return res.status(404).json({ error: 'trader_not_found' });
+    await pool.query(
+      'INSERT INTO copy_relations (copier_id, trader_id, amount, multiplier, created_at) VALUES (?, ?, ?, ?, ?) ' +
+      'ON DUPLICATE KEY UPDATE amount=VALUES(amount), multiplier=VALUES(multiplier)',
+      [req.user.uid, traderId, amount, mult, Date.now()]);
+    res.json({ ok: true });
+  } catch (e) { console.error('[copy/start]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+app.post('/api/copy/stop', requireUser, async (req, res) => {
+  try {
+    const traderId = Number((req.body || {}).trader_id);
+    if (!traderId) return res.status(400).json({ error: 'trader_required' });
+    await pool.query('DELETE FROM copy_relations WHERE copier_id = ? AND trader_id = ?', [req.user.uid, traderId]);
+    res.json({ ok: true });
+  } catch (e) { console.error('[copy/stop]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+// ============================================================
+//  SQUARE (الأخبار والمنشورات — مخزّنة على السيرفر ليراها الجميع)
+// ============================================================
+app.get('/api/square/posts', requireUser, async (req, res) => {
+  try {
+    const me = req.user.uid;
+    const filter = String(req.query.filter || 'new');
+    const q = String(req.query.q || '').trim();
+    let where = '1=1';
+    const params = [me];
+    if (filter === 'mine') { where = 'p.user_id = ?'; params.push(me); }
+    if (q) { where += ' AND (p.content LIKE ? OR p.author LIKE ?)'; params.push('%' + q + '%', '%' + q + '%'); }
+    let order = 'p.created_at DESC';
+    if (filter === 'hot') order = 'likes DESC, p.created_at DESC';
+    const [rows] = await pool.query(
+      'SELECT p.id, p.user_id, p.author, p.content, p.image, p.tag, p.created_at, ' +
+      ' (SELECT COUNT(*) FROM square_likes l WHERE l.post_id = p.id) AS likes, ' +
+      ' (SELECT COUNT(*) FROM square_comments c WHERE c.post_id = p.id) AS comments, ' +
+      ' (SELECT COUNT(*) FROM square_likes l WHERE l.post_id = p.id AND l.user_id = ?) AS liked ' +
+      'FROM square_posts p WHERE ' + where + ' ORDER BY ' + order + ' LIMIT 200',
+      params);
+    res.json({ ok: true, posts: rows });
+  } catch (e) { console.error('[square/posts]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+app.post('/api/square/posts', requireUser, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const content = String(b.content || '').trim().slice(0, 2000);
+    let image = String(b.image || '');
+    if (image && !/^data:image\/(jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(image)) image = '';
+    if (image && image.length > 2800000) image = '';
+    const tag = String(b.tag || '').trim().slice(0, 20) || null;
+    if (!content && !image) return res.status(400).json({ error: 'empty' });
+    const author = req.user.name || req.user.username || req.user.email;
+    const [r] = await pool.query(
+      'INSERT INTO square_posts (user_id, author, content, image, tag, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+      [req.user.uid, author, content, image || null, tag, Date.now()]);
+    res.json({ ok: true, id: r.insertId });
+  } catch (e) { console.error('[square/create]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+app.post('/api/square/posts/:id/like', requireUser, async (req, res) => {
+  try {
+    const pid = Number(req.params.id);
+    if (!pid) return res.status(400).json({ error: 'bad_id' });
+    const [[ex]] = await pool.query('SELECT 1 AS n FROM square_likes WHERE post_id = ? AND user_id = ?', [pid, req.user.uid]);
+    if (ex) await pool.query('DELETE FROM square_likes WHERE post_id = ? AND user_id = ?', [pid, req.user.uid]);
+    else await pool.query('INSERT IGNORE INTO square_likes (post_id, user_id) VALUES (?, ?)', [pid, req.user.uid]);
+    const [[c]] = await pool.query('SELECT COUNT(*) AS n FROM square_likes WHERE post_id = ?', [pid]);
+    res.json({ ok: true, liked: !ex, likes: c.n });
+  } catch (e) { console.error('[square/like]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+app.get('/api/square/posts/:id/comments', requireUser, async (req, res) => {
+  try {
+    const pid = Number(req.params.id);
+    const [rows] = await pool.query('SELECT id, user_id, author, content, created_at FROM square_comments WHERE post_id = ? ORDER BY created_at ASC LIMIT 500', [pid]);
+    res.json({ ok: true, comments: rows });
+  } catch (e) { console.error('[square/comments]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+app.post('/api/square/posts/:id/comments', requireUser, async (req, res) => {
+  try {
+    const pid = Number(req.params.id);
+    const content = String((req.body || {}).content || '').trim().slice(0, 1000);
+    if (!pid || !content) return res.status(400).json({ error: 'empty' });
+    const author = req.user.name || req.user.username || req.user.email;
+    const [r] = await pool.query('INSERT INTO square_comments (post_id, user_id, author, content, created_at) VALUES (?, ?, ?, ?, ?)', [pid, req.user.uid, author, content, Date.now()]);
+    res.json({ ok: true, id: r.insertId });
+  } catch (e) { console.error('[square/comment]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+app.delete('/api/square/posts/:id', requireUser, async (req, res) => {
+  try {
+    const pid = Number(req.params.id);
+    const [[p]] = await pool.query('SELECT user_id FROM square_posts WHERE id = ?', [pid]);
+    if (!p) return res.status(404).json({ error: 'not_found' });
+    if (Number(p.user_id) !== req.user.uid) return res.status(403).json({ error: 'forbidden' });
+    await pool.query('DELETE FROM square_posts WHERE id = ?', [pid]);
+    await pool.query('DELETE FROM square_likes WHERE post_id = ?', [pid]);
+    await pool.query('DELETE FROM square_comments WHERE post_id = ?', [pid]);
+    res.json({ ok: true });
+  } catch (e) { console.error('[square/delete]', e.message); res.status(500).json({ error: 'server_error' }); }
 });
 
 // ---- Static frontend ----

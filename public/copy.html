@@ -1,9 +1,6 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
 <script>
 (function(){try{var s=JSON.parse(localStorage.getItem('skygo_session')||'null');if(!s||!s.email){location.replace('login.html?next=copy.html');}}catch(e){location.replace('login.html');}})();
 </script>
@@ -124,6 +121,7 @@ html[data-theme=light] .bnav{background:#fff}
     <p>اختر متداولاً ناجحاً وستُنسخ صفقاته على حسابك آلياً بنفس النسبة — تماماً مثل نظام Binance Copy Trading.</p>
     <div class="row"><div class="st"><b>128ك+</b><span>ناسخ</span></div><div class="st"><b>$42م+</b><span>تحت الإدارة</span></div><div class="st"><b>87%</b><span>متوسط النجاح</span></div></div>
   </div>
+  <button id="applyBtn" class="tc-btn" style="margin:2px 14px 6px;width:calc(100% - 28px)" onclick="openApply()">🚀 قدّم طلباً لتصبح متداولاً يُنسخ</button>
   <div class="sortrow" id="sortrow">
     <button class="on" data-k="roi">الأعلى عائداً</button>
     <button data-k="win">نسبة النجاح</button>
@@ -144,6 +142,7 @@ html[data-theme=light] .bnav{background:#fff}
   <a href="wallet.html"><svg viewBox="0 0 24 24"><path d="M3 7h16a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2zM16 13h.01"/></svg><span>المحفظة</span></a>
 </nav>
 <script>
+/*LEGACY_DISABLED
 const $=id=>document.getElementById(id);
 const fmt=(n,d=2)=>Number(n).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
 function fmtK(v){v=+v;if(v>=1e9)return (v/1e9).toFixed(2)+'B';if(v>=1e6)return (v/1e6).toFixed(2)+'M';if(v>=1e3)return (v/1e3).toFixed(1)+'K';return String(Math.round(v));}
@@ -277,6 +276,46 @@ function stopCopy(i){
 window.setTab=setTab;window.openCopy=openCopy;window.cSet=cSet;window.cMult=cMult;window.cCalc=cCalc;window.doCopy=doCopy;window.closeMdl=closeMdl;window.stopCopy=stopCopy;window.goMine=goMine;
 renderTraders();
 setInterval(function(){if(TAB==='mine')renderMine();},5000);
+*/
+const $=id=>document.getElementById(id);
+const fmt=(n,d=2)=>Number(n||0).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+function fmtK(v){v=+v||0;if(v>=1e9)return (v/1e9).toFixed(2)+'B';if(v>=1e6)return (v/1e6).toFixed(2)+'M';if(v>=1e3)return (v/1e3).toFixed(1)+'K';return String(Math.round(v));}
+function toast(m){var e=$('toast');e.textContent=m;e.className='toast show';clearTimeout(window._t);window._t=setTimeout(function(){e.className='toast';},2400);}
+const SESS=JSON.parse(localStorage.getItem('skygo_session')||'{}');
+const TOKEN=SESS.token||localStorage.getItem('apex_token')||'';
+function api(path,opts){opts=opts||{};opts.headers=Object.assign({'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},opts.headers||{});return fetch(path,opts).then(function(r){return r.json().catch(function(){return{};}).then(function(j){if(!r.ok)throw (j&&j.error)||('http_'+r.status);return j;});});}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+const AVC=['#f0b90b','#5e7cff','#0ecb81','#f6465d','#19c2c2','#b06df0','#e0a615','#ff8a3d'];
+function colorFor(id){var h=0,s=String(id);for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return AVC[h%AVC.length];}
+const RISK={low:['مخاطر منخفضة','low'],mid:['مخاطر متوسطة','mid'],high:['مخاطر عالية','high']};
+function seedRand(str){str=String(str);var h=2166136261;for(var i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619);}return function(){h+=0x6D2B79F5;var t=Math.imul(h^h>>>15,1|h);t^=t+Math.imul(t^t>>>7,61|t);return ((t^t>>>14)>>>0)/4294967296;};}
+function spark(id,color){var r=seedRand('s'+id),n=24,pts=[],v=50;for(var i=0;i<n;i++){v+=(r()-0.42)*14;v=Math.max(8,Math.min(92,v));pts.push(v);}var W=300,H=56,mn=Math.min.apply(null,pts),mx=Math.max.apply(null,pts),sp=(mx-mn)||1;var line=pts.map(function(p,i){return (i/(n-1)*W).toFixed(1)+','+(H-2-((p-mn)/sp)*(H-6)).toFixed(1);});var area=line.join(' ')+' '+W+','+H+' 0,'+H;var gid='g'+id;return '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none"><defs><linearGradient id="'+gid+'" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="'+color+'" stop-opacity=".35"/><stop offset="1" stop-color="'+color+'" stop-opacity="0"/></linearGradient></defs><polygon points="'+area+'" fill="url(#'+gid+')"/><polyline points="'+line.join(' ')+'" fill="none" stroke="'+color+'" stroke-width="2"/></svg>';}
+
+let TRADERS=[],MYSET={},SORT='roi',TAB='traders',IS_TRADER=false;
+const SORTKEY={roi:'roi30',win:'win_rate',followers:'followers',aum:'aum'};
+function setTab(t){TAB=t;document.querySelectorAll('.tab').forEach(function(x){x.classList.toggle('on',x.dataset.t===t);});$('paneTraders').style.display=(t==='traders')?'block':'none';$('paneMine').style.display=(t==='mine')?'block':'none';if(t==='mine')loadMine();else loadTraders();}
+$('sortrow').addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;document.querySelectorAll('#sortrow button').forEach(function(x){x.classList.remove('on');});b.classList.add('on');SORT=b.dataset.k;drawTraders();});
+function loadTraders(){api('/api/copy/traders').then(function(d){TRADERS=d.traders||[];IS_TRADER=!!d.isTrader;MYSET={};TRADERS.forEach(function(t){if(+t.iCopy>0)MYSET[t.user_id]=true;});drawTraders();updateApplyBtn();}).catch(function(){$('tradersList').innerHTML='<div class="empty"><div class="big">⚠️</div><b>تعذّر التحميل</b><p>تأكد من الاتصال وأعد المحاولة.</p></div>';});}
+function updateApplyBtn(){var b=$('applyBtn');if(b)b.textContent=IS_TRADER?'✓ أنت متداول — تعديل ملفك':'🚀 قدّم طلباً لتصبح متداولاً يُنسخ';}
+function drawTraders(){var key=SORTKEY[SORT]||'roi30';var list=TRADERS.slice().sort(function(a,b){return (+b[key])-(+a[key]);});if(!list.length){$('tradersList').innerHTML='<div class="empty"><div class="big">👤</div><b>لا متداولون بعد</b><p>كن أول من يقدّم طلباً ليصبح متداولاً يُنسخ — اضغط الزر بالأعلى.</p></div>';return;}$('tradersList').innerHTML=list.map(function(t){var rk=RISK[t.risk]||RISK.mid;var color=colorFor(t.user_id);var copying=!!MYSET[t.user_id];var roi=(+t.roi30);return '<div class="tcard"><div class="tc-top"><div class="tc-av" style="background:linear-gradient(135deg,'+color+',#231a02)">'+esc((t.display_name||'?').charAt(0))+'</div><div class="tc-nm"><b>'+esc(t.display_name)+' <span class="vrf">✔</span></b><span>'+esc(t.strategy||'تداول كريبتو')+'<span class="badge '+rk[1]+'">'+rk[0]+'</span></span></div><div class="tc-roi"><b>'+(roi>=0?'+':'')+roi.toFixed(1)+'%</b><span>عائد 30 يوم</span></div></div><div class="tc-chart">'+spark(t.user_id,color)+'</div><div class="tc-stats"><div class="s"><b>'+(+t.win_rate).toFixed(0)+'%</b><span>نسبة نجاح</span></div><div class="s"><b>'+fmtK(t.followers)+'</b><span>ناسخ</span></div><div class="s"><b>$'+fmtK(t.aum)+'</b><span>تحت الإدارة</span></div></div><button class="tc-btn'+(copying?' copying':'')+'" onclick="'+(copying?'goMine()':('openCopy('+t.user_id+')'))+'">'+(copying?'✓ تنسخه الآن — إدارة':'نسخ')+'</button></div>';}).join('');var n=Object.keys(MYSET).length;$('mineCnt').textContent=n?('('+n+')'):'';}
+function goMine(){setTab('mine');}
+let CUR=null,MULT=1;
+function openCopy(id){var t=TRADERS.find(function(x){return +x.user_id===+id;});if(!t)return;CUR=t;MULT=1;var roi=(+t.roi30);var sheet=$('mdlSheet');sheet.innerHTML='<div class="mdl-grip"></div><div class="mdl-h">نسخ '+esc(t.display_name)+'</div><div class="mdl-sub">ستُنسخ صفقات '+esc(t.display_name)+' آلياً على حسابك بنفس النسبة. حدّد مبلغ النسخ ومضاعف الحجم.</div><div class="lbl">مبلغ النسخ (USDT)</div><div class="mdl-amt"><input id="cAmt" type="text" inputmode="decimal" placeholder="0.00" oninput="cCalc()"><span class="cur">USDT</span></div><div class="mdl-quick"><button onclick="cSet(50)">50</button><button onclick="cSet(100)">100</button><button onclick="cSet(500)">500</button><button onclick="cSet(1000)">1000</button></div><div class="lbl">مضاعف حجم الصفقة</div><div class="mult" id="multRow"><button class="on" onclick="cMult(1)">1x</button><button onclick="cMult(2)">2x</button><button onclick="cMult(5)">5x</button><button onclick="cMult(10)">10x</button></div><div class="mdl-row" style="margin-top:14px"><span>عائد المتداول (30ي)</span><b style="color:var(--green)">'+(roi>=0?'+':'')+roi.toFixed(1)+'%</b></div><div class="mdl-row"><span>العائد التقديري (30ي)</span><b id="cEst">—</b></div><div class="mdl-row"><span>رسوم الأداء</span><b>10% من الأرباح</b></div><button class="mdl-go" onclick="doCopy()">تأكيد النسخ</button><button class="mdl-x" onclick="closeMdl()">إلغاء</button>';$('mdl').classList.add('on');setTimeout(function(){try{$('cAmt').focus();}catch(e){}},200);}
+function cSet(v){var a=$('cAmt');if(a){a.value=v;cCalc();}}
+function cMult(m){MULT=m;document.querySelectorAll('#multRow button').forEach(function(b){b.classList.toggle('on',b.textContent===m+'x');});cCalc();}
+function cCalc(){var a=$('cAmt');var v=a?(parseFloat(a.value)||0):0;var est=$('cEst');if(!est||!CUR)return;var g=v*MULT*((+CUR.roi30)/100);est.textContent=(g>=0?'+':'')+'$'+fmt(g,2);est.style.color=g>=0?'var(--green)':'var(--red)';}
+function doCopy(){var a=$('cAmt');var v=a?(parseFloat(a.value)||0):0;if(v<=0){toast('أدخل مبلغ النسخ');return;}if(!CUR)return;api('/api/copy/start',{method:'POST',body:JSON.stringify({trader_id:CUR.user_id,amount:v,multiplier:MULT})}).then(function(){toast('✓ بدأت نسخ '+CUR.display_name);closeMdl();loadTraders();}).catch(function(err){if(err==='cannot_copy_self')toast('لا يمكنك نسخ نفسك');else toast('تعذّر بدء النسخ');});}
+function closeMdl(){$('mdl').classList.remove('on');CUR=null;}
+$('mdl').addEventListener('click',function(e){if(e.target===$('mdl'))closeMdl();});
+function loadMine(){api('/api/copy/mine').then(function(d){drawMine(d.copies||[]);}).catch(function(){$('mineList').innerHTML='<div class="empty"><div class="big">⚠️</div><b>تعذّر التحميل</b></div>';});}
+function drawMine(arr){if(!arr.length){$('mineList').innerHTML='<div class="empty"><div class="big">📋</div><b>لا تنسخ أحداً بعد</b><p>اختر متداولاً من تبويب «أفضل المتداولين» وابدأ النسخ.</p></div>';return;}var now=Date.now();$('mineList').innerHTML=arr.map(function(c){var days=Math.max(0.02,(now-(+c.created_at))/86400000);var daily=((+c.roi30)/100)/30;var r=seedRand(c.trader_id+''+c.created_at);var drift=(r()-0.42);var amt=(+c.amount);var pnl=amt*(+c.multiplier)*daily*days*(1+drift*0.5);var pct=amt>0?(pnl/amt*100):0;var up=pnl>=0;var color=colorFor(c.trader_id);return '<div class="mc"><div class="mc-top"><div class="tc-av" style="background:linear-gradient(135deg,'+color+',#231a02)">'+esc((c.display_name||'?').charAt(0))+'</div><div class="nm"><b>'+esc(c.display_name)+'</b><span>منذ '+days.toFixed(1)+' يوم · '+c.multiplier+'x</span></div><div class="mc-pnl '+(up?'up':'dn')+'"><b>'+(up?'+':'')+'$'+fmt(pnl,2)+'</b><span>'+(up?'+':'')+pct.toFixed(2)+'%</span></div></div><div class="mc-info"><div class="s"><b>$'+fmt(amt,2)+'</b><span>مبلغ النسخ</span></div><div class="s"><b>$'+fmt(amt+pnl,2)+'</b><span>القيمة الحالية</span></div><div class="s"><b style="color:var(--green)">+'+(+c.roi30).toFixed(0)+'%</b><span>عائد المتداول</span></div></div><button class="mc-stop" onclick="stopCopy('+c.trader_id+')">إيقاف النسخ وسحب $'+fmt(amt+pnl,2)+'</button></div>';}).join('');}
+function stopCopy(tid){if(!confirm('إيقاف النسخ؟'))return;api('/api/copy/stop',{method:'POST',body:JSON.stringify({trader_id:tid})}).then(function(){toast('تم إيقاف النسخ');loadMine();}).catch(function(){toast('تعذّر الإيقاف');});}
+function openApply(){var sheet=$('mdlSheet');sheet.innerHTML='<div class="mdl-grip"></div><div class="mdl-h">'+(IS_TRADER?'تعديل ملف المتداول':'كُن متداولاً يُنسخ')+'</div><div class="mdl-sub">قدّم طلبك لتظهر بطاقتك لكل المستخدمين فيبدؤوا نسخ صفقاتك. املأ بياناتك:</div><div class="lbl">الاسم الظاهر</div><div class="mdl-amt"><input id="aName" type="text" placeholder="مثال: CryptoFalcon" style="font-size:15px"></div><div class="lbl">الاستراتيجية / الأزواج</div><div class="mdl-amt"><input id="aStrat" type="text" placeholder="BTC · ETH · SOL" style="font-size:15px"></div><div class="lbl">نبذة قصيرة</div><div class="mdl-amt"><input id="aBio" type="text" placeholder="متداول سوينغ منذ 2019..." style="font-size:14px"></div><div class="lbl">مستوى المخاطرة</div><div class="mult" id="riskRow"><button class="on" data-r="low" onclick="pickRisk(this)">منخفضة</button><button data-r="mid" onclick="pickRisk(this)">متوسطة</button><button data-r="high" onclick="pickRisk(this)">عالية</button></div><div class="lbl">عائد آخر 30 يوم (%)</div><div class="mdl-amt"><input id="aRoi" type="text" inputmode="decimal" placeholder="مثال: 45.5" style="font-size:15px"><span class="cur">%</span></div><div class="lbl">نسبة النجاح (%)</div><div class="mdl-amt"><input id="aWin" type="text" inputmode="decimal" placeholder="مثال: 88" style="font-size:15px"><span class="cur">%</span></div><button class="mdl-go" onclick="submitApply()">'+(IS_TRADER?'حفظ التعديلات':'تقديم الطلب')+'</button><button class="mdl-x" onclick="closeMdl()">إلغاء</button>';window._risk='low';$('mdl').classList.add('on');}
+function pickRisk(b){window._risk=b.dataset.r;document.querySelectorAll('#riskRow button').forEach(function(x){x.classList.remove('on');});b.classList.add('on');}
+function submitApply(){var name=($('aName').value||'').trim();if(!name){toast('أدخل الاسم الظاهر');return;}var body={display_name:name,strategy:($('aStrat').value||'').trim(),bio:($('aBio').value||'').trim(),risk:window._risk||'mid',roi30:parseFloat($('aRoi').value)||0,win_rate:parseFloat($('aWin').value)||0};api('/api/copy/apply',{method:'POST',body:JSON.stringify(body)}).then(function(){toast('✓ تم — بطاقتك ظاهرة للجميع الآن');closeMdl();loadTraders();}).catch(function(){toast('تعذّر إرسال الطلب');});}
+window.setTab=setTab;window.openCopy=openCopy;window.cSet=cSet;window.cMult=cMult;window.cCalc=cCalc;window.doCopy=doCopy;window.closeMdl=closeMdl;window.stopCopy=stopCopy;window.goMine=goMine;window.openApply=openApply;window.pickRisk=pickRisk;window.submitApply=submitApply;
+loadTraders();
+setInterval(function(){if(TAB==='mine')loadMine();},8000);
 </script>
 </body>
 </html>
