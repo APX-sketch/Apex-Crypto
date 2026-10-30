@@ -226,6 +226,18 @@ body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);col
 .recdetail .rdrow .k{color:var(--muted);font-weight:700;flex:0 0 auto}
 .recdetail .rdrow .v{text-align:end;word-break:break-all;font-weight:800;direction:ltr}
 .recdetail .rdrow .v.pos{color:var(--green)} .recdetail .rdrow .v.neg{color:var(--red)}
+/* === أنيميشن فتح القوائم — مطابق للتصميم الجديد === */
+@keyframes wlSheetUp{from{opacity:0;transform:translateX(-50%) translateY(100%)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+@keyframes wlPop{from{opacity:0;transform:translateY(34px)}to{opacity:1;transform:translateY(0)}}
+@keyframes wlFade{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.recdetail.show .rdcard{animation:wlPop .3s cubic-bezier(.22,.61,.36,1)}
+.recsheet.show .recfilters,.recsheet.show .recbody{animation:wlFade .34s cubic-bezier(.22,.61,.36,1) both}
+.recsheet.show .recbody{animation-delay:.06s}
+.hero,.acts,.accnav,.sumcard{animation:wlFade .4s cubic-bezier(.22,.61,.36,1) both}
+.acts{animation-delay:.05s}.accnav{animation-delay:.08s}.sumcard{animation-delay:.11s}
+/* أيقونات الرأس بلمسة ذهبية لمطابقة الهوية */
+.hdr .ttl{background:linear-gradient(135deg,var(--gold1),var(--gold2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.hdr .icobtn svg{stroke:var(--gold2)}
 </style>
 </head>
 <body>

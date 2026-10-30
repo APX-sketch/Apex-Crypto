@@ -267,7 +267,7 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
 .icobtn .sdot.on{display:block}
 .icobtn.sq{background:var(--panel2);border:1px solid var(--border);border-radius:11px}
 .pf-top{display:flex;align-items:center;gap:8px;padding:calc(14px + env(safe-area-inset-top)) 14px 6px}
-.pf-top .pf-ic{width:40px;height:40px;display:flex;align-items:center;justify-content:center;border-radius:11px;cursor:pointer;color:var(--txt)}
+.pf-top .pf-ic{width:40px;height:40px;display:flex;align-items:center;justify-content:center;border-radius:11px;cursor:pointer;color:var(--gold2)}
 .pf-top .pf-ic:active{background:var(--panel2)}
 .pf-top .pf-ic svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.9}
 .pf-top .sp{flex:1}
@@ -294,6 +294,33 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
 .picker .pko .tk{margin-inline-start:auto;color:var(--gold2);font-weight:900;display:none}
 .picker .pko.sel .tk{display:block}
 .picker .pko.sel{color:var(--gold2)}
+/* === منع قص النص في الملف الشخصي === */
+.pf-hero .pi{flex:1;min-width:0}
+.pf-hero .pi .pn{white-space:normal;overflow:visible}
+.pf-hero .pi .pn span{overflow-wrap:anywhere;word-break:break-word;color:var(--txt)}
+.pf-hero .pi .pu{overflow-wrap:anywhere}
+.pf-support{white-space:normal;line-height:1.3;min-height:52px;height:auto}
+/* === صف حذف الحساب === */
+.row.danger .ic{background:rgba(246,70,93,.12)!important}
+.row.danger .ic svg{stroke:var(--red)!important}
+.row.danger b{color:var(--red)!important}
+.del-warn{margin:2px 16px 14px;padding:14px;border-radius:12px;background:rgba(246,70,93,.09);border:1px solid rgba(246,70,93,.25);color:var(--red);font-size:13px;line-height:1.6;font-weight:600}
+.del-field{margin:0 16px 14px}
+.del-field label{display:block;font-size:13px;font-weight:700;color:var(--muted);margin:0 0 8px}
+.del-field input{width:100%;box-sizing:border-box;padding:13px 14px;border-radius:12px;border:1px solid var(--border);background:var(--panel2);color:var(--txt);font-size:15px;font-family:inherit;outline:none}
+.del-field input:focus{border-color:var(--red)}
+.del-actions{display:flex;gap:10px;margin:4px 16px calc(18px + env(safe-area-inset-bottom))}
+.del-actions button{flex:1;padding:14px 0;border-radius:12px;border:0;font-family:inherit;font-weight:800;font-size:15px;cursor:pointer}
+.del-actions .cancel{background:var(--panel2);color:var(--txt)}
+.del-actions .confirm{background:var(--red);color:#fff}
+.del-actions .confirm:disabled{opacity:.6;cursor:default}
+/* === أنيميشن فتح القوائم === */
+@keyframes apxPkUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+@keyframes apxItemUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.picker.show .pk{animation:apxPkUp .28s cubic-bezier(.22,.61,.36,1)}
+.sheet.show .grp,.sheet.show .pf-hero,.sheet.show .pf-badges,.sheet.show .pf-support,.sheet.show .del-warn,.sheet.show .del-field,.sheet.show .del-actions{animation:apxItemUp .34s cubic-bezier(.22,.61,.36,1) both}
+.sheet.show .pf-hero{animation-delay:.03s}.sheet.show .pf-badges{animation-delay:.06s}.sheet.show .pf-support{animation-delay:.09s}.sheet.show .grp{animation-delay:.12s}
+.drawer.show .ditem{animation:apxItemUp .3s cubic-bezier(.22,.61,.36,1) both}
 </style>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0b0e11">
@@ -458,6 +485,23 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
     </div>
     <div class="grp">
       <div class="row" onclick="doLogout()"><span class="ic" style="background:rgba(246,70,93,.12)"><svg style="stroke:var(--red)" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg></span><div class="tx"><b style="color:var(--red)" data-i18n="logout">تسجيل الخروج</b></div></div>
+      <div class="row danger" onclick="openSheet('shDelAcc')"><span class="ic"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 13a2 2 0 002 2h8a2 2 0 002-2l1-13M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"/></svg></span><div class="tx"><b>حذف الحساب</b></div><span class="ar">‹</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== DELETE ACCOUNT SHEET (تحقق بكلمة المرور) ===== -->
+<div class="sheet" id="shDelAcc">
+  <div class="sh-top"><div class="bk" onclick="closeSheet('shDelAcc')">›</div><b>حذف الحساب نهائياً</b></div>
+  <div class="sh-body">
+    <div class="del-warn">⚠️ سيتم حذف حسابك وجميع بياناتك نهائياً، ولا يمكن التراجع عن هذا الإجراء.</div>
+    <div class="del-field">
+      <label for="delPass">أدخل كلمة المرور للتأكيد</label>
+      <input id="delPass" type="password" autocomplete="current-password" placeholder="••••••••">
+    </div>
+    <div class="del-actions">
+      <button type="button" class="cancel" onclick="closeSheet('shDelAcc')">إلغاء</button>
+      <button type="button" class="confirm" id="delBtn" onclick="deleteAccount()">تأكيد الحذف النهائي</button>
     </div>
   </div>
 </div>
@@ -491,7 +535,7 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
     </div>
     <div class="grp">
       <div class="gt">أخرى</div>
-      <div class="row" onclick="toast('أدوات التداول المتقدمة قيد الإعداد')"><div class="tx2">الأدوات</div><span class="ar">‹</span></div>
+      <div class="row" onclick="openTools()"><div class="tx2">الأدوات</div><span class="ar">‹</span></div>
       <div class="row" onclick="clearCache()"><div class="tx2">مسح ذاكرة التخزين المؤقت</div><span class="val" id="valCache">—</span><span class="ar">‹</span></div>
       <div class="row" onclick="openSheet('shHelp')"><div class="tx2">المساعدة والدعم</div><span class="ar">‹</span></div>
       <div class="row" onclick="toast('مركز الخصوصية — بياناتك محمية')"><div class="tx2">مركز الخصوصية</div><span class="ar">‹</span></div>
@@ -635,6 +679,27 @@ function openDrawer(){$('drawer').classList.add('show');$('scrim').classList.add
 function closeDrawer(){$('drawer').classList.remove('show');$('scrim').classList.remove('show');}
 function copyUid(){navigator.clipboard&&navigator.clipboard.writeText(''+UID);toast('تم نسخ رقم المستخدم');}
 function doLogout(){localStorage.removeItem('skygo_session');localStorage.removeItem('apex_token');localStorage.removeItem('apex_kyc_status');location.replace('login.html');}
+async function deleteAccount(){
+  var inp=$('delPass'),btn=$('delBtn');
+  var pass=(inp&&inp.value||'').trim();
+  if(!pass){toast('أدخل كلمة المرور للتأكيد');if(inp)inp.focus();return;}
+  var tok=(sess&&sess.token)||localStorage.getItem('apex_token')||'';
+  if(!tok){toast('الرجاء تسجيل الدخول');return;}
+  var _old=btn?btn.textContent:'';if(btn){btn.disabled=true;btn.textContent='جارٍ الحذف…';}
+  try{
+    var r=await fetch('/api/account/delete',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok},body:JSON.stringify({password:pass})});
+    var d={};try{d=await r.json();}catch(e){}
+    if(r.ok&&d&&d.ok){
+      try{localStorage.clear();}catch(e){}
+      location.replace('login.html');
+      return;
+    }
+    if(r.status===401||r.status===403){toast('كلمة المرور غير صحيحة');}
+    else{toast((d&&d.error)||'تعذّر حذف الحساب، حاول مجدداً');}
+  }catch(e){toast('تعذّر حذف الحساب، حاول مجدداً');}
+  if(btn){btn.disabled=false;btn.textContent=_old;}
+  if(inp)inp.value='';
+}
 
 /* ===== الملف الشخصي (شاشة كاملة) + الإعدادات ===== */
 function openProfile(){
@@ -654,10 +719,11 @@ var SETVAL={
   paycur:{key:'apex_set_paycur',def:'USD',el:'valPaycur',opts:[['USD','USD — دولار أمريكي'],['EUR','EUR — يورو'],['SAR','SAR — ريال سعودي'],['AED','AED — درهم إماراتي'],['EGP','EGP — جنيه مصري'],['TRY','TRY — ليرة تركية']]},
   tab:{key:'apex_set_tab',def:'الرئيسية',el:'valTab',opts:[['الرئيسية','الرئيسية'],['الأسواق','الأسواق'],['التداول','التداول'],['العقود الآجلة','العقود الآجلة'],['المحفظة','المحفظة']]},
   home:{key:'apex_set_home',def:'قياسي',el:'valHome',opts:[['قياسي','قياسي'],['مبسّط','مبسّط'],['احترافي','احترافي']]},
-  color:{key:'apex_set_color',def:'أخضر صعود / أحمر هبوط',el:'valColor',opts:[['أخضر صعود / أحمر هبوط','أخضر صعود / أحمر هبوط'],['أحمر صعود / أخضر هبوط','أحمر صعود / أخضر هبوط']]},
+  color:{key:'apex_set_color',def:'normal',el:'valColor',opts:[['normal','أخضر صعود / أحمر هبوط'],['reverse','أحمر صعود / أخضر هبوط']]},
   tz:{key:'apex_set_tz',def:'تلقائي',el:'valTz',opts:[['تلقائي','تلقائي'],['UTC','UTC (غرينتش)'],['UTC+3','UTC+3 (الرياض)'],['UTC+2','UTC+2 (القاهرة)'],['UTC+4','UTC+4 (دبي)'],['UTC+1','UTC+1 (وسط أوروبا)']]}
 };
-function _setLabel(name){var c=SETVAL[name];if(!c)return;var el=$(c.el);if(!el)return;el.textContent=localStorage.getItem(c.key)||c.def;}
+function _optLabel(name,val){var c=SETVAL[name];if(!c)return val;for(var i=0;i<c.opts.length;i++){if(c.opts[i][0]===val)return c.opts[i][1];}return val;}
+function _setLabel(name){var c=SETVAL[name];if(!c)return;var el=$(c.el);if(!el)return;var v=localStorage.getItem(c.key);if(v==null)v=c.def;el.textContent=_optLabel(name,v);}
 var _PICK_TITLE={currency:'العملة',paycur:'عملة الدفع',tab:'تبويب مخصص',home:'عرض الصفحة الرئيسية',color:'تفضيل اللون',tz:'المنطقة الزمنية'};
 function _esc(s){return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
 function openPick(name){
@@ -668,7 +734,9 @@ function openPick(name){
   html+=c.opts.map(function(o){return '<div class="pko'+(o[0]===cur?' sel':'')+'" onclick="pickSet(\''+name+'\',\''+_esc(o[0])+'\')"><span>'+o[1]+'</span><span class="tk">✓</span></div>';}).join('');
   $('pickerPk').innerHTML=html;_showPicker();
 }
-function pickSet(name,val){var c=SETVAL[name];if(!c)return;localStorage.setItem(c.key,val);_setLabel(name);closePick();toast('تم الحفظ');}
+function pickSet(name,val){var c=SETVAL[name];if(!c)return;localStorage.setItem(c.key,val);_setLabel(name);
+  if(name==='color'&&window.APEX_I18N&&APEX_I18N.setColorPref){APEX_I18N.setColorPref(val);}
+  closePick();toast('تم الحفظ');}
 function _renderThemePick(){
   var cur=(window.APEX_I18N&&APEX_I18N.theme)?APEX_I18N.theme():(localStorage.getItem('apex_theme')||'dark');
   var opts=[['dark','داكن'],['light','فاتح']];
@@ -682,6 +750,12 @@ function pickTheme(mode){
   closePick();toast('تم الحفظ');
 }
 function _showPicker(){$('pickerOv').classList.add('show');}
+function openTools(){
+  var tools=[['المتداول (Trade)','trading.html'],['العقود الآجلة (Futures)','futures.html'],['النسخ (Copy)','copy.html'],['الساحة (Square)','square.html'],['المحفظة','wallet.html']];
+  var html='<div class="pkh"><b>الأدوات</b><span onclick="closePick()">×</span></div>';
+  html+=tools.map(function(o){return '<div class="pko" onclick="location.href=\''+o[1]+'\'"><span>'+o[0]+'</span><span class="ar" style="margin-inline-start:auto;color:var(--muted)">‹</span></div>';}).join('');
+  $('pickerPk').innerHTML=html;_showPicker();
+}
 function closePick(){$('pickerOv').classList.remove('show');}
 function toggleSet(key,el){var on=!el.classList.contains('on');el.classList.toggle('on',on);localStorage.setItem('apex_set_'+key,on?'1':'0');toast(on?'تم التفعيل':'تم الإيقاف');}
 function clearCache(){
@@ -692,6 +766,7 @@ function clearCache(){
 function aboutApp(){toast('Apex · الإصدار 1.0 — منصة تداول العملات الرقمية');}
 function checkUpdates(){toast('أنت تستخدم أحدث إصدار (v1.0)');}
 function initSettings(){
+  try{var _oc=localStorage.getItem('apex_set_color');if(_oc&&_oc!=='normal'&&_oc!=='reverse'){localStorage.setItem('apex_set_color',(_oc.indexOf('أحمر صعود')===0)?'reverse':'normal');}}catch(e){}
   ['currency','paycur','tab','home','color','tz'].forEach(_setLabel);
   if(localStorage.getItem('apex_set_notif')!=='0'){var n=$('swNotif');if(n)n.classList.add('on');}
   if(localStorage.getItem('apex_set_ai')==='1'){var a=$('swAi');if(a)a.classList.add('on');}

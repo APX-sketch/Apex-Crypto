@@ -5,7 +5,7 @@
 =================================================================== */
 (function(){
 'use strict';
-var LKEY='apex_lang', TKEY='apex_theme';
+var LKEY='apex_lang', TKEY='apex_theme', CKEY='apex_set_color';
 var AR=/[\u0600-\u06FF]/;
 var LANGS=[
   {c:'ar',n:'العربية',e:'Arabic',f:'\uD83C\uDDF8\uD83C\uDDE6',dir:'rtl'},
@@ -559,7 +559,33 @@ var SRC={en:{
 'فاتح':'Light',
 'داكن':'Dark',
 'تسجيل الدخول':'Sign in',
-'إنشاء حساب':'Create account'
+'إنشاء حساب':'Create account',
+'حذف الحساب':'Delete account',
+'حذف الحساب نهائياً':'Delete account permanently',
+'سيتم حذف حسابك وجميع بياناتك نهائياً، ولا يمكن التراجع عن هذا الإجراء.':'Your account and all your data will be permanently deleted. This action cannot be undone.',
+'أدخل كلمة المرور للتأكيد':'Enter your password to confirm',
+'كلمة المرور':'Password',
+'تأكيد الحذف النهائي':'Confirm permanent deletion',
+'جارٍ الحذف…':'Deleting…',
+'إلغاء':'Cancel',
+'كلمة المرور غير صحيحة':'Incorrect password',
+'تعذّر حذف الحساب، حاول مجدداً':'Could not delete the account, please try again',
+'ألوان الشموع':'Candle colors',
+'أخضر صعود / أحمر هبوط':'Green up / Red down',
+'أحمر صعود / أخضر هبوط':'Red up / Green down',
+'المنطقة الزمنية':'Time zone',
+'طريقة الدفع':'Payment method',
+'الأدوات':'Tools',
+'اختر طريقة الدفع':'Choose payment method',
+'اختر المنطقة الزمنية':'Choose time zone',
+'بطاقة بنكية':'Bank card',
+'تحويل بنكي':'Bank transfer',
+'محفظة عملات':'Crypto wallet',
+'المتداول (Trade)':'Trade',
+'العقود الآجلة (Futures)':'Futures',
+'النسخ (Copy)':'Copy trading',
+'الساحة (Square)':'Square',
+'تم الحفظ':'Saved'
 }};
 
 function dirOf(c){for(var i=0;i<LANGS.length;i++){if(LANGS[i].c===c)return LANGS[i].dir;}return 'ltr';}
@@ -642,6 +668,33 @@ function applyTheme(mode){
   updateCtrl();
 }
 function toggleTheme(){applyTheme(curTheme==='light'?'dark':'light');}
+
+/* ===== تفضيل ألوان الشموع (صعود/هبوط) — عالمي عبر كل الصفحات ===== */
+var curCPref=(localStorage.getItem(CKEY)==='reverse')?'reverse':'normal';
+function applyColorPref(mode){
+  curCPref=(mode==='reverse')?'reverse':'normal';
+  try{localStorage.setItem(CKEY,curCPref);}catch(e){}
+  document.documentElement.setAttribute('data-cpref',curCPref);
+}
+function colorPref(){return curCPref;}
+
+/* ===== حقن طبقة التأثيرات: قلب ألوان الشموع + أنيميشن القوائم (كل الصفحات) ===== */
+function injectFx(){
+  if(document.getElementById('apxFxStyle'))return;
+  var st=document.createElement('style');st.id='apxFxStyle';
+  st.textContent=[
+   'html[data-cpref="reverse"]{--green:#f6465d;--red:#0ecb81;--up:#f6465d;--down:#0ecb81;}',
+   'html[data-cpref="reverse"] .up,html[data-cpref="reverse"] .pos,html[data-cpref="reverse"] .green{color:#f6465d !important}',
+   'html[data-cpref="reverse"] .down,html[data-cpref="reverse"] .neg,html[data-cpref="reverse"] .red{color:#0ecb81 !important}',
+   '@keyframes apxFade{from{opacity:0}to{opacity:1}}',
+   '@keyframes apxSheetUp{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:translateY(0)}}',
+   '@keyframes apxDrawerIn{from{opacity:0;transform:translateX(var(--apxdx,22px))}to{opacity:1;transform:translateX(0)}}',
+   '@keyframes apxPop{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}}',
+   '.apx-lov.on{animation:apxFade .18s ease}',
+   '.apx-lov.on .apx-lsheet{animation:apxSheetUp .26s cubic-bezier(.22,.61,.36,1)}'
+  ].join('\n');
+  document.head.appendChild(st);
+}
 
 /* ===== شريط التحكم (أيقونتي اللغة والمظهر) + نافذة اختيار اللغة ===== */
 var SUN='<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.6M12 19.4V22M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2 12h2.6M19.4 12H22M4.2 19.8L6 18M18 6l1.8-1.8"/></svg>';
@@ -736,16 +789,19 @@ function startObserver(){
   mo.observe(document.body,{childList:true,subtree:true});
 }
 
-window.APEX_I18N={apply:apply,t:function(k){return keyT(curLang,k);},langs:LANGS,current:function(){return curLang;},setTheme:applyTheme,toggleTheme:toggleTheme,theme:function(){return curTheme;},open:openPicker};
+window.APEX_I18N={apply:apply,t:function(k){return keyT(curLang,k);},langs:LANGS,current:function(){return curLang;},setTheme:applyTheme,toggleTheme:toggleTheme,theme:function(){return curTheme;},open:openPicker,setColorPref:applyColorPref,colorPref:colorPref};
 
 function boot(){
   document.documentElement.setAttribute('data-theme',curTheme);
+  document.documentElement.setAttribute('data-cpref',curCPref);
   injectStyle();
+  injectFx();
   buildCtrl();
   apply(curLang);
   startObserver();
 }
-/* تطبيق المظهر فوراً لتجنّب ومضة الألوان */
+/* تطبيق المظهر وتفضيل الألوان فوراً لتجنّب ومضة الألوان */
 document.documentElement.setAttribute('data-theme',curTheme);
+document.documentElement.setAttribute('data-cpref',curCPref);
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();
