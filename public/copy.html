@@ -104,6 +104,30 @@ html[data-theme=light] .bnav{background:#fff}
 .bnav a{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--muted);text-decoration:none;font-size:10px;font-weight:700}
 .bnav a svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8}
 .bnav a.active{color:var(--gold2)}
+/* ===== تخطيط شبيه Binance Copy ===== */
+.cbal{margin:12px 14px 6px;padding:16px 16px 14px;border-radius:16px;background:linear-gradient(120deg,#1e2530,#141920);border:1px solid var(--border)}
+html[data-theme=light] .cbal{background:linear-gradient(120deg,#fff,#eef1f6)}
+.cbal .lbl{font-size:12px;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:6px}
+.cbal .big{font-size:30px;font-weight:900;margin-top:6px;direction:ltr;letter-spacing:-.5px}
+.cbal .big small{font-size:15px;color:var(--muted);font-weight:800;margin-inline-start:5px}
+.cbal .sub{display:flex;gap:20px;margin-top:12px}
+.cbal .sub .it span{font-size:11px;color:var(--muted);display:block}
+.cbal .sub .it b{font-size:15px;font-weight:900;direction:ltr;display:block;margin-top:2px}
+.cbal .sub .it b.up{color:var(--green)}.cbal .sub .it b.dn{color:var(--red)}
+.seg{display:flex;gap:22px;padding:4px 18px 2px;border-bottom:1px solid var(--border);margin:6px 0 2px}
+.seg button{background:none;border:0;color:var(--muted);font-family:inherit;font-weight:800;font-size:15px;padding:9px 0;cursor:pointer;position:relative}
+.seg button.on{color:var(--txt)}
+.seg button.on::after{content:"";position:absolute;bottom:-1px;right:50%;transform:translateX(50%);width:60%;height:3px;border-radius:3px;background:linear-gradient(90deg,var(--gold1),var(--gold2))}
+.svc{display:flex;gap:10px;padding:12px 14px 4px}
+.svc .card{flex:1;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:13px 8px;text-align:center;cursor:pointer;transition:transform .12s}
+.svc .card:active{transform:scale(.96)}
+.svc .card .ic{width:40px;height:40px;margin:0 auto 8px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:rgba(224,166,21,.12)}
+.svc .card .ic svg{width:22px;height:22px;stroke:var(--gold2);fill:none;stroke-width:1.8}
+.svc .card b{font-size:12px;font-weight:800;display:block;line-height:1.3}
+.svc .card span{font-size:9.5px;color:var(--muted);display:block;margin-top:3px}
+.flt-h{display:flex;align-items:center;justify-content:space-between;padding:12px 16px 2px}
+.flt-h b{font-size:15px;font-weight:900}
+.flt-h a{font-size:12px;color:var(--gold2);font-weight:800;text-decoration:none;cursor:pointer}
 /* نجوم + لوحة الأداء + تقييمات */
 .stars{display:inline-flex;gap:1px;direction:ltr;vertical-align:middle}
 .stars svg{width:12px;height:12px}
@@ -142,20 +166,33 @@ html[data-theme=light] .bnav{background:#fff}
   <div class="icobtn" onclick="location.href='futures.html'"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
   <h1>نسخ التداول</h1>
 </div>
+<div class="cbal">
+  <div class="lbl">رصيد النسخ (USDT)</div>
+  <div class="big" id="copyBal">0.00 <small>USDT</small></div>
+  <div class="sub">
+    <div class="it"><span>الأرباح والخسائر غير المحققة</span><b class="up" id="copyUpnl">+0.00</b></div>
+    <div class="it"><span>النسخ النشطة</span><b id="copyCnt">0</b></div>
+  </div>
+</div>
 <div class="tabs">
   <div class="tab on" data-t="traders" onclick="setTab('traders')">أفضل المتداولين</div>
   <div class="tab" data-t="mine" onclick="setTab('mine')">نسخي <span id="mineCnt"></span></div>
   <div class="tab" data-t="stats" onclick="setTab('stats')">لوحة الأداء</div>
 </div>
 <div id="paneTraders">
-  <div class="hero">
-    <b>🔥 انسخِ المحترفين تلقائياً</b>
-    <p>اختر متداولاً ناجحاً وستُنسخ صفقاته على حسابك آلياً بنفس النسبة — تماماً مثل نظام Binance Copy Trading.</p>
-    <div class="row"><div class="st"><b>128ك+</b><span>ناسخ</span></div><div class="st"><b>$42م+</b><span>تحت الإدارة</span></div><div class="st"><b>87%</b><span>متوسط النجاح</span></div></div>
+  <div class="seg" id="seg">
+    <button class="on" data-g="futures" onclick="setSeg(this)">العقود الآجلة</button>
+    <button data-g="spot" onclick="setSeg(this)">التداول الفوري</button>
   </div>
-  <button id="applyBtn" class="tc-btn" style="margin:2px 14px 6px;width:calc(100% - 28px)" onclick="openApply()">🚀 قدّم طلباً لتصبح متداولاً يُنسخ</button>
+  <div class="svc">
+    <div class="card" onclick="svcSmart()"><div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.4"/><path d="M12 3v2.6M12 18.4V21M3 12h2.6M18.4 12H21M5.6 5.6l1.9 1.9M16.5 16.5l1.9 1.9M18.4 5.6l-1.9 1.9M7.5 16.5l-1.9 1.9"/></svg></div><b>النسخ الذكي</b><span>توزيع آلي</span></div>
+    <div class="card" onclick="svcMaster()"><div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a5 5 0 015-5h6a5 5 0 015 5v1"/></svg></div><b>كن متداولاً رئيسياً</b><span>تقدّم الآن</span></div>
+    <div class="card" onclick="svcLearn()"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 5h10a3 3 0 013 3v11a3 3 0 00-3-3H4zM20 5a3 3 0 00-3 3v8"/></svg></div><b>الدروس التعليمية</b><span>ابدأ التعلّم</span></div>
+  </div>
+  <button id="applyBtn" class="tc-btn" style="display:none" onclick="openApply()">🚀 قدّم طلباً لتصبح متداولاً يُنسخ</button>
+  <div class="flt-h"><b>أعلى عائد على الاستثمار</b><a onclick="goMine()">نسخي ›</a></div>
   <div class="sortrow" id="sortrow">
-    <button class="on" data-k="roi">الأعلى عائداً</button>
+    <button class="on" data-k="roi">موصى به</button>
     <button data-k="win">نسبة النجاح</button>
     <button data-k="followers">الأكثر متابعة</button>
     <button data-k="aum">الأكبر إدارة</button>
@@ -337,12 +374,12 @@ function openCopy(id){var t=TRADERS.find(function(x){return +x.user_id===+id;});
 function cSet(v){var a=$('cAmt');if(a){a.value=v;cCalc();}}
 function cMult(m){MULT=m;document.querySelectorAll('#multRow button').forEach(function(b){b.classList.toggle('on',b.textContent===m+'x');});cCalc();}
 function cCalc(){var a=$('cAmt');var v=a?(parseFloat(a.value)||0):0;var est=$('cEst');if(!est||!CUR)return;var g=v*MULT*((+CUR.roi30)/100);est.textContent=(g>=0?'+':'')+'$'+fmt(g,2);est.style.color=g>=0?'var(--green)':'var(--red)';}
-function doCopy(){var a=$('cAmt');var v=a?(parseFloat(a.value)||0):0;if(v<=0){toast('أدخل مبلغ النسخ');return;}if(!CUR)return;api('/api/copy/start',{method:'POST',body:JSON.stringify({trader_id:CUR.user_id,amount:v,multiplier:MULT})}).then(function(){toast('✓ بدأت نسخ '+CUR.display_name);closeMdl();loadTraders();}).catch(function(err){if(err==='cannot_copy_self')toast('لا يمكنك نسخ نفسك');else toast('تعذّر بدء النسخ');});}
+function doCopy(){var a=$('cAmt');var v=a?(parseFloat(a.value)||0):0;if(v<=0){toast('أدخل مبلغ النسخ');return;}if(!CUR)return;api('/api/copy/start',{method:'POST',body:JSON.stringify({trader_id:CUR.user_id,amount:v,multiplier:MULT})}).then(function(){toast('✓ بدأت نسخ '+CUR.display_name);closeMdl();loadTraders();refreshCopyBal();}).catch(function(err){if(err==='cannot_copy_self')toast('لا يمكنك نسخ نفسك');else toast('تعذّر بدء النسخ');});}
 function closeMdl(){$('mdl').classList.remove('on');CUR=null;}
 $('mdl').addEventListener('click',function(e){if(e.target===$('mdl'))closeMdl();});
 function loadMine(){api('/api/copy/mine').then(function(d){drawMine(d.copies||[]);}).catch(function(){$('mineList').innerHTML='<div class="empty"><div class="big">⚠️</div><b>تعذّر التحميل</b></div>';});}
 function drawMine(arr){if(!arr.length){$('mineList').innerHTML='<div class="empty"><div class="big">📋</div><b>لا تنسخ أحداً بعد</b><p>اختر متداولاً من تبويب «أفضل المتداولين» وابدأ النسخ.</p></div>';return;}var now=Date.now();$('mineList').innerHTML=arr.map(function(c){var days=Math.max(0.02,(now-(+c.created_at))/86400000);var daily=((+c.roi30)/100)/30;var r=seedRand(c.trader_id+''+c.created_at);var drift=(r()-0.42);var amt=(+c.amount);var pnl=amt*(+c.multiplier)*daily*days*(1+drift*0.5);var pct=amt>0?(pnl/amt*100):0;var up=pnl>=0;var color=colorFor(c.trader_id);return '<div class="mc"><div class="mc-top"><div class="tc-av" style="background:linear-gradient(135deg,'+color+',#231a02)">'+esc((c.display_name||'?').charAt(0))+'</div><div class="nm"><b>'+esc(c.display_name)+'</b><span>منذ '+days.toFixed(1)+' يوم · '+c.multiplier+'x</span></div><div class="mc-pnl '+(up?'up':'dn')+'"><b>'+(up?'+':'')+'$'+fmt(pnl,2)+'</b><span>'+(up?'+':'')+pct.toFixed(2)+'%</span></div></div><div class="mc-info"><div class="s"><b>$'+fmt(amt,2)+'</b><span>مبلغ النسخ</span></div><div class="s"><b>$'+fmt(amt+pnl,2)+'</b><span>القيمة الحالية</span></div><div class="s"><b style="color:var(--green)">+'+(+c.roi30).toFixed(0)+'%</b><span>عائد المتداول</span></div></div><button class="mc-stop" onclick="stopCopy('+c.trader_id+')">إيقاف النسخ وسحب $'+fmt(amt+pnl,2)+'</button></div>';}).join('');}
-function stopCopy(tid){if(!confirm('إيقاف النسخ؟'))return;api('/api/copy/stop',{method:'POST',body:JSON.stringify({trader_id:tid})}).then(function(){toast('تم إيقاف النسخ');loadMine();}).catch(function(){toast('تعذّر الإيقاف');});}
+function stopCopy(tid){if(!confirm('إيقاف النسخ؟'))return;api('/api/copy/stop',{method:'POST',body:JSON.stringify({trader_id:tid})}).then(function(){toast('تم إيقاف النسخ');loadMine();refreshCopyBal();}).catch(function(){toast('تعذّر الإيقاف');});}
 function openApply(){var sheet=$('mdlSheet');sheet.innerHTML='<div class="mdl-grip"></div><div class="mdl-h">'+(IS_TRADER?'تعديل ملف المتداول':'كُن متداولاً يُنسخ')+'</div><div class="mdl-sub">قدّم طلبك لتظهر بطاقتك لكل المستخدمين فيبدؤوا نسخ صفقاتك. املأ بياناتك:</div><div class="lbl">الاسم الظاهر</div><div class="mdl-amt"><input id="aName" type="text" placeholder="مثال: CryptoFalcon" style="font-size:15px"></div><div class="lbl">الاستراتيجية / الأزواج</div><div class="mdl-amt"><input id="aStrat" type="text" placeholder="BTC · ETH · SOL" style="font-size:15px"></div><div class="lbl">نبذة قصيرة</div><div class="mdl-amt"><input id="aBio" type="text" placeholder="متداول سوينغ منذ 2019..." style="font-size:14px"></div><div class="lbl">مستوى المخاطرة</div><div class="mult" id="riskRow"><button class="on" data-r="low" onclick="pickRisk(this)">منخفضة</button><button data-r="mid" onclick="pickRisk(this)">متوسطة</button><button data-r="high" onclick="pickRisk(this)">عالية</button></div><div class="lbl">عائد آخر 30 يوم (%)</div><div class="mdl-amt"><input id="aRoi" type="text" inputmode="decimal" placeholder="مثال: 45.5" style="font-size:15px"><span class="cur">%</span></div><div class="lbl">نسبة النجاح (%)</div><div class="mdl-amt"><input id="aWin" type="text" inputmode="decimal" placeholder="مثال: 88" style="font-size:15px"><span class="cur">%</span></div><button class="mdl-go" onclick="submitApply()">'+(IS_TRADER?'حفظ التعديلات':'تقديم الطلب')+'</button><button class="mdl-x" onclick="closeMdl()">إلغاء</button>';window._risk='low';$('mdl').classList.add('on');}
 function pickRisk(b){window._risk=b.dataset.r;document.querySelectorAll('#riskRow button').forEach(function(x){x.classList.remove('on');});b.classList.add('on');}
 function submitApply(){var name=($('aName').value||'').trim();if(!name){toast('أدخل الاسم الظاهر');return;}var body={display_name:name,strategy:($('aStrat').value||'').trim(),bio:($('aBio').value||'').trim(),risk:window._risk||'mid',roi30:parseFloat($('aRoi').value)||0,win_rate:parseFloat($('aWin').value)||0};api('/api/copy/apply',{method:'POST',body:JSON.stringify(body)}).then(function(){toast('✓ تم — بطاقتك ظاهرة للجميع الآن');closeMdl();loadTraders();}).catch(function(){toast('تعذّر إرسال الطلب');});}
@@ -353,9 +390,26 @@ function loadReviews(tid){REVTID=tid;REVPICK=0;api('/api/copy/traders/'+tid+'/re
 function submitReview(){if(!REVTID)return;if(!REVPICK){toast('اختر عدد النجوم أولاً');return;}var cmt=($('revCmt')&&$('revCmt').value||'').trim();api('/api/copy/traders/'+REVTID+'/reviews',{method:'POST',body:JSON.stringify({rating:REVPICK,comment:cmt})}).then(function(){toast('✓ شكراً — تم حفظ تقييمك');loadReviews(REVTID);loadTraders();}).catch(function(err){if(err==='cannot_review_self')toast('لا يمكنك تقييم نفسك');else toast('تعذّر حفظ التقييم');});}
 function loadStats(){$('statsBox').innerHTML='<div class="empty"><div class="big">⏳</div><b>جارٍ التحميل...</b></div>';api('/api/copy/stats').then(function(d){drawStats(d.stats||{},d.top||[]);}).catch(function(){$('statsBox').innerHTML='<div class="empty"><div class="big">⚠️</div><b>تعذّر التحميل</b></div>';});}
 function drawStats(s,top){var h='<div class="stat-grid"><div class="stat-c"><b>'+fmtK(s.traders||0)+'</b><span>متداول نشط</span></div><div class="stat-c"><b>'+fmtK(s.copiers||0)+'</b><span>ناسخ</span></div><div class="stat-c"><b>'+fmtK(s.copies||0)+'</b><span>علاقة نسخ</span></div><div class="stat-c"><b>$'+fmtK(s.aum||0)+'</b><span>إجمالي تحت الإدارة</span></div></div>';if(!top.length){h+='<div class="empty"><div class="big">📊</div><b>لا بيانات بعد</b><p>ستظهر لوحة الأداء بمجرّد أن يبدأ المستخدمون النسخ.</p></div>';$('statsBox').innerHTML=h;return;}h+='<div class="rev-sep">🏆 الأكثر نسخاً</div>';h+=top.map(function(t,i){var rk=i+1;var g=rk<=3?(' g'+rk):'';var roi=(+t.roi30);return '<div class="rank"><div class="no'+g+'">'+rk+'</div><div class="nm"><b>'+esc(t.display_name)+'</b><span>'+fmtK(t.followers)+' ناسخ · $'+fmtK(t.aum)+' · '+stars(t.rating)+'</span></div><div class="rt"><b>'+(roi>=0?'+':'')+roi.toFixed(1)+'%</b><span>عائد 30ي · '+(+t.win_rate).toFixed(0)+'% نجاح</span></div></div>';}).join('');$('statsBox').innerHTML=h;}
+/* ===== شريط القطاع (عقود/فوري) + بطاقات الخدمة + رصيد النسخ ===== */
+function setSeg(b){document.querySelectorAll('#seg button').forEach(function(x){x.classList.remove('on');});b.classList.add('on');}
+function svcSmart(){toast('النسخ الذكي: يوزّع مبلغك تلقائياً على أفضل المتداولين');var el=$('tradersList');if(el)el.scrollIntoView({behavior:'smooth',block:'start'});}
+function svcMaster(){openApply();}
+function svcLearn(){toast('الدروس التعليمية: دليل نسخ التداول للمبتدئين — قريباً');}
+function refreshCopyBal(){
+  api('/api/copy/mine').then(function(d){
+    var arr=d.copies||[];var now=Date.now();var bal=0,up=0;
+    arr.forEach(function(c){var days=Math.max(0.02,(now-(+c.created_at))/86400000);var daily=((+c.roi30)/100)/30;var r=seedRand(c.trader_id+''+c.created_at);var drift=(r()-0.42);var amt=(+c.amount);var pnl=amt*(+c.multiplier)*daily*days*(1+drift*0.5);bal+=amt+pnl;up+=pnl;});
+    var bEl=$('copyBal');if(bEl)bEl.innerHTML=fmt(bal,2)+' <small>USDT</small>';
+    var uEl=$('copyUpnl');if(uEl){uEl.textContent=(up>=0?'+':'')+fmt(up,2);uEl.className=up>=0?'up':'dn';}
+    var cEl=$('copyCnt');if(cEl)cEl.textContent=arr.length;
+  }).catch(function(){});
+}
+window.setSeg=setSeg;window.svcSmart=svcSmart;window.svcMaster=svcMaster;window.svcLearn=svcLearn;
 window.setTab=setTab;window.openCopy=openCopy;window.cSet=cSet;window.cMult=cMult;window.cCalc=cCalc;window.doCopy=doCopy;window.closeMdl=closeMdl;window.stopCopy=stopCopy;window.goMine=goMine;window.openApply=openApply;window.pickRisk=pickRisk;window.submitApply=submitApply;window.openRatePick=openRatePick;window.submitReview=submitReview;
 loadTraders();
+refreshCopyBal();
 setInterval(function(){if(TAB==='mine')loadMine();},8000);
+setInterval(refreshCopyBal,15000);
 </script>
 </body>
 </html>

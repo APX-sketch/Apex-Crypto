@@ -320,6 +320,11 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
 .picker.show .pk{animation:apxPkUp .28s cubic-bezier(.22,.61,.36,1)}
 .sheet.show .grp,.sheet.show .pf-hero,.sheet.show .pf-badges,.sheet.show .pf-support,.sheet.show .del-warn,.sheet.show .del-field,.sheet.show .del-actions{animation:apxItemUp .34s cubic-bezier(.22,.61,.36,1) both}
 .sheet.show .pf-hero{animation-delay:.03s}.sheet.show .pf-badges{animation-delay:.06s}.sheet.show .pf-support{animation-delay:.09s}.sheet.show .grp{animation-delay:.12s}
+/* تحسين الأداء: تلميح GPU أثناء الحركة ثم تحريره بعد انتهائها */
+.picker.show .pk,.sheet.show .grp,.sheet.show .pf-hero,.sheet.show .pf-badges,.sheet.show .pf-support,.drawer.show .ditem{will-change:transform,opacity}
+.sheet,.picker,.drawer{contain:layout paint}
+.picker:not(.show) .pk,.sheet:not(.show) *,.drawer:not(.show) .ditem{will-change:auto}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-delay:0!important;transition-duration:.08s!important}}
 .drawer.show .ditem{animation:apxItemUp .3s cubic-bezier(.22,.61,.36,1) both}
 </style>
 <link rel="manifest" href="manifest.webmanifest">
@@ -537,6 +542,7 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
       <div class="gt">أخرى</div>
       <div class="row" onclick="openTools()"><div class="tx2">الأدوات</div><span class="ar">‹</span></div>
       <div class="row" onclick="clearCache()"><div class="tx2">مسح ذاكرة التخزين المؤقت</div><span class="val" id="valCache">—</span><span class="ar">‹</span></div>
+      <div class="row" onclick="location.href='guide.html'"><div class="tx2">دليل الاستخدام السريع</div><span class="ar">‹</span></div>
       <div class="row" onclick="openSheet('shHelp')"><div class="tx2">المساعدة والدعم</div><span class="ar">‹</span></div>
       <div class="row" onclick="toast('مركز الخصوصية — بياناتك محمية')"><div class="tx2">مركز الخصوصية</div><span class="ar">‹</span></div>
       <div class="row" onclick="aboutApp()"><div class="tx2">نبذة عنا</div><span class="val">Apex v1.0</span><span class="ar">‹</span></div>
@@ -736,7 +742,8 @@ function openPick(name){
 }
 function pickSet(name,val){var c=SETVAL[name];if(!c)return;localStorage.setItem(c.key,val);_setLabel(name);
   if(name==='color'&&window.APEX_I18N&&APEX_I18N.setColorPref){APEX_I18N.setColorPref(val);}
-  closePick();toast('تم الحفظ');}
+  var lbl=val;try{var o=c.opts.filter(function(x){return x[0]===val;})[0];if(o)lbl=o[1];}catch(e){}
+  closePick();toast('✓ '+(_PICK_TITLE[name]||'الإعداد')+': '+lbl);}
 function _renderThemePick(){
   var cur=(window.APEX_I18N&&APEX_I18N.theme)?APEX_I18N.theme():(localStorage.getItem('apex_theme')||'dark');
   var opts=[['dark','داكن'],['light','فاتح']];
@@ -747,7 +754,7 @@ function _renderThemePick(){
 function pickTheme(mode){
   if(window.APEX_I18N&&APEX_I18N.setTheme)APEX_I18N.setTheme(mode);else{try{localStorage.setItem('apex_theme',mode);}catch(e){}document.documentElement.setAttribute('data-theme',mode);}
   var el=$('valTheme');if(el)el.textContent=mode==='light'?'فاتح':'داكن';
-  closePick();toast('تم الحفظ');
+  closePick();toast('✓ التصميم: '+(mode==='light'?'فاتح':'داكن'));
 }
 function _showPicker(){$('pickerOv').classList.add('show');}
 function openTools(){
@@ -757,7 +764,7 @@ function openTools(){
   $('pickerPk').innerHTML=html;_showPicker();
 }
 function closePick(){$('pickerOv').classList.remove('show');}
-function toggleSet(key,el){var on=!el.classList.contains('on');el.classList.toggle('on',on);localStorage.setItem('apex_set_'+key,on?'1':'0');toast(on?'تم التفعيل':'تم الإيقاف');}
+function toggleSet(key,el){var on=!el.classList.contains('on');el.classList.toggle('on',on);localStorage.setItem('apex_set_'+key,on?'1':'0');var nm={notif:'الإشعارات',ai:'الذكاء الاصطناعي',bnb:'خصم الرسوم بـBNB'}[key]||'الإعداد';toast('✓ '+nm+' — '+(on?'مُفعّل':'موقوف'));}
 function clearCache(){
   try{Object.keys(localStorage).forEach(function(k){if(k.indexOf('apex_mktcache')===0||k.indexOf('apex_cache')===0||k.indexOf('skygo_cache')===0||k.indexOf('mkt_')===0)localStorage.removeItem(k);});
     if('caches' in window){caches.keys().then(function(ks){ks.forEach(function(k){caches.delete(k);});});}}catch(e){}

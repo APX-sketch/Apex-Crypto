@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Apex — دليل الاستخدام السريع</title>
+<style>
+:root{--bg:#0b0e11;--panel:#141920;--panel2:#1c232c;--border:#252d38;--txt:#eef2f6;--muted:#8a94a3;--gold1:#f8d979;--gold2:#e0a615;--green:#0ecb81;--red:#f6465d}
+html[data-theme=light]{--bg:#f5f6fa;--panel:#fff;--panel2:#eef1f6;--border:#e2e6ee;--txt:#12161c;--muted:#6b7585}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{-webkit-text-size-adjust:100%}
+body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);color:var(--txt);max-width:480px;margin:0 auto;min-height:100vh;position:relative;overflow-x:hidden;padding-bottom:40px}
+.hdr{display:flex;align-items:center;gap:10px;padding:calc(12px + env(safe-area-inset-top)) 14px 12px;background:linear-gradient(135deg,#1b1f24,#0f1216);position:sticky;top:0;z-index:20;border-bottom:1px solid var(--border)}
+html[data-theme=light] .hdr{background:linear-gradient(135deg,#fff,#eef1f6)}
+.icobtn{width:38px;height:38px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:var(--panel2);border:1px solid var(--border);border-radius:11px;cursor:pointer;color:var(--txt)}
+.icobtn svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:2}
+.hdr h1{flex:1;font-size:17px;font-weight:900}
+.hero{padding:18px 16px 6px}
+.hero .big{font-size:22px;font-weight:900;line-height:1.3}
+.hero p{color:var(--muted);font-size:13px;margin-top:8px;line-height:1.7}
+.tip{display:flex;gap:9px;align-items:flex-start;background:rgba(224,166,21,.1);border:1px solid rgba(224,166,21,.3);border-radius:13px;padding:12px 13px;margin:12px 16px 4px}
+.tip svg{width:20px;height:20px;flex:0 0 auto;stroke:var(--gold2);fill:none;stroke-width:2;margin-top:1px}
+.tip b{color:var(--gold2);font-size:13px}
+.tip span{display:block;color:var(--muted);font-size:12px;margin-top:3px;line-height:1.6}
+.sec{margin:16px 16px 0}
+.sec>.st{font-size:13px;font-weight:900;color:var(--gold2);margin:0 2px 9px;display:flex;align-items:center;gap:7px}
+.sec>.st svg{width:17px;height:17px;stroke:var(--gold2);fill:none;stroke-width:2}
+.item{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:13px 14px;margin-bottom:9px}
+.item b{font-size:14px;font-weight:800;display:block}
+.item p{color:var(--muted);font-size:12.5px;margin-top:5px;line-height:1.65}
+.item .how{display:inline-flex;align-items:center;gap:5px;margin-top:8px;font-size:11px;font-weight:800;color:var(--txt);background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:5px 9px}
+.item .how svg{width:12px;height:12px;stroke:var(--gold2);fill:none;stroke-width:2.2}
+.steps{counter-reset:s;margin:4px 16px 0}
+.steps .s{display:flex;gap:11px;align-items:flex-start;padding:11px 0;border-bottom:1px solid var(--border)}
+.steps .s:last-child{border-bottom:0}
+.steps .s::before{counter-increment:s;content:counter(s);flex:0 0 auto;width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#1a1203;font-weight:900;font-size:13px;display:flex;align-items:center;justify-content:center}
+.steps .s div b{font-size:13.5px;font-weight:800;display:block}
+.steps .s div span{color:var(--muted);font-size:12px;margin-top:2px;display:block;line-height:1.6}
+.foot{text-align:center;color:var(--muted);font-size:11px;padding:22px 16px 10px}
+.toast{position:fixed;bottom:40px;left:50%;transform:translate(-50%,20px);background:#20272f;color:#fff;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:700;opacity:0;pointer-events:none;transition:.25s;z-index:60;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+.toast.show{transform:translate(-50%,0);opacity:1}
+</style>
+</head>
+<body>
+<script>(function(){try{var m=localStorage.getItem('apex_theme')||'dark';document.documentElement.setAttribute('data-theme',m);}catch(e){}})();</script>
+<div class="hdr">
+  <div class="icobtn" onclick="history.length>1?history.back():location.href='index.html'"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></div>
+  <h1>دليل الاستخدام السريع</h1>
+</div>
+<div class="hero">
+  <div class="big">إعدادات حسابك — بدقيقة واحدة</div>
+  <p>كل إعداد تغيّره يُحفظ فوراً على جهازك وتظهر رسالة تأكيد صغيرة (Toast). هذا دليل سريع لكل خيار ومكانه.</p>
+</div>
+<div class="tip">
+  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
+  <div><b>كيف تفتح الإعدادات؟</b><span>من الصفحة الرئيسية ← أيقونة الترس ⚙️ أعلى الصفحة أو من الملف الشخصي ← «الإعدادات».</span></div>
+</div>
+
+<div class="sec">
+  <div class="st"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 010 18"/></svg>عام</div>
+  <div class="item"><b>تفضيل الإشعارات</b><p>مفتاح تشغيل/إيقاف تنبيهات الأسعار والصفقات والأخبار.</p><span class="how"><svg viewBox="0 0 24 24"><path d="M5 13l4 4 10-10"/></svg>اضغط المفتاح → يظهر «✓ الإشعارات — مُفعّل/موقوف»</span></div>
+  <div class="item"><b>العملة</b><p>عملة عرض الأرصدة والأسعار (USD / EUR / SAR / AED…).</p><span class="how"><svg viewBox="0 0 24 24"><path d="M5 13l4 4 10-10"/></svg>اختر من القائمة → «✓ العملة: …»</span></div>
+  <div class="item"><b>اللغة</b><p>لغة الواجهة الكاملة مع اتجاه RTL تلقائي للعربية.</p><span class="how"><svg viewBox="0 0 24 24"><path d="M5 13l4 4 10-10"/></svg>اختر اللغة → تُطبّق فوراً على كل الصفحات</span></div>
+  <div class="item"><b>تفضيلات الذكاء الاصطناعي</b><p>تفعيل مساعد التحليل والاقتراحات الذكية داخل التطبيق.</p><span class="how"><svg viewBox="0 0 24 24"><path d="M5 13l4 4 10-10"/></svg>اضغط المفتاح → تأكيد فوري</span></div>
+  <div class="item"><b>تبويب مخصص</b><p>حدّد الصفحة التي تفتح أولاً عند تشغيل التطبيق.</p><span class="how"><svg viewBox="0 0 24 24"><path d="M5 13l4 4 10-10"/></svg>اختر التبويب → «✓ تبويب مخصص: …»</span></div>
+  <div class="item"><b>عرض الصفحة الرئيسية</b><p>نمط العرض: قياسي أو مبسّط أو متقدّم.</p><span class="how"><svg viewBox="0 0 24 24"><path d="M5 13l4 4 10-10"/></svg>اختر النمط → تأكيد فوري</span></div>
+</div>
+
+<div class="sec">
+  <div class="st"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>المظهر</div>
+  <div class="item"><b>التصميم</b><p>التبديل بين الوضع الداكن والفاتح.</p><span class="how"><svg viewBox="0 0 24 24"><path d="M5 13l4 4 10-10"/></svg>اختر داكن/فاتح → «✓ التصميم: …»</span></div>
+  <div class="item"><b>تفضيل اللون</b><p>اختر اتجاه الألوان: أخضر صعود/أحمر هبوط أو العكس.</p><span class="how"><svg viewBox="0 0 24 24"><path d="M5 13l4 4 10-10"/></svg>اختر النمط → يُطبّق على كل الرسوم</span></div>
+  <div class="item"><b>المنطقة الزمنية</b><p>توقيت عرض الصفقات والرسوم البيانية (تلقائي افتراضياً).</p><span class="how"><svg viewBox="0 0 24 24"><path d="M5 13l4 4 10-10"/></svg>اختر المنطقة → تأكيد فوري</span></div>
+</div>
+
+<div class="sec">
+  <div class="st"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg>الدفع والمحفظة</div>
+  <div class="item"><b>عملة الدفع</b><p>العملة المستخدمة في الإيداع والشراء المباشر.</p><span class="how"><svg viewBox="0 0 24 24"><path d="M5 13l4 4 10-10"/></svg>اختر العملة → «✓ عملة الدفع: …»</span></div>
+  <div class="item"><b>عنوان السحب</b><p>إدارة عناوين سحب العملات الرقمية الموثوقة.</p><span class="how"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>يفتح صفحة السحب</span></div>
+  <div class="item"><b>استخدام BNB لخصم الرسوم</b><p>تفعيله يمنحك خصماً على رسوم التداول عند الدفع بـBNB.</p><span class="how"><svg viewBox="0 0 24 24"><path d="M5 13l4 4 10-10"/></svg>اضغط المفتاح → «✓ خصم الرسوم بـBNB — مُفعّل»</span></div>
+</div>
+
+<div class="sec">
+  <div class="st"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>الأمان</div>
+  <div class="item"><b>تغيير كلمة المرور</b><p>أدخل الحالية ثم الجديدة (٨ أحرف فأكثر) وتأكيدها.</p><span class="how"><svg viewBox="0 0 24 24"><path d="M5 13l4 4 10-10"/></svg>الأمان والحماية → تغيير كلمة المرور</span></div>
+  <div class="item"><b>المصادقة الثنائية 2FA</b><p>طبقة حماية إضافية عند تسجيل الدخول.</p><span class="how"><svg viewBox="0 0 24 24"><path d="M5 13l4 4 10-10"/></svg>اضغط المفتاح → تأكيد فوري</span></div>
+  <div class="item"><b>بصمة / وجه ورمز مكافحة التصيّد</b><p>دخول سريع آمن + رمز يظهر في رسائل Apex الرسمية لتمييزها.</p><span class="how"><svg viewBox="0 0 24 24"><path d="M5 13l4 4 10-10"/></svg>فعّل المفتاح واحفظ الرمز</span></div>
+</div>
+
+<div class="sec">
+  <div class="st"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>أخرى</div>
+  <div class="item"><b>الأدوات</b><p>وصول سريع للمتداول والعقود الآجلة والنسخ والساحة والمحفظة.</p></div>
+  <div class="item"><b>مسح ذاكرة التخزين المؤقت</b><p>يحذف بيانات الأسعار المؤقتة إذا تأخّر التحديث — لا يحذف حسابك.</p><span class="how"><svg viewBox="0 0 24 24"><path d="M5 13l4 4 10-10"/></svg>اضغط → «تم المسح»</span></div>
+  <div class="item"><b>مركز الخصوصية والتحقق من التحديثات</b><p>حالة حماية بياناتك وآخر إصدار من التطبيق.</p></div>
+</div>
+
+<div class="sec">
+  <div class="st"><svg viewBox="0 0 24 24"><path d="M9 11l3 3 8-8"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>خطوات مقترحة لأول استخدام</div>
+  <div class="steps">
+    <div class="s"><div><b>اضبط اللغة والعملة</b><span>عام → اللغة ثم العملة، لتظهر الواجهة والأرصدة بما يناسبك.</span></div></div>
+    <div class="s"><div><b>اختر المظهر</b><span>المظهر → التصميم (داكن/فاتح) وتفضيل اللون.</span></div></div>
+    <div class="s"><div><b>فعّل الأمان</b><span>الأمان → 2FA + رمز مكافحة التصيّد لحماية حسابك.</span></div></div>
+    <div class="s"><div><b>حدّد عنوان السحب</b><span>الدفع والمحفظة → عنوان السحب قبل أول عملية سحب.</span></div></div>
+    <div class="s"><div><b>خصّص البداية</b><span>عام → تبويب مخصص لتفتح صفحتك المفضّلة مباشرة.</span></div></div>
+  </div>
+</div>
+
+<div class="foot">Apex v1.0 — كل تغيير يُحفظ تلقائياً ويُؤكَّد برسالة Toast فورية.</div>
+<div class="toast" id="toast"></div>
+</body>
+</html>

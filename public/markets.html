@@ -1,9 +1,6 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
 <script>
 (function(){
   try{
@@ -182,6 +179,7 @@ html[data-theme=light] .bnav{background:#ffffff}
   <button class="cat" data-c="crypto">العملات الرقمية</button>
   <button class="cat" data-c="tradfi">التمويل التقليدي</button>
   <button class="cat" data-c="predict">توقع</button>
+  <button class="cat" data-c="copy">نسخ</button>
 </div>
 <!-- SUB TABS (crypto only) -->
 <div class="subs" id="subs">
@@ -509,6 +507,7 @@ function syncBars(){
 }
 $('cats').addEventListener('click',e=>{
   const b=e.target.closest('.cat');if(!b)return;
+  if(b.dataset.c==='copy'){location.href='copy.html';return;}
   document.querySelectorAll('.cat').forEach(c=>c.classList.remove('active'));
   b.classList.add('active');CAT=b.dataset.c;
   syncBars();
