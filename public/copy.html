@@ -156,12 +156,40 @@ html[data-theme=light] .bnav{background:#fff}
 .bnav a{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--muted);text-decoration:none;font-size:10px;font-weight:700}
 .bnav a svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8}
 .bnav a.active{color:var(--gold2)}
+/* حاسبة تقدير الأرباح */
+.est{background:linear-gradient(120deg,rgba(224,166,21,.10),rgba(224,166,21,.03));border:1px solid var(--gold2);border-radius:14px;padding:12px 14px;margin-top:12px}
+.est .eh{font-size:12px;font-weight:900;color:var(--gold2);display:flex;align-items:center;gap:6px;margin-bottom:8px}
+.est .eh svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2}
+.est .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.est .cell{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:9px 11px}
+.est .cell span{font-size:10px;color:var(--muted);display:block}
+.est .cell b{font-size:15px;font-weight:900;direction:ltr;display:block;margin-top:3px}
+.est .cell b.up{color:var(--green)}.est .cell b.dn{color:var(--red)}
+.est .foot{font-size:10.5px;color:var(--muted);margin-top:8px;line-height:1.6}
+/* جدول مقارنة المتداولين */
+.cmpwrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--border);border-radius:14px;margin-top:6px}
+table.cmp{width:100%;min-width:620px;border-collapse:collapse;font-size:11.5px}
+table.cmp th,table.cmp td{padding:9px 8px;text-align:center;border-bottom:1px solid var(--border);white-space:nowrap}
+table.cmp th{background:var(--panel2);color:var(--muted);font-weight:800;font-size:10.5px;position:sticky;top:0}
+table.cmp td{color:var(--txt);font-weight:800}
+table.cmp td.ltr{direction:ltr}
+table.cmp tr:last-child td{border-bottom:0}
+table.cmp td.name{text-align:start;font-weight:900;display:flex;align-items:center;gap:7px}
+table.cmp .av{width:24px;height:24px;border-radius:8px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:12px;color:#231a02;font-weight:900}
+table.cmp .up{color:var(--green)}table.cmp .dn{color:var(--red)}
+table.cmp .medal{font-size:13px}
+.chk{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:6px;background:var(--panel2);border:1px solid var(--border);cursor:pointer;color:transparent;font-size:12px}
+.chk.on{background:var(--gold2);border-color:var(--gold2);color:#231a02}
+.cmpbar{display:flex;align-items:center;gap:8px;margin:12px 2px 4px;flex-wrap:wrap}
+.cmpbar button{border:1px solid var(--border);background:var(--panel);color:var(--txt);font-family:inherit;font-weight:800;font-size:12px;padding:9px 14px;border-radius:999px;cursor:pointer}
+.cmpbar button.primary{background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#231a02;border:0}
 </style>
 </head>
 <body>
 <div class="hdr">
   <div class="icobtn" onclick="location.href='futures.html'"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
   <h1>نسخ التداول</h1>
+  <div class="icobtn" onclick="openAlerts()" style="position:relative"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg><span id="alertDot" style="display:none;position:absolute;top:6px;left:6px;width:8px;height:8px;border-radius:50%;background:var(--red)"></span></div>
 </div>
 
 <div class="toptabs">
@@ -180,9 +208,19 @@ html[data-theme=light] .bnav{background:#fff}
 </div>
 
 <div class="svcs">
-  <div class="svc" onclick="goMine()"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4zM8 12l3 3 5-6"/></svg></div><span>النسخ الذكي</span></div>
+  <div class="svc" id="svcRoom" onclick="openRoom()" style="display:none"><div class="ic"><svg viewBox="0 0 24 24"><path d="M3 20h18M6 20V9l6-5 6 5v11M10 20v-5h4v5"/></svg></div><span>غرفة التداول</span></div>
+  <div class="svc" onclick="goPerf()"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16M8 16l3-4 3 2 5-7"/></svg></div><span>الأداء والإحصائيات</span></div>
+  <div class="svc" onclick="openCompare()"><div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3v18M7 8H3l2-3 2 3H3M21 8h-4l2-3 2 3h-4M5 8v4a3 3 0 006 0V8M13 8v4a3 3 0 006 0V8"/></svg></div><span>مقارنة المتداولين</span></div>
   <div class="svc" onclick="openApply()"><div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5"/></svg></div><span>كن متداولاً رئيسياً</span></div>
-  <div class="svc" onclick="openLearn()"><div class="ic"><svg viewBox="0 0 24 24"><path d="M12 4l8 4-8 4-8-4zM6 10v5c0 1.6 2.7 3 6 3s6-1.4 6-3v-5"/></svg></div><span>الدروس التعليمية</span></div>
+  <div class="svc" onclick="openLearn()"><div class="ic"><svg viewBox="0 0 24 24"><path d="M12 4l8 4-8 4-8-4zM6 10v5c0 1.6 2.7 3 6 3s6-1.4 6-3v-5"/></svg></div><span>الدروس</span></div>
+</div>
+
+<div id="perfPane" style="display:none">
+  <div class="wrap" id="perfBody"></div>
+</div>
+
+<div id="cmpPane" style="display:none">
+  <div class="wrap" id="cmpBody"></div>
 </div>
 
 <div class="filterrow" id="filterRow">
@@ -311,8 +349,7 @@ function refreshWallet(){
   }).catch(function(){});
 }
 var MINEVIEW=false;
-function goMine(){MINEVIEW=true;$('tradersList').style.display='none';$('mineList').style.display='block';renderMine();window.scrollTo(0,0);}
-function goTraders(){MINEVIEW=false;$('mineList').style.display='none';$('tradersList').style.display='block';}
+function goMine(){MINEVIEW=true;PERFVIEW=false;CMPVIEW=false;$('perfPane').style.display='none';$('cmpPane').style.display='none';$('tradersList').style.display='none';$('mineList').style.display='block';renderMine();window.scrollTo(0,0);}
 function mineCard(c){
   var color=colorFor(c.trader_id),profit=+c.profit||0,amt=+c.amount||0,up=profit>=0;
   var modeTxt=(c.mode==='ratio')?'معدّل ثابت':'مبلغ ثابت';
@@ -320,6 +357,8 @@ function mineCard(c){
   chips.push('<span class="chip">'+modeTxt+'</span>');
   chips.push('<span class="chip">مضاعف '+(+c.multiplier||1)+'x</span>');
   if(+c.stop_loss>0)chips.push('<span class="chip">إيقاف خسارة '+fmt(+c.stop_loss,0)+'%</span>');
+  if(+c.auto_stop)chips.push('<span class="chip" style="color:var(--gold2);border-color:var(--gold2)">إيقاف تلقائي عند الخسارة</span>');
+  if(+c.stopped)chips.push('<span class="chip" style="color:var(--red);border-color:var(--red)">توقف تلقائياً — بلغ حدّ الخسارة</span>');
   if(+c.copy_all)chips.push('<span class="chip">نسخ كل الأرصدة</span>');
   if(+c.auto_invest)chips.push('<span class="chip">استثمار تلقائي</span>');
   var paused=!+c.followed;
@@ -343,7 +382,7 @@ function renderMine(){
 }
 // ================= شاشة 2: إعدادات نسخ التداول =================
 var CUR=null,CMODE='fixed',CMULT=1,CAGREE=false,CADV=false;
-var CFLAGS={copy_all:false,auto_invest:false,sell_on_stop:true};
+var CFLAGS={copy_all:false,auto_invest:false,sell_on_stop:true,auto_stop:true};
 var SYMS=['BTCUSDT','ETHUSDT','BNBUSDT','SOLUSDT','XRPUSDT','ADAUSDT','DOGEUSDT','TONUSDT'];
 var CSYM={BTCUSDT:true,ETHUSDT:true};
 function openCopy(id){
@@ -351,7 +390,7 @@ function openCopy(id){
   if(!t){var m=MINE.filter(function(c){return String(c.trader_id)===String(id);})[0];if(m)t={user_id:m.trader_id,display_name:m.display_name,roi30:m.roi30,profit_share:m.profit_share,risk:m.risk,kind:m.kind};}
   if(!t)return;CUR=t;CMODE='fixed';CMULT=1;CAGREE=false;CADV=false;
   var ex=MINE.filter(function(c){return String(c.trader_id)===String(id);})[0];
-  CFLAGS={copy_all:ex?!!+ex.copy_all:false,auto_invest:ex?!!+ex.auto_invest:false,sell_on_stop:ex?!!+ex.sell_on_stop:true};
+  CFLAGS={copy_all:ex?!!+ex.copy_all:false,auto_invest:ex?!!+ex.auto_invest:false,sell_on_stop:ex?!!+ex.sell_on_stop:true,auto_stop:ex?!!+ex.auto_stop:true};
   CSYM={};(ex&&ex.symbols?String(ex.symbols).split(','):['BTCUSDT','ETHUSDT']).forEach(function(s){if(s)CSYM[s.trim()]=true;});
   var freeAmt=Math.max(0,(+WALLET.avail||0)-(+WALLET.locked||0));
   var sheet=$('mdlSheet');
@@ -365,13 +404,16 @@ function openCopy(id){
     '<div class="lbl">مبلغ النسخ (USDT)<i>100.00 - 200,000.00</i></div>'+
     '<div class="mdl-amt"><input id="cAmt" type="text" inputmode="decimal" placeholder="100.00" value="'+(ex?fmt(+ex.amount,2):'')+'" oninput="cCalc()"><span class="cur">USDT</span></div>'+
     '<div class="mdl-quick"><button onclick="cSet(100)">100</button><button onclick="cSet(500)">500</button><button onclick="cSet(1000)">1000</button><button onclick="cSet(5000)">5000</button></div>'+
+    '<div class="est" id="cEst"><div class="eh"><svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16M8 16l3-4 3 2 5-7"/></svg>حاسبة تقدير الأرباح التلقائية</div><div id="cEstBody"></div></div>'+
+    '<div class="mdl-row" style="margin-top:8px"><span>الرصيد المتاح في محفظة النسخ</span><b id="cFree">'+fmt(freeAmt,2)+' USDT</b></div>'+
     '<div class="mdl-row" style="margin-top:8px"><span>الرصيد المتاح في محفظة النسخ</span><b id="cFree">'+fmt(freeAmt,2)+' USDT</b></div>'+
     '<div class="lbl">مضاعف حجم الصفقة</div>'+
     '<div class="mult" id="multRow"><button class="on" onclick="cMult(1)">1x</button><button onclick="cMult(2)">2x</button><button onclick="cMult(5)">5x</button><button onclick="cMult(10)">10x</button></div>'+
     '<div class="lbl">تفضيل الرمز <i id="symCnt"></i></div>'+
     '<div class="pickrow" id="symRow">'+SYMS.map(function(s){return '<button class="'+(CSYM[s]?'on':'')+'" onclick="cSym(\''+s+'\',this)">'+s.replace('USDT','')+'</button>';}).join('')+'</div>'+
     '<div class="lbl">إيقاف الخسارة الإجمالي <i><span id="slVal">'+(ex?fmt(+ex.stop_loss,0):'0')+'</span>%</i></div>'+
-    '<input id="cSL" type="range" min="0" max="95" step="5" value="'+(ex?(+ex.stop_loss):0)+'" oninput="$(\'slVal\').textContent=this.value" style="width:100%;accent-color:var(--gold2)">'+
+    '<input id="cSL" type="range" min="0" max="95" step="5" value="'+(ex?(+ex.stop_loss):0)+'" oninput="$(\'slVal\').textContent=this.value;cCalc()" style="width:100%;accent-color:var(--gold2)">'+
+    '<div class="sw" style="padding-top:4px"><div class="t"><b>إيقاف النسخ تلقائياً عند بلوغ الخسارة</b><span>عندما تبلغ الخسارة حدّ الإيقاف المُحدّد أعلاه، تُوقف نسخ هذا المتداول تلقائياً ويُفكّ المبلغ المتبقي.</span></div><div class="toggle'+((ex?!!+ex.auto_stop:true)?' on':'')+'" id="swAutoStop" onclick="cFlag(\'auto_stop\',this)"></div></div>'+
     '<div class="acc" id="advAcc"><div class="acc-h" onclick="cAdv()"><span style="color:var(--txt)">الإعدادات المتقدمة</span><span id="advArrow">▾</span></div><div class="acc-b">'+
       '<div class="sw"><div class="t"><b>نسخ جميع أرصدة المتداول الرئيسي</b><span>محاكاة كامل محفظة المتداول</span></div><div class="toggle'+(CFLAGS.copy_all?' on':'')+'" id="swCopyAll" onclick="cFlag(\'copy_all\',this)"></div></div>'+
       '<div class="sw"><div class="t"><b>الاستثمار التلقائي</b><span>إعادة استثمار الأرباح المحققة تلقائياً</span></div><div class="toggle'+(CFLAGS.auto_invest?' on':'')+'" id="swAuto" onclick="cFlag(\'auto_invest\',this)"></div></div>'+
@@ -382,14 +424,33 @@ function openCopy(id){
     '<div class="agr"><div class="box" id="cBox" onclick="cToggleAgree()">✓</div><div>أوافق على <b style="color:var(--gold2)">اتفاقية خدمة نسخ التداول</b> وأدرك أن نتائج التداول السابقة لا تضمن الأرباح المستقبلية.</div></div>'+
     '<button class="mdl-go" id="cGo" disabled onclick="doCopy()">تأكيد</button>'+
     '<button class="mdl-x" onclick="closeMdl()">إلغاء</button>';
-  CSLIP='default';updateSymCnt();
+  CSLIP='default';updateSymCnt();cCalc();
   $('mdl').classList.add('on');
 }
 var CSLIP='default';
 function cMode(m){CMODE=m;$('segFixed').classList.toggle('on',m==='fixed');$('segRatio').classList.toggle('on',m==='ratio');}
 function cSet(v){var a=$('cAmt');if(a){a.value=v;cCalc();}}
-function cMult(m){CMULT=m;document.querySelectorAll('#multRow button').forEach(function(b){b.classList.toggle('on',b.textContent===m+'x');});}
-function cCalc(){}
+function cMult(m){CMULT=m;document.querySelectorAll('#multRow button').forEach(function(b){b.classList.toggle('on',b.textContent===m+'x');});cCalc();}
+function cCalc(){
+  var box=$('cEstBody');if(!box)return;
+  var a=$('cAmt'),amt=a?(parseFloat(a.value)||0):0;
+  var roi=CUR?(+CUR.roi30||0):0,share=CUR?(+CUR.profit_share||0):0;
+  var sl=parseFloat(($('cSL')||{}).value||0);
+  if(amt<=0){box.innerHTML='<div class="foot">أدخل مبلغ النسخ لعرض تقدير الأرباح المتوقعة بناءً على أداء المتداول (عائد 30 يوم) وحجم نسخك والمضاعف.</div>';return;}
+  var eff=amt*CMULT;
+  function net(f){var g=eff*(roi/100)*f;return g>0?g*(1-share/100):g;}
+  var mid=net(1),low=net(0.4),high=net(1.6);
+  var maxLoss=sl>0?(-amt*(sl/100)):null;
+  function cell(lbl,val,sub){var up=val>=0;return '<div class="cell"><span>'+lbl+'</span><b class="'+(up?'up':'dn')+'">'+(up?'+':'-')+'$'+fmt(Math.abs(val),2)+'</b>'+(sub?'<span style="margin-top:2px">'+sub+'</span>':'')+'</div>';}
+  var html='<div class="grid2">'+
+    cell('تقدير متوقّع (30ي)',mid,'ربح صافٍ بعد مشاركة '+fmt(share,0)+'%')+
+    cell('القيمة النهائية',amt+mid,'من رأس مال $'+fmt(amt,2))+
+    cell('سيناريو محافظ',low,'عند 40% من الأداء')+
+    cell('سيناريو متفائل',high,'عند 160% من الأداء')+
+  '</div>';
+  html+='<div class="foot">التقدير = المبلغ × المضاعف ('+CMULT+'x) × عائد المتداول ('+(roi>=0?'+':'')+fmt(roi,1)+'%). '+(maxLoss!=null?('أقصى خسارة مسموحة بحدّ الإيقاف: <b style="color:var(--red)">-$'+fmt(Math.abs(maxLoss),2)+'</b> وعندها يُوقَف النسخ تلقائياً.'):'لم تُفعّل حدّ إيقاف خسارة بعد.')+' الأرقام تقديرية ولا تضمن نتائج مستقبلية.</div>';
+  box.innerHTML=html;
+}
 function cSym(s,el){CSYM[s]=!CSYM[s];if(el)el.classList.toggle('on',CSYM[s]);updateSymCnt();}
 function updateSymCnt(){var n=Object.keys(CSYM).filter(function(k){return CSYM[k];}).length;var e=$('symCnt');if(e)e.textContent='+'+n;}
 function cAdv(){CADV=!CADV;$('advAcc').classList.toggle('on',CADV);var a=$('advArrow');if(a)a.textContent=CADV?'▴':'▾';}
@@ -401,7 +462,7 @@ function doCopy(){
   var a=$('cAmt'),v=a?(parseFloat(a.value)||0):0;
   if(v<100){toast('الحد الأدنى 100 USDT');return;}
   var syms=Object.keys(CSYM).filter(function(k){return CSYM[k];}).join(',')||'BTCUSDT';
-  var body={trader_id:CUR.user_id,amount:v,multiplier:CMULT,mode:CMODE,stop_loss:parseFloat(($('cSL')||{}).value||0),copy_all:CFLAGS.copy_all,auto_invest:CFLAGS.auto_invest,sell_on_stop:CFLAGS.sell_on_stop,slippage:CSLIP,symbols:syms};
+  var body={trader_id:CUR.user_id,amount:v,multiplier:CMULT,mode:CMODE,stop_loss:parseFloat(($('cSL')||{}).value||0),copy_all:CFLAGS.copy_all,auto_invest:CFLAGS.auto_invest,sell_on_stop:CFLAGS.sell_on_stop,auto_stop:CFLAGS.auto_stop,slippage:CSLIP,symbols:syms};
   var go=$('cGo');if(go)go.disabled=true;
   api('/api/copy/start',{method:'POST',body:JSON.stringify(body)}).then(function(){
     toast('✓ تم تفعيل نسخ '+CUR.display_name);closeMdl();return Promise.all([loadTraders(),refreshWallet()]);
@@ -543,7 +604,174 @@ function settleTrade(id){
   }).catch(function(){toast('تعذّر التسوية');});
 }
 
-// ================= الدروس =================
+// ================= تبويب الأداء والإحصائيات =================
+var PERFVIEW=false,CMPVIEW=false;
+function goPerf(){PERFVIEW=true;MINEVIEW=false;CMPVIEW=false;$('cmpPane').style.display='none';$('tradersList').style.display='none';$('mineList').style.display='none';$('perfPane').style.display='block';loadPerf();window.scrollTo(0,0);}
+function goTraders(){PERFVIEW=false;MINEVIEW=false;CMPVIEW=false;$('perfPane').style.display='none';$('cmpPane').style.display='none';$('mineList').style.display='none';$('tradersList').style.display='block';window.scrollTo(0,0);}
+// ================= جدول مقارنة أداء المتداولين =================
+var CMPPICK={};
+function openCompare(){
+  PERFVIEW=false;MINEVIEW=false;CMPVIEW=true;
+  $('perfPane').style.display='none';$('tradersList').style.display='none';$('mineList').style.display='none';
+  $('cmpPane').style.display='block';renderCmp();window.scrollTo(0,0);
+}
+function toggleCmp(id){
+  CMPPICK[id]=!CMPPICK[id];
+  var n=Object.keys(CMPPICK).filter(function(k){return CMPPICK[k];}).length;
+  if(n>4){CMPPICK[id]=false;toast('يمكن مقارنة حتى 4 متداولين');}
+  renderCmp();
+}
+function renderCmp(){
+  var head='<div style="display:flex;align-items:center;gap:10px;margin:2px 2px 10px"><div style="flex:1;font-size:15px;font-weight:900">مقارنة أداء المتداولين</div>'+
+    '<button onclick="goTraders()" style="background:var(--panel2);border:1px solid var(--border);color:var(--txt);font-family:inherit;font-weight:800;font-size:12px;padding:8px 13px;border-radius:999px;cursor:pointer">→ المتداولون</button></div>';
+  var list=TRADERS.slice().sort(function(a,b){return (+b.roi30||0)-(+a.roi30||0);});
+  if(!list.length){$('cmpBody').innerHTML=head+'<div class="empty"><div class="big">📋</div><b>لا متداولين بعد</b><p>ستظهر هنا مقارنة مباشرة بين أداء المتداولين الرئيسيين.</p></div>';return;}
+  var pick=list.map(function(t){
+    var on=!!CMPPICK[t.user_id];
+    return '<span onclick="toggleCmp('+t.user_id+')" style="display:inline-flex;align-items:center;gap:6px;border:1px solid '+(on?'var(--gold2)':'var(--border)')+';background:'+(on?'rgba(224,166,21,.12)':'var(--panel)')+';color:'+(on?'var(--gold2)':'var(--muted)')+';font-weight:800;font-size:11.5px;padding:7px 12px;border-radius:999px;cursor:pointer;margin:0 6px 8px 0">'+(on?'✓ ':'')+esc(t.display_name)+'</span>';
+  }).join('');
+  var chosen=list.filter(function(t){return CMPPICK[t.user_id];});
+  var rowsSrc=chosen.length?chosen:list.slice(0,4);
+  var rank=0;
+  var tr=rowsSrc.map(function(t){
+    rank++;
+    var medal=chosen.length?'':'<span class="medal">'+(rank===1?'🥇':rank===2?'🥈':rank===3?'🥉':'#'+rank)+'</span>';
+    var roi=+t.roi30||0,win=+t.win_rate||0,foll=+t.followers||0,aum=+t.aum||0,share=+t.profit_share||0,rate=Number(t.rating)||0,rev=+t.reviews||0;
+    var rk=RISK[t.risk]||RISK.mid;
+    var copying=!!MYSET[t.user_id];
+    return '<tr>'+
+      '<td class="name">'+medal+'<span class="av" style="background:linear-gradient(135deg,'+colorFor(t.user_id)+',#231a02)">'+esc((t.display_name||'?').charAt(0))+'</span>'+esc(t.display_name)+'</td>'+
+      '<td class="ltr '+(roi>=0?'up':'dn')+'">'+(roi>=0?'+':'')+fmt(roi,1)+'%</td>'+
+      '<td class="ltr '+(win>=50?'up':'dn')+'">'+fmt(win,1)+'%</td>'+
+      '<td class="ltr">'+fmtK(foll)+'</td>'+
+      '<td class="ltr">$'+fmtK(aum)+'</td>'+
+      '<td class="ltr">'+fmt(share,0)+'%</td>'+
+      '<td class="ltr">'+fmt(rate,1)+' ★ ('+rev+')</td>'+
+      '<td><span class="badge '+rk[1]+'">'+rk[0]+'</span></td>'+
+      '<td>'+(copying?'<span class="up" style="font-size:11px">✓ تنسخه</span>':'<span class="chk" onclick="openCopy('+t.user_id+')">+</span>')+'</td>'+
+    '</tr>';
+  }).join('');
+  var body='<div class="mdl-sub" style="margin:0 2px 6px">اختر حتى 4 متداولين لمقارنتهم جنباً إلى جنب حسب العائد، نسبة النجاح، المتابعون، الأصول المُدارة، مشاركة الأرباح والتقييم.</div>'+
+    '<div style="margin:8px 0 2px">'+pick+'</div>'+
+    '<div class="cmpbar">'+(chosen.length?'<button onclick="CMPPICK={};renderCmp()">مسح الاختيار</button>':'')+'<button class="primary" onclick="openCopy('+(rowsSrc[0]?rowsSrc[0].user_id:0)+')">نسخ الأفضل أداءً</button></div>'+
+    '<div class="cmpwrap"><table class="cmp"><thead><tr>'+
+      '<th>المتداول</th><th>عائد 30ي</th><th>نسبة النجاح</th><th>الناسخون</th><th>أصول مُدارة</th><th>مشاركة الأرباح</th><th>التقييم</th><th>المخاطر</th><th>نسخ</th>'+
+    '</tr></thead><tbody>'+tr+'</tbody></table></div>';
+  $('cmpBody').innerHTML=head+body;
+}
+function loadPerf(){
+  $('perfBody').innerHTML='<div class="empty"><div class="big">⏳</div><b>جارٍ التحميل...</b></div>';
+  api('/api/copy/perf').then(function(d){
+    var tr=d.trader||{},a=d.agg||{},closed=d.closed||[];
+    var trades=+a.trades||0,wins=+a.wins||0,losses=+a.losses||0,pnl=+a.pnl||0,avg=+a.avgRoi||0;
+    var winRate=trades?(wins/trades*100):0;
+    var head='<div style="display:flex;align-items:center;gap:10px;margin:2px 2px 12px"><div style="flex:1;font-size:15px;font-weight:900">الأداء والإحصائيات</div>'+
+      '<button onclick="goTraders()" style="background:var(--panel2);border:1px solid var(--border);color:var(--txt);font-family:inherit;font-weight:800;font-size:12px;padding:8px 13px;border-radius:999px;cursor:pointer">→ المتداولون</button></div>';
+    var stats='<div class="cbal" style="margin:0 0 12px;padding:14px">'+
+      '<div class="lab">إجمالي الربح/الخسارة الموزّعة</div><div class="big" style="font-size:24px;color:'+(pnl>=0?'var(--green)':'var(--red)')+'">'+(pnl>=0?'+':'-')+'$'+fmt(Math.abs(pnl),2)+'</div>'+
+      '<div class="sub"><div class="it">صفقات مغلقة<b>'+trades+'</b></div><div class="it">نسبة النجاح<b>'+fmt(winRate,1)+'%</b></div><div class="it">متوسط العائد<b>'+fmt(avg,2)+'%</b></div><div class="it">رابح/خاسر<b style="direction:ltr">'+wins+'/'+losses+'</b></div></div></div>';
+    if(!closed.length){
+      $('perfBody').innerHTML=head+stats+'<div class="empty"><div class="big">📊</div><b>لا صفقات مكتملة بعد</b><p>ستظهر هنا كل صفقات المتداول المغلقة مع نسبة الربح والخسارة بالتفصيل.</p></div>';
+      return;
+    }
+    var rows=closed.map(function(c){
+      var up=(+c.pnl)>=0;
+      return '<div style="background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:12px 13px;margin-bottom:9px">'+
+        '<div style="display:flex;align-items:center;gap:8px"><b style="flex:1;font-size:13.5px">'+esc(c.symbol)+'</b>'+
+        '<span class="chip">'+(c.side==='short'?'بيع':'شراء')+'</span>'+
+        '<b style="direction:ltr;font-size:14px;color:'+(+c.roi_pct>=0?'var(--green)':'var(--red)')+'">'+(+c.roi_pct>=0?'+':'')+fmt(+c.roi_pct,2)+'%</b></div>'+
+        '<div class="mc-info" style="margin:9px 0 0"><div class="s"><b style="color:'+(up?'var(--green)':'var(--red)')+'">'+(up?'+':'-')+'$'+fmt(Math.abs(+c.pnl),2)+'</b><span>ربحي</span></div>'+
+        '<div class="s"><b>'+(+c.followers||0)+'</b><span>ناسخ</span></div>'+
+        '<div class="s"><b>'+(+c.dist>=0?'+':'-')+'$'+fmt(Math.abs(+c.dist),2)+'</b><span>موزّع للناسخين</span></div></div>'+
+        '<div style="font-size:10px;color:var(--muted);margin-top:7px">'+new Date(+c.closed_at).toLocaleString('ar-EG')+'</div></div>';
+    }).join('');
+    $('perfBody').innerHTML=head+stats+'<div class="lbl" style="margin:4px 2px 9px">سجل الصفقات المكتملة</div>'+rows;
+  }).catch(function(){$('perfBody').innerHTML='<div class="empty"><div class="big">⚠️</div><b>تعذّر التحميل</b></div>';});
+}
+
+// ================= التنبيهات =================
+function checkAlerts(){
+  api('/api/copy/alerts').then(function(d){
+    var n=+d.unread||0;var dot=$('alertDot');if(dot)dot.style.display=n>0?'block':'none';
+  }).catch(function(){});
+}
+function openAlerts(){
+  api('/api/copy/alerts').then(function(d){
+    var items=d.items||[];
+    var sheet=$('mdlSheet');
+    var body=items.length?items.map(function(n){
+      return '<div style="background:var(--panel2);border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin-bottom:8px"><b style="font-size:12.5px;display:block">'+esc(n.title)+'</b><span style="font-size:11.5px;color:var(--muted);line-height:1.6;display:block;margin-top:3px">'+esc(n.body)+'</span><div style="font-size:10px;color:var(--muted);margin-top:5px">'+new Date(+n.at).toLocaleString('ar-EG')+'</div></div>';
+    }).join(''):'<div style="color:var(--muted);font-size:12px;text-align:center;padding:20px 0">لا تنبيهات نسخ بعد</div>';
+    sheet.innerHTML='<div class="mdl-grip"></div><div class="mdl-h">تنبيهات النسخ</div>'+
+      '<div class="mdl-sub">تُصلك هنا عند فتح/إغلاق المتداول الرئيسي لصفقة، وعند تفعيل نسخك لصفقاته.</div>'+body+
+      '<button class="mdl-x" onclick="closeMdl()">إغلاق</button>';
+    $('mdl').classList.add('on');
+    api('/api/copy/alerts/read',{method:'POST',body:JSON.stringify({count:items.length})}).then(function(){$('alertDot').style.display='none';}).catch(function(){});
+  }).catch(function(){toast('تعذّر تحميل التنبيهات');});
+}
+
+// ================= غرفة التداول المعزولة =================
+var ROOMDATA={};
+function openRoom(){
+  api('/api/copy/room').then(function(d){
+    if(!d.isTrader){toast('ستحتاج أن تصبح متداولاً رئيسياً أولاً');openApply();return;}
+    ROOMDATA=d;
+    var open=d.open||[],closed=d.closed||[],w=d.wallet||{};
+    var openHtml=open.length?open.map(function(r){
+      var up=(+r.roi_pct)>=0;
+      return '<div style="background:var(--panel2);border:1px solid var(--border);border-radius:14px;padding:12px 13px;margin-bottom:9px">'+
+        '<div style="display:flex;align-items:center;gap:8px"><b style="flex:1;font-size:13.5px">'+esc(r.symbol)+'</b><span class="chip">'+(r.side==='short'?'بيع':'شراء')+' ×'+(+r.leverage)+'</span>'+
+        '<b style="direction:ltr;font-size:13px">'+fmt(+r.entry,4)+'</b></div>'+
+        '<div class="mdl-row" style="margin-top:4px"><span>هامش</span><b>$'+fmt(+r.margin,2)+'</b></div>'+
+        '<button class="mdl-go" style="margin-top:8px;padding:11px 0;font-size:13px" onclick="openCloseTrade('+r.id+')">إغلاق الصفقة وتسويتها</button></div>';
+    }).join(''):'<div style="color:var(--muted);font-size:12px;text-align:center;padding:14px 0">لا صفقات مفتوحة</div>';
+    var closedHtml=closed.slice(0,5).map(function(r){
+      var up=(+r.pnl)>=0;
+      return '<div style="display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--border);border-radius:12px;padding:9px 11px;margin-bottom:7px"><div style="flex:1;font-size:12.5px;font-weight:800">'+esc(r.symbol)+'</div><b style="direction:ltr;font-size:12.5px;color:'+(up?'var(--green)':'var(--red)')+'">'+(+r.roi_pct>=0?'+':'')+fmt(+r.roi_pct,2)+'%</b><b style="direction:ltr;font-size:12px;color:'+(up?'var(--green)':'var(--red)')+'">'+(up?'+':'-')+'$'+fmt(Math.abs(+r.pnl),2)+'</b></div>';
+    }).join('');
+    var sheet=$('mdlSheet');
+    sheet.innerHTML='<div class="mdl-grip"></div><div class="mdl-h">غرفة التداول — متداول رئيسي</div>'+
+      '<div class="mdl-sub">مساحة معزولة تماماً عن تداولك الشخصي. أي صفقة تفتحها هنا تُوزّع فوراً على كل ناسخيك مع العرض الصافي لكل واحد = هامشه × مضاعفه × نسبة الحركة.</div>'+
+      '<div class="cbal" style="margin:0 0 12px;padding:13px"><div class="lab">محفظة المتداول المعزولة</div><div class="big" style="font-size:22px">'+fmt(+w.avail||0,2)+' <small>USDT</small></div>'+
+        '<div class="sub"><div class="it">الناسخون<b>'+fmt(d.followers,0)+'</b></div><div class="it">أصول موزّعة<b>$'+fmtK(d.aum)+'</b></div><div class="it">مشاركة أرباح<b>'+fmt(d.profit_share,0)+'%</b></div></div></div>'+
+      '<div class="lbl">فتح صفقة جديدة</div>'+
+      '<div class="pickrow" id="rSymRow">'+SYMS.map(function(s,i){return '<button class="'+(i===0?'on':'')+'" onclick="rSym(this)">'+s.replace('USDT','')+'</button>';}).join('')+'</div>'+
+      '<div class="seg" style="margin-top:9px"><button class="on" id="rLong" onclick="rSide(\'long\')">شراء / لونج</button><button id="rShort" onclick="rSide(\'short\')">بيع / شورت</button></div>'+
+      '<div class="rows2" style="margin-top:9px"><div class="mdl-amt"><input id="rMargin" type="text" inputmode="decimal" placeholder="هامش USDT"></div><div class="mdl-amt"><input id="rLev" type="text" inputmode="decimal" placeholder="رافعة ×" value="1"></div></div>'+
+      '<button class="mdl-go" onclick="roomOpen()">فتح الصفقة وتوزيعها على الناسخين</button>'+
+      '<div class="lbl" style="margin-top:16px">صفقات مفتوحة</div>'+openHtml+
+      (closed.length?('<div class="lbl" style="margin-top:12px">آخر الصفقات المغلقة</div>'+closedHtml):'')+
+      '<button class="mdl-x" onclick="closeMdl()">إغلاق</button>';
+    $('mdl').classList.add('on');
+  }).catch(function(){toast('تعذّر فتح الغرفة');});
+}
+var RSYM='BTCUSDT',RSIDE='long';
+function rSym(el){document.querySelectorAll('#rSymRow button').forEach(function(b){b.classList.remove('on');});el.classList.add('on');RSYM=el.textContent+'USDT';}
+function rSide(s){RSIDE=s;$('rLong').classList.toggle('on',s==='long');$('rShort').classList.toggle('on',s==='short');}
+function roomOpen(){
+  var m=parseFloat(($('rMargin')||{}).value)||0,lev=parseFloat(($('rLev')||{}).value)||1;
+  if(m<=0){toast('أدخل الهامش');return;}
+  api('/api/copy/room/open',{method:'POST',body:JSON.stringify({symbol:RSYM,side:RSIDE,margin:m,leverage:lev})}).then(function(d){
+    toast('✓ فُتحت الصفقة ووُزّعت على '+ (ROOMDATA.followers||0) +' ناسخ');openRoom();checkAlerts();
+  }).catch(function(err){toast(err==='not_a_trader'?'أنت لست متداولاً رئيسياً':'تعذّر فتح الصفقة');});
+}
+function openCloseTrade(id){
+  var sheet=$('mdlSheet');
+  sheet.innerHTML='<div class="mdl-grip"></div><div class="mdl-h">إغلاق الصفقة</div>'+
+    '<div class="mdl-sub">أدخل نسبة الربح أو الخسارة المحققة على حركة السعر (مثال: 4.5 للربح، -2.5 للخسارة). سيُوزّع الناتج فوراً على كل ناسخيك.</div>'+
+    '<div class="mdl-amt"><input id="crRoi" type="text" inputmode="decimal" placeholder="% حركة السعر"><span class="cur">%</span></div>'+
+    '<button class="mdl-go" onclick="roomClose('+id+')">تأكيد الإغلاق والتسوية</button>'+
+    '<button class="mdl-x" onclick="openRoom()">رجوع</button>';
+  $('mdl').classList.add('on');
+}
+function roomClose(id){
+  var roi=parseFloat(($('crRoi')||{}).value);
+  if(isNaN(roi)){toast('أدخل النسبة');return;}
+  api('/api/copy/room/close',{method:'POST',body:JSON.stringify({room_id:id,roi_pct:roi})}).then(function(d){
+    toast('✓ أُغلقت الصفقة — وزّعت '+(d.distributed||0)+' نسخة');openRoom();refreshWallet();checkAlerts();
+  }).catch(function(){toast('تعذّر الإغلاق');});
+}
+
 function openLearn(){
   var sheet=$('mdlSheet');
   sheet.innerHTML='<div class="mdl-grip"></div><div class="mdl-h">الدروس التعليمية</div>'+
@@ -561,10 +789,15 @@ window.openCopy=openCopy;window.cMode=cMode;window.cSet=cSet;window.cMult=cMult;
 window.openTransfer=openTransfer;window.xDir=xDir;window.xSet=xSet;window.doTransfer=doTransfer;
 window.openApply=openApply;window.aKind=aKind;window.aPub=aPub;window.aAgree=aAgree;window.doApply=doApply;
 window.openLearn=openLearn;window.openTradePanel=openTradePanel;window.tSym=tSym;window.tSide=tSide;window.tradeSubmit=tradeSubmit;window.settleTrade=settleTrade;window.closeMdl=closeMdl;
+window.goPerf=goPerf;window.openAlerts=openAlerts;window.openRoom=openRoom;window.rSym=rSym;window.rSide=rSide;window.roomOpen=roomOpen;window.openCloseTrade=openCloseTrade;window.roomClose=roomClose;
+window.openCompare=openCompare;window.toggleCmp=toggleCmp;window.renderCmp=renderCmp;
 
 $('mdl').addEventListener('click',function(e){if(e.target===$('mdl'))closeMdl();});
-loadTraders().then(function(){return refreshWallet();});
-setInterval(function(){if(MINEVIEW)refreshWallet();},15000);
+loadTraders().then(function(){
+  if(IS_TRADER){var sr=$('svcRoom');if(sr)sr.style.display='block';}
+  return refreshWallet();
+}).then(function(){checkAlerts();});
+setInterval(function(){if(MINEVIEW)refreshWallet();checkAlerts();},15000);
 </script>
 </script>
 </body>
