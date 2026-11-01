@@ -336,6 +336,61 @@ async function ensureSchema() {
     ' created_at BIGINT NOT NULL DEFAULT 0,' +
     ' UNIQUE KEY uq_copy (copier_id, trader_id)' +
     ')');
+  // ===== صفقات المتداولين التي تُنسخ تلقائياً (مصدر واحد للحقيقة) =====
+  await pool.query(
+    'CREATE TABLE IF NOT EXISTS copy_trades (' +
+    ' id INT AUTO_INCREMENT PRIMARY KEY,' +
+    ' trader_id INT NOT NULL,' +
+    ' symbol VARCHAR(30) NOT NULL,' +
+    ' side VARCHAR(8) NOT NULL,' +
+    ' roi_pct DECIMAL(12,4) NOT NULL DEFAULT 0,' +
+    ' note VARCHAR(200) NULL,' +
+    ' allocated INT NOT NULL DEFAULT 0,' +
+    ' profit DECIMAL(30,8) NOT NULL DEFAULT 0,' +
+    ' settled INT NOT NULL DEFAULT 0,' +
+    ' created_at BIGINT NOT NULL DEFAULT 0,' +
+    ' INDEX idx_trader (trader_id, created_at)' +
+    ')');
+  // سجل نسخ كل صفقة على كل متابع (يمنع الاحتساب المزدوج ويحفظ ربح كل مستخدم)
+  await pool.query(
+    'CREATE TABLE IF NOT EXISTS copy_trade_copies (' +
+    ' id INT AUTO_INCREMENT PRIMARY KEY,' +
+    ' trade_id INT NOT NULL,' +
+    ' copier_id INT NOT NULL,' +
+    ' trader_id INT NOT NULL,' +
+    ' amount DECIMAL(30,8) NOT NULL DEFAULT 0,' +
+    ' multiplier INT NOT NULL DEFAULT 1,' +
+    ' profit DECIMAL(30,8) NOT NULL DEFAULT 0,' +
+    ' created_at BIGINT NOT NULL DEFAULT 0,' +
+    ' UNIQUE KEY uq_tc (trade_id, copier_id),' +
+    ' INDEX idx_copier (copier_id)' +
+    ')');
+  // أعمدة محفظة النسخ + إعدادات كل علاقة (تُضاف بأمان للجداول القديمة)
+  const copyCols = [
+    "ALTER TABLE copy_relations ADD COLUMN mode VARCHAR(12) NOT NULL DEFAULT 'fixed_rate'",
+    "ALTER TABLE copy_relations ADD COLUMN stop_loss DECIMAL(6,2) NOT NULL DEFAULT 0",
+    "ALTER TABLE copy_relations ADD COLUMN copy_all TINYINT NOT NULL DEFAULT 0",
+    "ALTER TABLE copy_relations ADD COLUMN auto_invest TINYINT NOT NULL DEFAULT 0",
+    "ALTER TABLE copy_relations ADD COLUMN sell_on_stop TINYINT NOT NULL DEFAULT 1",
+    "ALTER TABLE copy_relations ADD COLUMN slippage VARCHAR(20) NOT NULL DEFAULT 'default'",
+    "ALTER TABLE copy_relations ADD COLUMN symbols VARCHAR(300) NULL",
+    "ALTER TABLE copy_relations ADD COLUMN profit DECIMAL(30,8) NOT NULL DEFAULT 0",
+    "ALTER TABLE copy_relations ADD COLUMN followed TINYINT NOT NULL DEFAULT 1",
+  ];
+  for (const sql of copyCols) {
+    try { await pool.query(sql); } catch (e) {
+      if (!/Duplicate column|already exists|Unknown column/i.test(e.message || '')) console.warn('[schema] copy_relations:', e.message);
+    }
+  }
+  const traderCols = [
+    "ALTER TABLE copy_traders ADD COLUMN profit_share DECIMAL(6,2) NOT NULL DEFAULT 10",
+    "ALTER TABLE copy_traders ADD COLUMN kind VARCHAR(20) NOT NULL DEFAULT 'futures'",
+  ];
+  for (const sql of traderCols) {
+    try { await pool.query(sql); } catch (e) {
+      if (!/Duplicate column|already exists|Unknown column/i.test(e.message || '')) console.warn('[schema] copy_traders:', e.message);
+    }
+  }
   // ===== صفحة Square (الأخبار والمنشورات) — مشتركة على السيرفر =====
   await pool.query(
     'CREATE TABLE IF NOT EXISTS square_posts (' +
@@ -474,6 +529,42 @@ function futuresApply(userId, deltas) {
   futuresWallets[userId] = next;
   saveFutures();
   return next;
+}
+
+// ---- Copy wallet (محفظة النسخ — منفصلة تماماً عن الفوري/العقود) ----
+// المال لا يتغيّر إلا بفعلين حقيقيين: (1) تحويل داخلي من المحفظة الفورية عند
+// بدء/زيادة النسخ، (2) تسوية أرباح/خسائر ناتجة عن صفقات المتداول الرئيسي الفعلية.
+// لا شيء يُحتسب تلقائياً أو عشوائياً — الرصيد يبقى ثابتاً حتى تحدث تسوية حقيقية.
+const COPY_FILE = join(__dirname, 'data', 'apex-copywallet.json');
+function loadCopyW() {
+  try {
+    if (existsSync(COPY_FILE)) {
+      const d = JSON.parse(readFileSync(COPY_FILE, 'utf8'));
+      return (d && typeof d === 'object' && d.wallets && typeof d.wallets === 'object') ? d.wallets : {};
+    }
+  } catch (e) { /* ignore corrupt / missing file */ }
+  return {};
+}
+const copyWallets = loadCopyW(); // { userId: { avail: 0, locked: 0 } }
+function saveCopyW() {
+  try {
+    mkdirSync(dirname(COPY_FILE), { recursive: true });
+    writeFileSync(COPY_FILE, JSON.stringify({ wallets: copyWallets }));
+  } catch (e) { console.warn('[copywallet] save failed:', e.message); }
+}
+function copyWallet(userId) {
+  const w = copyWallets[String(userId)];
+  return { avail: Number((w && w.avail) || 0), locked: Number((w && w.locked) || 0) };
+}
+function copyWalletSet(userId, avail, locked) {
+  copyWallets[String(userId)] = { avail: Math.max(0, Number(avail) || 0), locked: Math.max(0, Number(locked) || 0) };
+  saveCopyW();
+  return copyWallet(userId);
+}
+// رصيد قائم فعلاً = المتاح (داخل علاقات نسخ نشطة). لا يُخصم من المتاح إلا بالتسوية.
+function copyDeployed(userId) {
+  const w = copyWallet(userId);
+  return Math.max(0, w.avail - w.locked);
 }
 
 // ---- User preferences (notification toggles) ----
@@ -972,6 +1063,49 @@ app.get('/api/exchangeInfo', async (req, res) => {
     res.status(502).json({ error: 'upstream_unavailable' });
   }
 });
+// مسار لجلب بيانات المستخدم والمحفظة والأرصدة
+app.get('/api/user/wallet/:userId', async (req, res) => {
+    try {
+        const userId = req.params.userId;
+        
+        // استعلام SQL يجمع بيانات المستخدم مع محفظته (المتاح والمجمد وإجمالي الأصول)
+        const query = `
+            SELECT 
+                u.id AS user_id,
+                u.username,
+                u.email,
+                COALESCE(w.currency, 'USDT') AS currency,
+                COALESCE(SUM(w.balance), 0) AS balance,
+                COALESCE(SUM(w.locked_balance), 0) AS locked_balance,
+                COALESCE(SUM(w.balance + w.locked_balance), 0) AS total_assets
+            FROM users u
+            LEFT JOIN wallets w ON u.id = w.user_id
+            WHERE u.id = ?
+            GROUP BY u.id, u.username, u.email, w.currency;
+        `;
+
+        // تنفيذ الاستعلام عبر اتصال قاعدة البيانات (مثل mysql2)
+        db.query(query, [userId], (err, results) => {
+            if (err) {
+                console.error(err);
+                return res.status(500).json({ error: 'خطأ في قاعدة البيانات' });
+            }
+
+            if (results.length === 0) {
+                return res.status(404).json({ error: 'المستخدم غير موجود' });
+            }
+
+            // إرجاع البيانات الناتجة للواجهة الأمامية
+            res.json({
+                success: true,
+                data: results[0] // يعرض رصيد المستخدم بدقة (مثل الـ 4000 لسعدي)
+            });
+        });
+
+    } catch (error) {
+        res.status(500).json({ error: 'حدث خطأ غير متوقع' });
+    }
+});
 
 app.get('/api/alerts', (req, res) => {
   res.json({ threshold: ALERT_THRESHOLD, symbols: ALERT_SYMBOLS, data: prices.getAlerts() });
@@ -1376,6 +1510,38 @@ app.post('/api/auth/reverify', strictLimiter, requireUser, async (req, res) => {
   } catch (err) {
     console.error('Reverify Error:', err);
     res.status(500).json({ error: 'reverify_failed' });
+  }
+});
+
+// ---- Self-service: permanently delete own account (password-verified) ----
+app.post('/api/account/delete', strictLimiter, requireUser, async (req, res) => {
+  try {
+    const password = String((req.body || {}).password || '');
+    if (!password) return res.status(400).json({ error: 'password_required' });
+
+    // 1) تحقّق من كلمة المرور من مصدر الحقيقة MySQL
+    const dbu = await dbGetUserById(req.user.uid);
+    if (!dbu) return res.status(401).json({ error: 'unauthorized' });
+    const vr = verifyPassword(password, dbu.password);
+    if (!vr.ok) {
+      logSecurity(req, { kind: 'account_delete_bad_password', severity: 'warning',
+        detail: 'محاولة حذف حساب بكلمة مرور خاطئة' });
+      return res.status(401).json({ error: 'invalid_password' });
+    }
+
+    // 2) احذف كل بيانات المستخدم (نفس نمط حذف الأدمن)
+    await pool.query('DELETE FROM id_documents WHERE user_id = ?', [dbu.id]);
+    await pool.query('DELETE FROM wallets WHERE user_id = ?', [dbu.id]);
+    const [r] = await pool.query('DELETE FROM users WHERE id = ?', [dbu.id]);
+    try { store.deleteUser && store.deleteUser(String(dbu.id)); } catch (e) {}
+    try {
+      logSecurity(req, { kind: 'account_deleted', severity: 'warning',
+        detail: 'حذف المستخدم لحسابه نهائياً' });
+    } catch (e) {}
+    res.json({ ok: !!r.affectedRows });
+  } catch (err) {
+    console.error('self delete error:', err.message);
+    res.status(500).json({ error: 'delete_failed' });
   }
 });
 
@@ -2692,6 +2858,7 @@ app.get('/api/copy/traders', requireUser, async (req, res) => {
     const me = req.user.uid;
     const [traders] = await pool.query(
       'SELECT t.user_id, t.display_name, t.bio, t.strategy, t.risk, t.roi30, t.win_rate, t.created_at, ' +
+      ' t.profit_share, t.kind, ' +
       ' (SELECT COUNT(*) FROM copy_relations r WHERE r.trader_id = t.user_id) AS followers, ' +
       ' (SELECT COALESCE(SUM(r.amount),0) FROM copy_relations r WHERE r.trader_id = t.user_id) AS aum, ' +
       ' (SELECT COUNT(*) FROM copy_relations r WHERE r.trader_id = t.user_id AND r.copier_id = ?) AS iCopy, ' +
@@ -2712,14 +2879,17 @@ app.post('/api/copy/apply', requireUser, async (req, res) => {
     const bio = String(b.bio || '').trim().slice(0, 400);
     const strategy = String(b.strategy || '').trim().slice(0, 120);
     const risk = ['low', 'mid', 'high'].includes(String(b.risk)) ? String(b.risk) : 'mid';
+    const kind = (String(b.kind || 'futures') === 'spot') ? 'spot' : 'futures';
+    const profitShare = Math.max(0, Math.min(50, (b.profit_share == null ? 10 : Number(b.profit_share)) || 0));
+    // جميع متابعي هذا المتداول (للتوافق مع منطق الربح المشترك)
     const roi30 = Math.max(-100, Math.min(100000, Number(b.roi30) || 0));
     const win = Math.max(0, Math.min(100, Number(b.win_rate) || 0));
     await pool.query(
-      'INSERT INTO copy_traders (user_id, display_name, bio, strategy, risk, roi30, win_rate, status, created_at) ' +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?) " +
+      'INSERT INTO copy_traders (user_id, display_name, bio, strategy, risk, roi30, win_rate, status, created_at, profit_share, kind) ' +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?) " +
       'ON DUPLICATE KEY UPDATE display_name=VALUES(display_name), bio=VALUES(bio), strategy=VALUES(strategy), ' +
-      "risk=VALUES(risk), roi30=VALUES(roi30), win_rate=VALUES(win_rate), status='active'",
-      [req.user.uid, name, bio, strategy, risk, roi30, win, Date.now()]);
+      "risk=VALUES(risk), roi30=VALUES(roi30), win_rate=VALUES(win_rate), status='active', profit_share=VALUES(profit_share), kind=VALUES(kind)",
+      [req.user.uid, name, bio, strategy, risk, roi30, win, Date.now(), profitShare, kind]);
     res.json({ ok: true });
   } catch (e) { console.error('[copy/apply]', e.message); res.status(500).json({ error: 'server_error' }); }
 });
@@ -2727,38 +2897,176 @@ app.post('/api/copy/apply', requireUser, async (req, res) => {
 app.get('/api/copy/mine', requireUser, async (req, res) => {
   try {
     const [rows] = await pool.query(
-      'SELECT r.trader_id, r.amount, r.multiplier, r.created_at, t.display_name, t.risk, t.roi30, t.win_rate ' +
+      'SELECT r.trader_id, r.amount, r.multiplier, r.mode, r.stop_loss, r.copy_all, r.auto_invest, r.sell_on_stop, r.slippage, r.symbols, r.profit, r.followed, r.created_at, ' +
+      ' t.display_name, t.risk, t.roi30, t.win_rate, t.profit_share, t.kind ' +
       'FROM copy_relations r JOIN copy_traders t ON t.user_id = r.trader_id WHERE r.copier_id = ? ORDER BY r.created_at DESC',
       [req.user.uid]);
-    res.json({ ok: true, copies: rows });
+    const [closed] = await pool.query(
+      'SELECT tc.trader_id, tc.amount, tc.multiplier, tc.profit, tc.created_at, t.display_name ' +
+      'FROM copy_trade_copies tc JOIN copy_traders t ON t.user_id = tc.trader_id ' +
+      'WHERE tc.copier_id = ? ORDER BY tc.created_at DESC LIMIT 100', [req.user.uid]);
+    res.json({ ok: true, copies: rows, closed: closed, wallet: copyWallet(req.user.uid) });
   } catch (e) { console.error('[copy/mine]', e.message); res.status(500).json({ error: 'server_error' }); }
 });
 
-app.post('/api/copy/start', requireUser, async (req, res) => {
+// ---- محفظة النسخ: قراءة الرصيد المتاح ----
+app.get('/api/copy/wallet', requireUser, async (req, res) => {
+  try {
+    const w = copyWallet(req.user.uid);
+    const [[s]] = await pool.query('SELECT COALESCE(SUM(amount),0) AS inuse FROM copy_relations WHERE copier_id = ?', [req.user.uid]);
+    res.json({ ok: true, avail: w.avail, locked: w.locked, inUse: Number(s.inuse) || 0 });
+  } catch (e) { console.error('[copy/wallet]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+// ---- تحويل داخلي: من المحفظة الفورية ← محفظة النسخ (atomic، بلا خلق مال) ----
+app.post('/api/copy/fund', strictLimiter, requireUser, (req, res) => {
+  const body = req.body || {};
+  const cur = String(body.currency || 'USDT').toUpperCase();
+  const amt = Number(body.amount);
+  const dir = String(body.dir || 'in').toLowerCase();
+  if (!/^[A-Z0-9]{2,12}$/.test(cur)) return res.status(400).json({ error: 'bad_currency' });
+  if (!(amt > 0) || !isFinite(amt)) return res.status(400).json({ error: 'bad_amount' });
+  if (cur !== 'USDT') return res.status(400).json({ error: 'only_usdt' });
+  const w = copyWallet(req.user.uid);
+  if (dir === 'out') {
+    // نسخ ← فوري: لا يخرج إلا المبلغ غير القائم في علاقات نشطة
+    const freeAmt = Math.max(0, w.avail - w.locked);
+    if (amt > freeAmt + 1e-9) return res.status(400).json({ error: 'insufficient_balance' });
+    const u = store.applyDeltas(req.user.id, { [cur]: amt });
+    if (!u) return res.status(500).json({ error: 'transfer_failed' });
+    copyWalletSet(req.user.uid, w.avail - amt, w.locked);
+    try { store.addTransaction(req.user.id, { type: 'transfer_internal', direction: 'copy_to_spot', from: 'copy', to: 'spot', amount: amt, currency: cur, note: 'تحويل من محفظة النسخ إلى المحفظة الفورية' }); } catch (e) {}
+    try { store.addNotification(req.user.id, { title: 'تحويل من محفظة النسخ', kind: 'money', body: 'تم تحويل ' + amt + ' ' + cur + ' من محفظة النسخ إلى المحفظة الفورية.' }); } catch (e) {}
+    return res.json({ ok: true, wallet: copyWallet(req.user.uid), balances: u.balances || {} });
+  }
+  // فوري ← نسخ
+  const u = store.applyDeltas(req.user.id, { [cur]: -amt });
+  if (!u) {
+    logSecurity(req, { kind: 'below_zero_copy', severity: 'critical', detail: 'محاولة تحويل إلى محفظة النسخ تتجاوز الرصيد الفوري (خلق مال — رُفض)', meta: { currency: cur, amount: amt } });
+    return res.status(400).json({ error: 'insufficient_balance' });
+  }
+  copyWalletSet(req.user.uid, w.avail + amt, w.locked);
+  try { store.addTransaction(req.user.id, { type: 'transfer_internal', direction: 'spot_to_copy', from: 'spot', to: 'copy', amount: amt, currency: cur, note: 'تحويل من المحفظة الفورية إلى محفظة النسخ' }); } catch (e) {}
+  try { store.addNotification(req.user.id, { title: 'تحويل إلى محفظة النسخ', kind: 'money', body: 'تم تحويل ' + amt + ' ' + cur + ' إلى محفظة النسخ.' }); } catch (e) {}
+  res.json({ ok: true, wallet: copyWallet(req.user.uid), balances: u.balances || {} });
+});
+
+app.post('/api/copy/start', strictLimiter, requireUser, async (req, res) => {
   try {
     const b = req.body || {};
     const traderId = Number(b.trader_id);
     const amount = Math.max(0, Number(b.amount) || 0);
     const mult = [1, 2, 5, 10].includes(Number(b.multiplier)) ? Number(b.multiplier) : 1;
     if (!traderId) return res.status(400).json({ error: 'trader_required' });
-    if (traderId === req.user.uid) return res.status(400).json({ error: 'cannot_copy_self' });
+    if (String(traderId) === String(req.user.uid)) return res.status(400).json({ error: 'cannot_copy_self' });
     if (amount <= 0) return res.status(400).json({ error: 'amount_required' });
-    const [[t]] = await pool.query("SELECT user_id FROM copy_traders WHERE user_id = ? AND status = 'active'", [traderId]);
+    const [[t]] = await pool.query("SELECT user_id, display_name, profit_share, kind FROM copy_traders WHERE user_id = ? AND status = 'active'", [traderId]);
     if (!t) return res.status(404).json({ error: 'trader_not_found' });
+    // التحقق الفعلي: رصيد محفظة النسخ المتاح ≥ المبلغ المطلوب
+    const w = copyWallet(req.user.uid);
+    const freeAmt = Math.max(0, w.avail - w.locked);
+    if (amount > freeAmt + 1e-9) return res.status(400).json({ error: 'insufficient_copy_balance', avail: freeAmt, wallet: copyWallet(req.user.uid) });
+    const mode = (String(b.mode || 'fixed') === 'ratio') ? 'ratio' : 'fixed';
+    const stopLoss = Math.max(0, Math.min(95, Number(b.stop_loss) || 0));
+    const slippage = String(b.slippage || 'default').slice(0, 20);
+    const symbols = String(b.symbols || 'BTCUSDT,ETHUSDT').slice(0, 300);
     await pool.query(
-      'INSERT INTO copy_relations (copier_id, trader_id, amount, multiplier, created_at) VALUES (?, ?, ?, ?, ?) ' +
-      'ON DUPLICATE KEY UPDATE amount=VALUES(amount), multiplier=VALUES(multiplier)',
-      [req.user.uid, traderId, amount, mult, Date.now()]);
-    res.json({ ok: true });
+      'INSERT INTO copy_relations (copier_id, trader_id, amount, multiplier, mode, stop_loss, copy_all, auto_invest, sell_on_stop, slippage, symbols, profit, followed, created_at) ' +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1, ?) " +
+      'ON DUPLICATE KEY UPDATE amount=VALUES(amount), multiplier=VALUES(multiplier), mode=VALUES(mode), ' +
+      'stop_loss=VALUES(stop_loss), copy_all=VALUES(copy_all), auto_invest=VALUES(auto_invest), ' +
+      'sell_on_stop=VALUES(sell_on_stop), slippage=VALUES(slippage), symbols=VALUES(symbols), followed=1',
+      [req.user.uid, traderId, amount, mult, mode, stopLoss,
+       b.copy_all ? 1 : 0, b.auto_invest ? 1 : 0, (b.sell_on_stop === undefined ? 1 : (b.sell_on_stop ? 1 : 0)), slippage, symbols, Date.now()]);
+    // تثبيت المبلغ المخصص (يبقى داخل رصيدك ويُحجز للنسخ)
+    copyWalletSet(req.user.uid, w.avail, w.locked + amount);
+    try { store.addNotification(req.user.id, { title: 'بدأت نسخ متداول', kind: 'copy', body: 'بدأت نسخ ' + t.display_name + ' بمبلغ ' + amount + ' USDT (نسبة مشاركة الأرباح ' + Number(t.profit_share || 0) + '%)؛ الربح يتحقق فقط عند إغلاق صفقات المتداول الرئيسي.' }); } catch (e) {}
+    res.json({ ok: true, wallet: copyWallet(req.user.uid) });
   } catch (e) { console.error('[copy/start]', e.message); res.status(500).json({ error: 'server_error' }); }
 });
 
-app.post('/api/copy/stop', requireUser, async (req, res) => {
+// ---- صفقات المتداول الرئيسي: توزيع فعلي على المتابعين (بلا أي ربح تلقائي) ----
+app.post('/api/copy/trade', strictLimiter, requireUser, async (req, res) => {
   try {
-    const traderId = Number((req.body || {}).trader_id);
+    const b = req.body || {};
+    const [[ts]] = await pool.query('SELECT user_id, display_name FROM copy_traders WHERE user_id = ?', [req.user.uid]);
+    if (!ts) return res.status(403).json({ error: 'not_a_trader' });
+    const allowed = ['BTCUSDT','ETHUSDT','BNBUSDT','SOLUSDT','XRPUSDT','ADAUSDT','DOGEUSDT','TONUSDT'];
+    const symbol = String(b.symbol || 'BTCUSDT').toUpperCase();
+    if (allowed.indexOf(symbol) < 0) return res.status(400).json({ error: 'bad_symbol' });
+    const side = (String(b.side || 'long').toLowerCase() === 'short') ? 'short' : 'long';
+    const roi = Math.max(-100, Math.min(500, Number(b.roi_pct) || 0));
+    const note = String(b.note || '').slice(0, 200);
+    const [ins] = await pool.query(
+      'INSERT INTO copy_trades (trader_id, symbol, side, roi_pct, note, allocated, profit, settled, created_at) VALUES (?, ?, ?, ?, ?, 0, 0, 0, ?)',
+      [req.user.uid, symbol, side, roi, note, Date.now()]);
+    const out = await copyFanout(ins.insertId, null, null);
+    res.json({ ok: true, trade_id: ins.insertId, distributed: out ? out.count : 0, wallet: copyWallet(req.user.uid) });
+  } catch (e) { console.error('[copy/trade]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+// ---- صفقاتي المسجلة (للمتداول الرئيسي) ----
+app.get('/api/copy/trades', requireUser, async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM copy_trades WHERE trader_id = ? ORDER BY created_at DESC LIMIT 100', [req.user.uid]);
+    res.json({ ok: true, trades: rows });
+  } catch (e) { console.error('[copy/trades]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+app.post('/api/copy/settle', strictLimiter, requireUser, async (req, res) => {
+  try {
+    const tradeId = Number((req.body || {}).trade_id);
+    if (!(tradeId > 0)) return res.status(400).json({ error: 'bad_trade' });
+    const [[tr]] = await pool.query('SELECT * FROM copy_trades WHERE id = ? AND trader_id = ?', [tradeId, req.user.uid]);
+    if (!tr) return res.status(404).json({ error: 'trade_not_found' });
+    if (Number(tr.settled)) return res.json({ ok: true, already: true });
+    const [cps] = await pool.query('SELECT * FROM copy_trade_copies WHERE trade_id = ?', [tradeId]);
+    let total = 0;
+    for (const c of cps) {
+      const amt = Number(c.amount) || 0, multN = Number(c.multiplier) || 1;
+      let profit = amt * multN * (Number(tr.roi_pct) / 100);
+      const [[rel]] = await pool.query('SELECT stop_loss, profit_share FROM copy_relations WHERE copier_id = ? AND trader_id = ?', [c.copier_id, tr.trader_id]);
+      const stopLoss = rel ? Number(rel.stop_loss) || 0 : 0;
+      if (profit < 0 && stopLoss > 0) profit = Math.max(profit, -amt * (stopLoss / 100));
+      const w = copyWallet(c.copier_id);
+      copyWalletSet(c.copier_id, Math.max(0, w.avail + amt + profit), Math.max(0, w.locked - amt));
+      total += profit;
+      await pool.query('UPDATE copy_trade_copies SET profit = ? WHERE id = ?', [profit, c.id]);
+      await pool.query('UPDATE copy_relations SET profit = COALESCE(profit,0) + ? WHERE copier_id = ? AND trader_id = ?', [profit, c.copier_id, tr.trader_id]);
+      if (profit > 0) {
+        try { store.addTransaction(c.copier_id, { type: 'copy_profit', amount: profit, currency: 'USDT', note: 'ربح صفقة منسوخة ' + tr.symbol }); } catch (e) {}
+        try { store.addNotification(c.copier_id, { title: 'ربح صفقة منسوخة', kind: 'copy', body: 'صفقة ' + tr.symbol + ' أغلقت بربح ' + profit.toFixed(2) + ' USDT على نسختك.' }); } catch (e) {}
+      } else if (profit < 0) {
+        try { store.addTransaction(c.copier_id, { type: 'copy_loss', amount: profit, currency: 'USDT', note: 'خسارة صفقة منسوخة ' + tr.symbol }); } catch (e) {}
+        try { store.addNotification(c.copier_id, { title: 'خسارة صفقة منسوخة', kind: 'copy', body: 'صفقة ' + tr.symbol + ' أغلقت بخسارة ' + Math.abs(profit).toFixed(2) + ' USDT على نسختك.' }); } catch (e) {}
+      }
+    }
+    await pool.query('UPDATE copy_trades SET settled = 1, profit = ? WHERE id = ?', [total, tradeId]);
+    res.json({ ok: true, settled: cps.length, total_profit: total });
+  } catch (e) { console.error('[copy/settle]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+app.post('/api/copy/stop', strictLimiter, requireUser, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const traderId = Number(b.trader_id);
     if (!traderId) return res.status(400).json({ error: 'trader_required' });
-    await pool.query('DELETE FROM copy_relations WHERE copier_id = ? AND trader_id = ?', [req.user.uid, traderId]);
-    res.json({ ok: true });
+    const [[rel]] = await pool.query('SELECT id, amount, followed FROM copy_relations WHERE copier_id = ? AND trader_id = ?', [req.user.uid, traderId]);
+    if (!rel) return res.status(404).json({ error: 'relation_not_found' });
+    // رفض الإيقاف إن كان هناك مبلغ مقيّد في صفقات مفتوحة (يجب تسويتها أولاً)
+    const [[op]] = await pool.query(
+      'SELECT COUNT(*) AS n FROM copy_trade_copies tc JOIN copy_trades t ON t.id = tc.trade_id WHERE tc.copier_id = ? AND tc.trader_id = ? AND t.settled = 0',
+      [req.user.uid, traderId]);
+    const isForce = !!b.force;
+    if (Number(op.n) > 0 && !isForce) return res.status(409).json({ error: 'has_open_positions', open: Number(op.n) });
+    if (Number(op.n) > 0 && isForce && !b.respond) return res.status(409).json({ error: 'confirm_respond_required', open: Number(op.n) });
+    const amt = Number(rel.amount) || 0;
+    const w = copyWallet(req.user.uid);
+    // فكّ العلاقة: إرجاع المبلغ المخصص إلى المتاح (دون خلق مال) — الاستثمار التلقائي يعيد للحفظ إن كانت الصفقات مسوّاة
+    copyWalletSet(req.user.uid, w.avail, Math.max(0, w.locked - amt));
+    await pool.query('UPDATE copy_relations SET followed = 0 WHERE id = ?', [rel.id]);
+    try { store.addNotification(req.user.id, { title: 'أوقفت النسخ', kind: 'copy', body: 'تم إيقاف نسخ المتداول وفكّ المبلغ المخصص من محفظة النسخ.' }); } catch (e) {}
+    res.json({ ok: true, wallet: copyWallet(req.user.uid) });
   } catch (e) { console.error('[copy/stop]', e.message); res.status(500).json({ error: 'server_error' }); }
 });
 
@@ -2816,6 +3124,44 @@ app.post('/api/copy/traders/:id/reviews', requireUser, async (req, res) => {
     res.json({ ok: true });
   } catch (e) { console.error('[copy/review]', e.message); res.status(500).json({ error: 'server_error' }); }
 });
+
+// ---- أدوات النسخ: تنزيل صفقة واحدة على كل متابع نشط (بلا أي ربح تلقائي) ----
+// profit = صفر. الربح لا يُحتسب إلا في /api/copy/settle حسب نتيجة صفقة حقيقية.
+async function copyFanout(tradeId, copierFilter, amountOverride) {
+  const [[tr]] = await pool.query('SELECT * FROM copy_trades WHERE id = ?', [tradeId]);
+  if (!tr) return null;
+  const [rels] = await pool.query(
+    'SELECT copier_id, amount, multiplier, followed FROM copy_relations WHERE trader_id = ?', [tr.trader_id]);
+  const filtered = rels.filter(function (r) {
+    if (!Number(r.followed)) return false;
+    if (copierFilter && String(r.copier_id) !== String(copierFilter)) return false;
+    return true;
+  });
+  let allocated = 0, lockedAdd = 0;
+  for (const r of filtered) {
+    const amt = Number(amountOverride != null ? amountOverride : r.amount) || 0;
+    if (amt <= 0) continue;
+    const w = copyWallet(r.copier_id);
+    const each = Math.min(amt, Math.max(0, w.avail - w.locked));
+    if (each <= 0) continue;
+    allocated += each; lockedAdd += each;
+    await pool.query(
+      'INSERT INTO copy_trade_copies (trade_id, copier_id, trader_id, amount, multiplier, profit, created_at) ' +
+      'VALUES (?, ?, ?, ?, ?, 0, ?) ON DUPLICATE KEY UPDATE amount=VALUES(amount), multiplier=VALUES(multiplier)',
+      [tr.id, r.copier_id, tr.trader_id, each, Number(r.multiplier) || 1, Date.now()]);
+  }
+  if (lockedAdd > 0) {
+    // تثبيت المبلغ المودع بالصفقة (لا يظهر في رصيد التسوية حتى تُسوَّى الصفقة)
+    const [rows2] = await pool.query('SELECT DISTINCT copier_id FROM copy_trade_copies WHERE trade_id = ?', [tr.id]);
+    for (const row of rows2) {
+      const w = copyWallet(row.copier_id);
+      const [[s]] = await pool.query('SELECT COALESCE(SUM(amount),0) AS s FROM copy_trade_copies WHERE trade_id = ? AND copier_id = ?', [tr.id, row.copier_id]);
+      copyWalletSet(row.copier_id, w.avail, w.locked + (Number(s.s) || 0));
+    }
+  }
+  await pool.query('UPDATE copy_trades SET allocated = ? WHERE id = ?', [allocated, tr.id]);
+  return { trade: tr, count: filtered.length, allocated: allocated };
+}
 
 // ============================================================
 //  SQUARE (الأخبار والمنشورات — مخزّنة على السيرفر ليراها الجميع)
