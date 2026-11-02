@@ -95,8 +95,8 @@ html[data-theme=light] .cbal{background:linear-gradient(120deg,#fff,#eef1f6)}
 .mc-stop{width:100%;border:1px solid var(--red);background:rgba(246,70,93,.1);color:var(--red);border-radius:11px;font-family:inherit;font-weight:800;font-size:13px;padding:10px 0;cursor:pointer}
 .mc-mng{width:100%;border:1px solid var(--border);background:var(--panel2);color:var(--txt);border-radius:11px;font-family:inherit;font-weight:800;font-size:12.5px;padding:9px 0;cursor:pointer;margin-bottom:8px}
 .mdl{position:fixed;inset:0;z-index:999;display:none;background:rgba(0,0,0,.55);backdrop-filter:blur(3px)}
-.mdl.on{display:block}
-.mdl-sheet{position:absolute;left:0;right:0;bottom:0;max-width:480px;margin:0 auto;background:var(--panel);border-top-left-radius:22px;border-top-right-radius:22px;padding:20px 18px calc(26px + env(safe-area-inset-bottom));box-shadow:0 -8px 30px rgba(0,0,0,.4);max-height:92vh;overflow-y:auto}
+.mdl.on{display:flex;align-items:center;justify-content:center;padding:16px}
+.mdl-sheet{position:relative;left:auto;right:auto;bottom:auto;width:100%;max-width:440px;margin:0 auto;background:var(--panel);border-radius:22px;padding:22px 18px calc(20px + env(safe-area-inset-bottom));box-shadow:0 18px 50px rgba(0,0,0,.55);max-height:88vh;overflow-y:auto}
 .mdl-grip{width:42px;height:4px;border-radius:4px;background:var(--border);margin:0 auto 16px}
 .mdl-h{font-size:17px;font-weight:900;margin-bottom:4px}
 .mdl-sub{font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.65}

@@ -68,6 +68,64 @@ const ADMIN_PASS = process.env.ADMIN_PASS || 'apex-admin-2024';
 const REQUIRE_APPROVAL = (process.env.REQUIRE_APPROVAL || 'true') !== 'false';
 
 // ---- Persistent demo store (users / sessions / support chat) ----
+// ============================================================
+//  طبقة حفظ دائمة (DURABLE PERSISTENCE)
+//  السبب الجذري لفقدان الأرصدة/العملات/الأوامر بعد إعادة التشغيل:
+//  نظام ملفات Render مؤقّت (ephemeral) — كل ملفات data/*.json
+//  تُمسح عند كل إعادة نشر. هذه الطبقة تعكس كل الملفات
+//  إلى جدول kv_store في قاعدة Aiven (دائمة): تستعيدها عند
+//  الإقلاع، وتحفظ لقطة دورية + عند الإيقاف، فلا تُفقد أي بيانات.
+// ============================================================
+const DATA_DIR = join(__dirname, 'data');
+const PERSIST_FILES = [
+  'apex-data.json', 'apex-orders.json', 'apex-futures.json',
+  'apex-copywallet.json', 'apex-prefs.json', 'apex-security.json',
+  'apex-ops.json', 'apex-commission.json', 'apex-apx.json',
+  'apex-admin-2fa.json',
+];
+function _persistHash(s) {
+  let h = 2166136261 >>> 0; s = String(s);
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return (h >>> 0).toString(16) + ':' + s.length;
+}
+function _persistDbConfig() {
+  return {
+    host: process.env.DB_HOST, port: process.env.DB_PORT,
+    user: process.env.DB_USER, password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME, ssl: { rejectUnauthorized: false },
+  };
+}
+const _lastSnapshotHash = {};
+async function restoreDataFromDb() {
+  let conn;
+  try {
+    mkdirSync(DATA_DIR, { recursive: true });
+    conn = await mysql.createConnection(_persistDbConfig());
+    await conn.query('CREATE TABLE IF NOT EXISTS kv_store (k VARCHAR(190) PRIMARY KEY, v LONGTEXT, updated_at BIGINT) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
+    const [rows] = await conn.query('SELECT k, v FROM kv_store');
+    let restored = 0;
+    for (const r of rows) {
+      if (PERSIST_FILES.indexOf(r.k) < 0) continue;
+      const p = join(DATA_DIR, r.k);
+      const incoming = String(r.v == null ? '' : r.v);
+      let cur = '';
+      try { if (existsSync(p)) cur = readFileSync(p, 'utf8'); } catch (e) {}
+      // استعد من القاعدة فقط عندما يكون الملف مفقوداً/فارغاً (بعد إعادة نشر)
+      if ((!cur || cur.trim() === '') && incoming) {
+        try { writeFileSync(p, incoming); restored++; } catch (e) {}
+      }
+      _lastSnapshotHash[r.k] = _persistHash(incoming);
+    }
+    console.log('[persist] استُعيد من قاعدة البيانات:', restored, 'ملف');
+  } catch (e) {
+    console.warn('[persist] تعذّرت الاستعادة (متابعة بالملفات المحلية):', e.message);
+  } finally {
+    if (conn) { try { await conn.end(); } catch (e) {} }
+  }
+}
+// الاستعادة تتم قبل تهيئة أي مخزن حتى يقرأ المخزن الملفات المستعادة
+await restoreDataFromDb();
+
 const store = new Store(join(__dirname, 'data', 'apex-data.json'));
 
 // ---- نظام التنبيهات البريدية (حوالات + OTP) + سجلّ مراقبة الإرسال ----
@@ -94,6 +152,39 @@ const pool = mysql.createPool({
   ssl: { rejectUnauthorized: false }
   
 });
+
+// ---- حفظ لقطة دورية من ملفات data/ إلى قاعدة البيانات (دائم) ----
+// يرفع كل ملف تغيّر فقط (بمقارنة بصمة)؛ فالأرصدة والعملات والأوامر
+// تُحفظ خلال ثوانٍ من أي تغيير ثم تُستعاد بالكامل عند الإقلاع.
+async function snapshotDataToDb(force) {
+  try {
+    for (const f of PERSIST_FILES) {
+      const p = join(DATA_DIR, f);
+      if (!existsSync(p)) continue;
+      let content = '';
+      try { content = readFileSync(p, 'utf8'); } catch (e) { continue; }
+      if (!content || content.trim() === '') continue;
+      const h = _persistHash(content);
+      if (!force && _lastSnapshotHash[f] === h) continue;
+      await pool.query(
+        'INSERT INTO kv_store (k, v, updated_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE v=VALUES(v), updated_at=VALUES(updated_at)',
+        [f, content, Date.now()]);
+      _lastSnapshotHash[f] = h;
+    }
+  } catch (e) { console.warn('[persist] تعذّر حفظ اللقطة:', e.message); }
+}
+// لقطة دورية كل 7 ثوانٍ (تغطي الأعطال المفاجئة)
+setInterval(function () { snapshotDataToDb(false); }, 7000);
+// لقطة نهائية عند إيقاف الخادم (Render يرسل SIGTERM قبل إعادة النشر)
+let _persistFinalDone = false;
+async function _persistFinalSnapshot(sig) {
+  if (_persistFinalDone) return; _persistFinalDone = true;
+  try { await snapshotDataToDb(true); } catch (e) {}
+  console.log('[persist] لقطة نهائية عند', sig);
+  process.exit(0);
+}
+process.on('SIGTERM', function () { _persistFinalSnapshot('SIGTERM'); });
+process.on('SIGINT', function () { _persistFinalSnapshot('SIGINT'); });
 
 // ============================================================
 //  MySQL USER LAYER (identity + status + KYC) — source of truth

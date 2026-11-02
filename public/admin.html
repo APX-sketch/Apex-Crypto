@@ -153,6 +153,7 @@ tr:last-child td{border-bottom:0}
     <div class="lg">Apex</div>
     <div class="tag">لوحة الإدارة</div>
     <div class="sp"></div>
+    <button class="out" style="color:var(--gold2);font-weight:800" onclick="exportFullPDF()">⬇ تصدير PDF شامل</button>
     <button class="out" onclick="adminLogout()">تسجيل الخروج ‹</button>
   </div>
   <div class="layout">
@@ -737,6 +738,100 @@ async function confirm2fa(){
   }catch(e){btn.disabled=false;btn.textContent='تأكيد';lerr('خطأ في الاتصال');}
 }
 function adminLogout(){TOKEN='';localStorage.removeItem('apex_admin_token');if(POLL)clearInterval(POLL);$('app').style.display='none';$('loginWrap').style.display='flex';resetLoginUI();}
+
+/* ============ تصدير PDF شامل (مستخدمون + أرصدة + عملات مشتراة + أوامر معلّقة + معاملات) ============ */
+async function exportFullPDF(){
+  var btn=event&&event.target;if(btn){btn.disabled=true;btn.textContent='… تجهيز';}
+  try{
+    var usersR={},liqR={},ordersR={},txR={};
+    try{usersR=await api('/api/admin/users');}catch(e){}
+    try{liqR=await api('/api/admin/liquidity');}catch(e){}
+    try{ordersR=await api('/api/admin/orders');}catch(e){}
+    try{txR=await api('/api/admin/transactions');}catch(e){}
+    var users=(usersR&&usersR.users)||[];
+    var liq=(liqR&&liqR.rows)||[];
+    var open=(ordersR&&ordersR.open)||[];
+    var txs=(txR&&txR.transactions)||[];
+    // العملات المشتراة لكل مستخدم (نظرة عامة = فوري + عقود)
+    var holdings=await Promise.all(users.map(function(u){
+      return api('/api/admin/users/'+u.id+'/balances').then(function(d){return {u:u,d:d};}).catch(function(){return {u:u,d:null};});
+    }));
+    var esc2=function(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');};
+    var num=function(n,dd){return Number(n||0).toLocaleString('en-US',{maximumFractionDigits:(dd==null?8:dd)});};
+    var usd=function(n){return '$'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});};
+    var dt=function(ms){if(!ms)return '—';try{return new Date(ms).toLocaleString('ar-EG');}catch(e){return String(ms);}};
+    var stMap={pending:'قيد المراجعة',approved:'موافَق',rejected:'مرفوض',banned:'محظور'};
+    var now=new Date().toLocaleString('ar-EG');
+    var totalLiq=liq.reduce(function(a,r){return a+(Number(r.balanceUsd)||0);},0);
+
+    var h='<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>تقرير Apex الشامل</title>';
+    h+='<style>*{box-sizing:border-box}body{font-family:"Segoe UI",Tahoma,Arial,sans-serif;color:#111;margin:28px;line-height:1.5}'+
+       'h1{font-size:22px;margin:0 0 2px}h2{font-size:16px;margin:26px 0 8px;padding-bottom:6px;border-bottom:2px solid #c9a227;color:#8a6d13}'+
+       '.sub{color:#666;font-size:12px;margin-bottom:14px}'+
+       '.kpis{display:flex;flex-wrap:wrap;gap:10px;margin:10px 0 4px}'+
+       '.kpi{border:1px solid #ddd;border-radius:10px;padding:8px 14px;min-width:150px}'+
+       '.kpi b{display:block;font-size:19px}.kpi span{color:#666;font-size:11.5px}'+
+       'table{width:100%;border-collapse:collapse;font-size:12px;margin-top:4px}'+
+       'th,td{border:1px solid #ddd;padding:6px 8px;text-align:right}'+
+       'th{background:#f3f0e6}tbody tr:nth-child(even){background:#fafafa}'+
+       '.ltr{direction:ltr}.muted{color:#777}.empty{color:#999;padding:8px}'+
+       '@media print{body{margin:10mm}h2{page-break-after:avoid}tr{page-break-inside:avoid}}'+
+       '</style></head><body>';
+    h+='<h1>Apex — تقرير شامل للمنصّة</h1>';
+    h+='<div class="sub">تاريخ التصدير: '+esc2(now)+'</div>';
+    h+='<div class="kpis">'+
+       '<div class="kpi"><b>'+users.length+'</b><span>إجمالي المستخدمين</span></div>'+
+       '<div class="kpi"><b>'+usd(totalLiq)+'</b><span>إجمالي الأرصدة</span></div>'+
+       '<div class="kpi"><b>'+open.length+'</b><span>أوامر معلّقة</span></div>'+
+       '<div class="kpi"><b>'+txs.length+'</b><span>معاملات مالية</span></div>'+
+       '</div>';
+
+    // 1) المستخدمون + الأرصدة
+    h+='<h2>1) المستخدمون وأرصدتهم</h2>';
+    var liqById={};liq.forEach(function(r){liqById[r.email]=r;});
+    if(!users.length)h+='<div class="empty">لا يوجد مستخدمون</div>';
+    else{h+='<table><thead><tr><th>الاسم</th><th>البريد</th><th>UID</th><th>الحالة</th><th>الرصيد (USD)</th></tr></thead><tbody>'+
+      users.map(function(u){var lr=liqById[u.email]||{};
+        return '<tr><td>'+esc2(u.name)+'</td><td class="ltr">'+esc2(u.email)+'</td><td class="ltr">'+esc2(u.uid)+'</td><td>'+(stMap[u.status]||esc2(u.status))+'</td><td class="ltr" style="text-align:right">'+usd(lr.balanceUsd)+'</td></tr>';
+      }).join('')+'</tbody></table>';}
+
+    // 2) العملات الرقمية المشتراة
+    h+='<h2>2) العملات الرقمية المشتراة (فوري + عقود)</h2>';
+    var hRows='';
+    holdings.forEach(function(x){
+      var d=x.d;if(!d)return;var ov=d.overview||{};
+      var spot=d.spot||d.balances||{};var fut=d.futures||{};
+      var keys=Object.keys(ov).filter(function(k){return Number(ov[k])>0;}).sort();
+      keys.forEach(function(k){
+        hRows+='<tr><td>'+esc2(x.u.name)+'</td><td class="ltr">'+esc2(x.u.email)+'</td><td class="ltr" style="font-weight:700">'+esc2(k)+'</td><td class="ltr" style="text-align:right">'+num(spot[k])+'</td><td class="ltr" style="text-align:right">'+num(fut[k])+'</td><td class="ltr" style="text-align:right;font-weight:700">'+num(ov[k])+'</td></tr>';
+      });
+    });
+    if(!hRows)h+='<div class="empty">لا توجد عملات مشتراة بعد</div>';
+    else h+='<table><thead><tr><th>المستخدم</th><th>البريد</th><th>العملة</th><th>فوري</th><th>عقود</th><th>الإجمالي</th></tr></thead><tbody>'+hRows+'</tbody></table>';
+
+    // 3) الأوامر المعلّقة
+    h+='<h2>3) الأوامر المعلّقة</h2>';
+    if(!open.length)h+='<div class="empty">لا توجد أوامر معلّقة</div>';
+    else h+='<table><thead><tr><th>الحساب</th><th>الزوج</th><th>النوع</th><th>سعر الأمر</th><th>الكمية</th><th>القيمة (USD)</th><th>الوقت</th></tr></thead><tbody>'+
+      open.map(function(o){return '<tr><td>'+esc2(o.userName||o.userEmail||o.uid||'—')+'</td><td class="ltr">'+esc2(o.base||o.sym)+'/'+esc2(o.quote)+'</td><td>'+(o.side==='buy'?'شراء':'بيع')+'</td><td class="ltr" style="text-align:right">'+num(o.price)+'</td><td class="ltr" style="text-align:right">'+num(o.qty)+'</td><td class="ltr" style="text-align:right">'+usd(o.notional)+'</td><td class="muted">'+dt(o.createdAt)+'</td></tr>';}).join('')+'</tbody></table>';
+
+    // 4) المعاملات المالية
+    h+='<h2>4) المعاملات المالية</h2>';
+    if(!txs.length)h+='<div class="empty">لا توجد عمليات</div>';
+    else{var txL={admin_credit:'شحن إدارة',admin_debit:'خصم إدارة',transfer_in:'تحويل وارد',transfer_out:'تحويل صادر'};
+      h+='<table><thead><tr><th>المستخدم</th><th>النوع</th><th>المبلغ</th><th>العملة</th><th>التاريخ</th></tr></thead><tbody>'+
+      txs.map(function(t){var sign=(t.type==='transfer_out'||t.type==='admin_debit')?'-':'+';return '<tr><td>'+esc2(t.userName||t.userEmail||'—')+'</td><td>'+(txL[t.type]||esc2(t.type))+'</td><td class="ltr" style="text-align:right">'+sign+num(t.amount)+'</td><td class="ltr">'+esc2(t.currency||'USDT')+'</td><td class="muted">'+dt(t.at||t.createdAt)+'</td></tr>';}).join('')+'</tbody></table>';}
+
+    h+='<div class="sub" style="margin-top:28px">تقرير آلي من لوحة إدارة Apex · '+esc2(now)+'</div>';
+    h+='<script>window.onload=function(){setTimeout(function(){window.print();},400);};<\/script>';
+    h+='</body></html>';
+
+    var w=window.open('','_blank');
+    if(!w){toast('الرجاء السماح بالنوافذ المنبثقة لتصدير PDF');}
+    else{w.document.open();w.document.write(h);w.document.close();}
+  }catch(e){toast('تعذّر التصدير');}
+  finally{if(btn){btn.disabled=false;btn.textContent='⬇ تصدير PDF شامل';}}
+}
 $('apass').addEventListener('keydown',e=>{if(e.key==='Enter')adminLogin();});
 $('setupCode')&&$('setupCode').addEventListener('keydown',e=>{if(e.key==='Enter')confirmSetup();});
 $('verifyCode')&&$('verifyCode').addEventListener('keydown',e=>{if(e.key==='Enter')confirm2fa();});
