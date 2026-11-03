@@ -82,7 +82,7 @@ const PERSIST_FILES = [
   'apex-copywallet.json', 'apex-prefs.json', 'apex-security.json',
   'apex-ops.json', 'apex-commission.json', 'apex-apx.json',
   'apex-admin-2fa.json', 'apex-orderalerts.json',
-  'apex-sessions.json',
+  'apex-sessions.json', 'apex-balance-audit.json',
 ];
 function _persistHash(s) {
   let h = 2166136261 >>> 0; s = String(s);
@@ -154,6 +154,64 @@ const pool = mysql.createPool({
   ssl: { rejectUnauthorized: false }
   
 });
+
+// ============================================================
+// مزامنة الأرصدة إلى جدول wallets في MySQL
+// — الدفتر الحيّ (store) هو المصدر الرسمي، وهذه الدالة
+//   تعكس كل عملة يملكها/اشتراها المستخدم إلى صفّ في
+//   wallets (صفّ لكل عملة) فيظهر الرصيد ويتحدّث في قاعدة
+//   البيانات مباشرة (DBeaver / لوحة الأدمن).
+// ============================================================
+// خريطة لتخفيف المزامنة عند القراءة (مرة كل 60ث لكل مستخدم)
+const _lastWalletSync = {};
+async function dbSyncWallets(userId, balances) {
+  try {
+    const uid = Number(userId);
+    if (!Number.isFinite(uid)) return;
+    const entries = Object.entries(balances || {})
+      .map(([k, v]) => [String(k).toUpperCase().slice(0, 12), Number(v)])
+      .filter(([k, v]) => /^[A-Z0-9]{2,12}$/.test(k) && isFinite(v) && v >= 0);
+    for (const [cur, amt] of entries) {
+      await pool.query(
+        'INSERT INTO wallets (user_id, currency, balance, updated_at) VALUES (?, ?, ?, NOW()) ' +
+        'ON DUPLICATE KEY UPDATE balance = VALUES(balance), updated_at = NOW()',
+        [uid, cur, amt]);
+    }
+    // صفّر أي عملة لم تعد موجودة في المحفظة (بدل ترك رصيد وهمي)
+    const keep = entries.map((e) => e[0]);
+    if (keep.length) {
+      await pool.query('UPDATE wallets SET balance = 0, updated_at = NOW() WHERE user_id = ? AND currency NOT IN (?)', [uid, keep]);
+    } else {
+      await pool.query('UPDATE wallets SET balance = 0, updated_at = NOW() WHERE user_id = ?', [uid]);
+    }
+  } catch (e) { /* غير قاتل: الدفتر الحيّ يبقى المصدر الرسمي */ }
+}
+// اربط كل تغيير رصيد في الدفتر بمزامنة فورية إلى wallets.
+(function hookWalletSync() {
+  const methods = ['applyDeltas', 'addDeposit', 'debitBalance', 'setBalances'];
+  for (const m of methods) {
+    if (typeof store[m] !== 'function') continue;
+    const orig = store[m].bind(store);
+    store[m] = function (...args) {
+      let before = {};
+      try {
+        const su0 = store.findUserById(String(args[0]));
+        if (su0 && su0.balances) before = Object.assign({}, su0.balances);
+      } catch (e) {}
+      const r = orig(...args);
+      if (r) {
+        try {
+          const su = store.findUserById(String(args[0]));
+          if (su) {
+            dbSyncWallets(args[0], su.balances || {});
+            logBalanceDiff(args[0], before, su.balances || {}, m, su);
+          }
+        } catch (e) {}
+      }
+      return r;
+    };
+  }
+})();
 
 // ---- حفظ لقطة دورية من ملفات data/ إلى قاعدة البيانات (دائم) ----
 // يرفع كل ملف تغيّر فقط (بمقارنة بصمة)؛ فالأرصدة والعملات والأوامر
@@ -514,6 +572,11 @@ async function ensureSchema() {
     ' locked_balance DECIMAL(30,8) NOT NULL DEFAULT 0,' +
     ' UNIQUE KEY uq_user_cur (user_id, currency)' +
     ')');
+  // أعمدة المحفظة (ترميم الجداول اليدوية/القديمة حتى تدعم كل عملة + وقت التحديث)
+  await ensureColumn('wallets', 'currency', "`currency` VARCHAR(12) NOT NULL DEFAULT 'USDT'");
+  await ensureColumn('wallets', 'balance', '`balance` DECIMAL(30,8) NOT NULL DEFAULT 0');
+  await ensureColumn('wallets', 'locked_balance', '`locked_balance` DECIMAL(30,8) NOT NULL DEFAULT 0');
+  await ensureColumn('wallets', 'updated_at', '`updated_at` DATETIME NULL DEFAULT CURRENT_TIMESTAMP');
   // ===== نسخ التداول (Copy Trading) — مشترك على السيرفر =====
   // بطاقة المتداول: صف واحد لكل مستخدم قدّم طلباً ليصبح متداولاً يُنسخ.
   await pool.query(
@@ -718,6 +781,66 @@ function recordCommission({ amount, currency, userId, userName, source }) {
   saveCommission();
   return commission.totals[cur];
 }
+
+// ============================================================
+// سجل عمليات الأرصدة (Audit Log) — يسجّل كل تغيير
+// في رصيد أي عملة لأي مستخدم (قبل/بعد/الفرق + المصدر).
+// يُحفظ في ملفّ خاص (ضمن PERSIST_FILES) فيبقى بعد إعادة النشر.
+// ============================================================
+const BAL_AUDIT_FILE = join(__dirname, 'data', 'apex-balance-audit.json');
+function loadBalanceAudit() {
+  try {
+    if (existsSync(BAL_AUDIT_FILE)) {
+      const d = JSON.parse(readFileSync(BAL_AUDIT_FILE, 'utf8'));
+      return { count: Number(d.count) || 0, entries: Array.isArray(d.entries) ? d.entries : [] };
+    }
+  } catch (e) { /* ignore corrupt / missing */ }
+  return { count: 0, entries: [] };
+}
+const balAudit = loadBalanceAudit();
+let _balAuditDirty = false;
+function saveBalanceAudit() {
+  try {
+    mkdirSync(dirname(BAL_AUDIT_FILE), { recursive: true });
+    writeFileSync(BAL_AUDIT_FILE, JSON.stringify(balAudit));
+    _balAuditDirty = false;
+  } catch (e) { console.warn('[balance-audit] save failed:', e.message); }
+}
+// خريطة المصادر إلى تسميات عربية مفهومة في اللوحة.
+const BAL_SRC_LABEL = {
+  applyDeltas: 'تداول/تحويل', addDeposit: 'إيداع/شحن', debitBalance: 'خصم/سحب', setBalances: 'مزامنة',
+};
+// سجّل فرق الأرصدة بين لقطتين (before/after) كسطر أو أكثر في السجل.
+function logBalanceDiff(userId, before, after, source, su) {
+  try {
+    const EPS = 1e-8;
+    const syms = new Set([...Object.keys(before || {}), ...Object.keys(after || {})]);
+    const at = Date.now();
+    let wrote = false;
+    for (const sym of syms) {
+      const b = Number((before || {})[sym]) || 0;
+      const a = Number((after || {})[sym]) || 0;
+      const delta = +(a - b).toFixed(10);
+      if (Math.abs(delta) < EPS) continue;
+      balAudit.entries.unshift({
+        userId: String(userId), userName: (su && (su.name || su.email)) || '',
+        userEmail: (su && su.email) || '',
+        currency: String(sym).toUpperCase().slice(0, 12),
+        before: +b.toFixed(8), after: +a.toFixed(8), delta: +delta.toFixed(8),
+        source: String(source || ''), sourceLabel: BAL_SRC_LABEL[source] || String(source || ''),
+        at,
+      });
+      wrote = true;
+    }
+    if (wrote) {
+      balAudit.count += 1;
+      if (balAudit.entries.length > 5000) balAudit.entries.length = 5000;
+      _balAuditDirty = true;
+    }
+  } catch (e) { /* non-fatal */ }
+}
+// حفظ دوري (كل 5ث) لتجنّب كثرة الكتابة عند تداول كثيف.
+setInterval(() => { if (_balAuditDirty) saveBalanceAudit(); }, 5000).unref?.();
 
 // ---- Futures wallet (SEPARATE from the Spot balance) ----
 // Money safety: the futures wallet is a server-authoritative store, kept in its
@@ -1413,6 +1536,16 @@ async function requireUser(req, res, next) {
     };
     // keep the "last active" marker fresh for the admin online indicator
     try { pool.query('UPDATE users SET last_seen = ? WHERE id = ?', [Date.now(), dbu.id]); } catch (e) {}
+    // اعكس أرصدة المستخدم الحالية إلى جدول wallets (مخنوقة: مرة كل 60ث)
+    try {
+      if (su && su.balances) {
+        const k = String(dbu.id); const t = Date.now();
+        if (!_lastWalletSync[k] || (t - _lastWalletSync[k]) > 60000) {
+          _lastWalletSync[k] = t;
+          dbSyncWallets(dbu.id, su.balances);
+        }
+      }
+    } catch (e) {}
     next();
   } catch (e) {
     console.error('requireUser error:', e.message);
@@ -2909,49 +3042,117 @@ function valueUsd(balances) {
 
 app.get('/api/admin/liquidity', requireAdmin, async (req, res) => {
   try {
-    const ONLINE_MS = 90 * 1000;
-    const now = Date.now();
-    const [users] = await pool.query(
-      'SELECT id, username, name, email, status, last_seen FROM users ORDER BY created_at DESC');
-    const [wals] = await pool.query('SELECT user_id, currency, balance FROM wallets');
-    const byUser = {};
-    for (const w of wals) {
-      const uid = String(w.user_id);
-      const cur = String(w.currency || 'USDT').toUpperCase();
-      byUser[uid] = byUser[uid] || {};
-      byUser[uid][cur] = (Number(byUser[uid][cur]) || 0) + Number(w.balance || 0);
-    }
-    const rows = users.map((u) => {
-      const uid = String(u.id);
-      // الدفتر الموحّد (store) هو المصدر الرسمي للرصيد. نستخدم أرصدته
-      // إن وجدت، ونستخدم جدول wallets كاحتياطي فقط لتجنّب العدّ المزدوج.
-      let balances;
-      try {
-        const su = store.findUserById(uid);
-        if (su && su.balances && Object.keys(su.balances).length) {
-          balances = Object.assign({}, su.balances);
-        } else {
-          balances = Object.assign({}, byUser[uid] || {});
-        }
-      } catch (e) { balances = Object.assign({}, byUser[uid] || {}); }
-      const balanceUsd = valueUsd(balances);
-      return {
-        id: uid, uid: u.id,
-        name: u.name || u.username || u.email,
-        email: u.email,
-        status: u.status || 'pending',
-        balanceUsd, balances,
-        lastSeen: Number(u.last_seen) || 0,
-        online: !!u.last_seen && (now - Number(u.last_seen)) < ONLINE_MS,
-      };
-    }).sort((a, b) => b.balanceUsd - a.balanceUsd);
-    const totalLiquidity = rows.reduce((s, r) => s + r.balanceUsd, 0);
-    const online = rows.filter((r) => r.online).length;
-    res.json({ ok: true, rows, totalLiquidity, online, count: rows.length });
+    const data = await buildLiquidityRows();
+    res.json({ ok: true, ...data });
   } catch (err) {
     console.error('liquidity error:', err);
     res.status(500).json({ error: 'liquidity_failed' });
   }
+});
+
+// يبني صفوف الأرصدة (مستخدم + تفصيل عملات) مرة واحدة
+// لتستخدمها كلّ من واجهة JSON وتصدير CSV.
+async function buildLiquidityRows() {
+  const ONLINE_MS = 90 * 1000;
+  const now = Date.now();
+  const [users] = await pool.query(
+    'SELECT id, username, name, email, status, last_seen FROM users ORDER BY created_at DESC');
+  const [wals] = await pool.query('SELECT user_id, currency, balance FROM wallets');
+  const byUser = {};
+  for (const w of wals) {
+    const uid = String(w.user_id);
+    const cur = String(w.currency || 'USDT').toUpperCase();
+    byUser[uid] = byUser[uid] || {};
+    byUser[uid][cur] = (Number(byUser[uid][cur]) || 0) + Number(w.balance || 0);
+  }
+  const rows = users.map((u) => {
+    const uid = String(u.id);
+    // الدفتر الموحّد (store) هو المصدر الرسمي للرصيد. نستخدم أرصدته
+    // إن وجدت، ونستخدم جدول wallets كاحتياطي فقط لتجنّب العدّ المزدوج.
+    let balances;
+    try {
+      const su = store.findUserById(uid);
+      if (su && su.balances && Object.keys(su.balances).length) {
+        balances = Object.assign({}, su.balances);
+      } else {
+        balances = Object.assign({}, byUser[uid] || {});
+      }
+    } catch (e) { balances = Object.assign({}, byUser[uid] || {}); }
+    const balanceUsd = valueUsd(balances);
+    // تفصيل كل عملة: عدد الحبات + قيمتها بـ USDT (لعرضها في لوحة الأدمن)
+    const coins = Object.keys(balances).map((c) => {
+      const amount = Number(balances[c]) || 0;
+      const px = STABLES.has(c) ? 1 : (priceOf(c + 'USDT') || 0);
+      return { currency: c, amount, usd: amount * px, price: px };
+    }).filter((c) => c.amount > 1e-8).sort((a, b) => b.usd - a.usd);
+    return {
+      id: uid, uid: u.id,
+      name: u.name || u.username || u.email,
+      email: u.email,
+      status: u.status || 'pending',
+      balanceUsd, balances, coins,
+      lastSeen: Number(u.last_seen) || 0,
+      online: !!u.last_seen && (now - Number(u.last_seen)) < ONLINE_MS,
+    };
+  }).sort((a, b) => b.balanceUsd - a.balanceUsd);
+  const totalLiquidity = rows.reduce((s, r) => s + r.balanceUsd, 0);
+  const online = rows.filter((r) => r.online).length;
+  return { rows, totalLiquidity, online, count: rows.length };
+}
+
+// ---- Admin: تصدير تقرير أرصدة المستخدمين إلى CSV ----
+// صف لكل (مستخدم × عملة) مع BOM ليفتح العربي صحيحاً في Excel.
+app.get('/api/admin/liquidity/export.csv', requireAdmin, async (req, res) => {
+  try {
+    const { rows, totalLiquidity } = await buildLiquidityRows();
+    const esc = (v) => {
+      const s = String(v == null ? '' : v);
+      return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    const lines = [];
+    lines.push([
+      'المعرّف', 'الاسم', 'البريد', 'الحالة', 'متصل',
+      'العملة', 'الكمية', 'السعر USDT', 'القيمة USDT', 'إجمالي المحفظة USDT',
+    ].map(esc).join(','));
+    for (const r of rows) {
+      const coins = (r.coins && r.coins.length) ? r.coins : [{ currency: '', amount: 0, price: 0, usd: 0 }];
+      for (const c of coins) {
+        lines.push([
+          r.uid, r.name, r.email, r.status, r.online ? 'نعم' : 'لا',
+          c.currency, (Number(c.amount) || 0).toFixed(8),
+          (Number(c.price) || 0).toFixed(6), (Number(c.usd) || 0).toFixed(2),
+          (Number(r.balanceUsd) || 0).toFixed(2),
+        ].map(esc).join(','));
+      }
+    }
+    lines.push('');
+    lines.push([esc('الإجمالي العام USDT'), '', '', '', '', '', '', '', esc((Number(totalLiquidity) || 0).toFixed(2)), ''].join(','));
+    const csv = '\uFEFF' + lines.join('\r\n');
+    const fname = 'apex-balances-' + new Date().toISOString().slice(0, 10) + '.csv';
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="' + fname + '"');
+    res.send(csv);
+  } catch (err) {
+    console.error('liquidity csv error:', err);
+    res.status(500).json({ error: 'export_failed' });
+  }
+});
+
+// ---- Admin: سجل عمليات الأرصدة (Audit Log) ----
+// يرجّع أحدث التغييرات مع فلترة اختيارية (userId / currency).
+app.get('/api/admin/balance-audit', requireAdmin, (req, res) => {
+  const limit = Math.min(Math.max(Number(req.query.limit) || 200, 1), 2000);
+  const fUser = req.query.userId ? String(req.query.userId) : '';
+  const fCur = req.query.currency ? String(req.query.currency).toUpperCase() : '';
+  let entries = balAudit.entries;
+  if (fUser) entries = entries.filter((e) => String(e.userId) === fUser);
+  if (fCur) entries = entries.filter((e) => String(e.currency) === fCur);
+  res.json({
+    ok: true,
+    count: balAudit.count || 0,
+    total: balAudit.entries.length,
+    entries: entries.slice(0, limit),
+  });
 });
 
 // ---- Admin: platform commission (trading fees collected) ----

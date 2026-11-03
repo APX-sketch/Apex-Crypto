@@ -334,8 +334,16 @@ tr:last-child td{border-bottom:0}
           <div class="stat y"><div class="k"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg>نشط الآن</div><div class="v" id="stLiqOnline">0</div></div>
         </div>
         <div class="card">
-          <div class="card-h"><b>أرصدة الحسابات</b><div class="sp"></div><button class="btn ghost sm" onclick="loadLiquidity()">تحديث ↻</button></div>
+          <div class="card-h"><b>أرصدة الحسابات</b><div class="sp"></div><button class="btn ghost sm" onclick="exportLiquidityCsv()">تصدير CSV ⬇</button><button class="btn ghost sm" onclick="loadLiquidity()">تحديث ↻</button></div>
           <div id="liqTable"></div>
+        </div>
+        <div class="card">
+          <div class="card-h"><b>سجل تغييرات الأرصدة (Audit Log)</b>
+            <div class="sp"></div>
+            <input id="auditSearch" placeholder="فلترة: عملة أو معرّف" style="background:var(--panel2);border:1px solid var(--border);color:var(--fg);border-radius:8px;padding:6px 10px;font-size:12.5px;margin-inline-end:8px" oninput="renderAudit()">
+            <button class="btn ghost sm" onclick="loadAudit()">تحديث ↻</button>
+          </div>
+          <div id="auditTable"></div>
         </div>
       </div>
       <!-- COMMISSION (platform trading-fee revenue account) -->
@@ -567,7 +575,7 @@ async function adjustBal(mode){
     toast('تم تحديث '+cur+' → '+Number(r.newBalance).toLocaleString('en-US',{maximumFractionDigits:8}));
     $('bAmt').value='';
     await renderBal();
-    if($('pg-liquidity').classList.contains('on'))loadLiquidity();
+    if($('pg-liquidity').classList.contains('on')){loadLiquidity();loadAudit();}
     if($('pg-finance').classList.contains('on'))loadFinance();
     if($('pg-logs').classList.contains('on'))loadLogs();
   }catch(e){toast('تعذّر تحديث الرصيد');}
@@ -894,7 +902,7 @@ $('verifyCode')&&$('verifyCode').addEventListener('keydown',e=>{if(e.key==='Ente
 function startApp(){
   $('loginWrap').style.display='none';$('app').style.display='block';
   refreshAll();
-  POLL=setInterval(()=>{refreshStats();if($('pg-overview').classList.contains('on'))refreshHealth();if($('pg-requests').classList.contains('on'))loadRequests();if($('pg-liquidity').classList.contains('on'))loadLiquidity();if($('pg-orders').classList.contains('on')){loadOrders();loadAlerts();}if($('pg-commission').classList.contains('on'))loadCommission();if($('pg-security').classList.contains('on'))loadSecurity();if($('pg-support').classList.contains('on'))loadChats();},6000);
+  POLL=setInterval(()=>{refreshStats();if($('pg-overview').classList.contains('on'))refreshHealth();if($('pg-requests').classList.contains('on'))loadRequests();if($('pg-liquidity').classList.contains('on')){loadLiquidity();loadAudit();}if($('pg-orders').classList.contains('on')){loadOrders();loadAlerts();}if($('pg-commission').classList.contains('on'))loadCommission();if($('pg-security').classList.contains('on'))loadSecurity();if($('pg-support').classList.contains('on'))loadChats();},6000);
 }
 function nav(pg){
   document.querySelectorAll('.navi').forEach(n=>n.classList.toggle('on',n.dataset.pg===pg));
@@ -903,7 +911,7 @@ function nav(pg){
   if(pg==='overview')refreshAll();
   if(pg==='requests')loadRequests();
   if(pg==='users')loadUsers();
-  if(pg==='liquidity')loadLiquidity();
+  if(pg==='liquidity'){loadLiquidity();loadAudit();}
   if(pg==='orders'){loadOrders();loadAlerts();}
   if(pg==='apx')axLoad();
   if(pg==='commission')loadCommission();
@@ -1225,9 +1233,82 @@ async function loadLiquidity(){
     $('stLiqOnline').textContent=d.online;
     const rows=d.rows||[];
     if(!rows.length){$('liqTable').innerHTML='<div class="empty">لا توجد حسابات</div>';return;}
-    $('liqTable').innerHTML='<table><thead><tr><th>الاسم</th><th>البريد</th><th>الرصيد (USD)</th><th>الحالة</th><th>آخر ظهور</th></tr></thead><tbody>'+
-      rows.map(r=>'<tr><td class="u-name">'+esc(r.name)+'</td><td class="u-mail">'+esc(r.email)+'</td><td style="font-weight:800;color:var(--gold1);direction:ltr;text-align:right">'+fmtUsd(r.balanceUsd)+'</td><td>'+(r.online?'<span class="pill approved">● نشط</span>':'<span class="pill banned">○ غير نشط</span>')+'</td><td style="color:var(--muted)">'+fmtSeen(r.lastSeen)+'</td></tr>').join('')+'</tbody></table>';
+    $('liqTable').innerHTML='<table><thead><tr><th>الاسم</th><th>البريد</th><th>الرصيد (USD)</th><th>العملات</th><th>الحالة</th><th>آخر ظهور</th></tr></thead><tbody>'+
+      rows.map(function(r,i){
+        var cc=(r.coins||[]).length;
+        var main='<tr style="cursor:pointer" onclick="toggleLiq('+i+')"><td class="u-name">'+esc(r.name)+'</td><td class="u-mail">'+esc(r.email)+'</td><td style="font-weight:800;color:var(--gold1);direction:ltr;text-align:right">'+fmtUsd(r.balanceUsd)+'</td><td><span class="pill '+(cc?'approved':'pending')+'">'+cc+' عملة ▾</span></td><td>'+(r.online?'<span class="pill approved">● نشط</span>':'<span class="pill banned">○ غير نشط</span>')+'</td><td style="color:var(--muted)">'+fmtSeen(r.lastSeen)+'</td></tr>';
+        var det='<tr id="liqd-'+i+'" style="display:none"><td colspan="6" style="background:var(--panel2);padding:6px 12px">'+liqCoinsHtml(r.coins)+'</td></tr>';
+        return main+det;
+      }).join('')+'</tbody></table>';
   }catch(e){}
+}
+function fmtCoin(n){n=Number(n)||0;return n.toLocaleString('en-US',{maximumFractionDigits:8});}
+function toggleLiq(i){var el=document.getElementById('liqd-'+i);if(el)el.style.display=(el.style.display==='none'?'':'none');}
+function liqCoinsHtml(coins){
+  if(!coins||!coins.length)return '<div style="color:var(--muted);padding:6px 2px">لا توجد عملات في هذا الحساب</div>';
+  var tbl='<table style="width:100%;margin:2px 0"><thead><tr><th>العملة</th><th style="text-align:right">عدد الحبات</th><th style="text-align:right">القيمة (USDT)</th><th style="text-align:right">النسبة</th></tr></thead><tbody>'+
+    coins.map(function(c,k){var tot=coins.reduce(function(s,x){return s+(Number(x.usd)||0);},0)||1;var pct=((Number(c.usd)||0)/tot*100);return '<tr><td style="font-weight:800"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:'+donutColor(k)+';margin-inline-end:6px"></span>'+esc(c.currency)+'</td><td style="direction:ltr;text-align:right">'+fmtCoin(c.amount)+'</td><td style="direction:ltr;text-align:right;color:var(--gold1);font-weight:800">'+fmtUsd(c.usd)+'</td><td style="direction:ltr;text-align:right;color:var(--muted)">'+pct.toFixed(1)+'%</td></tr>';}).join('')+
+    '</tbody></table>';
+  return '<div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap"><div style="flex:0 0 auto">'+donutHtml(coins)+'</div><div style="flex:1 1 260px;min-width:260px">'+tbl+'</div></div>';
+}
+/* ألوان الرسم الدائري (ثابتة لتتطابق مع الجدول) */
+function donutColor(i){var p=['#f0b90b','#3fb68b','#4a90e2','#e2574a','#9b59b6','#e67e22','#1abc9c','#e84393','#7f8c8d','#2ecc71'];return p[i%p.length];}
+/* رسم دائري (donut) بـ SVG خالص — بلا أي مكتبة خارجية */
+function donutHtml(coins){
+  var data=(coins||[]).map(function(c){return {currency:c.currency,usd:Number(c.usd)||0};}).filter(function(c){return c.usd>0;});
+  var total=data.reduce(function(s,c){return s+c.usd;},0);
+  if(total<=0)return '<div style="color:var(--muted);font-size:12px;padding:12px">لا قيمة لعرضها</div>';
+  var cx=70,cy=70,r=52,sw=24,C=2*Math.PI*r,off=0,segs='';
+  for(var k=0;k<data.length;k++){
+    var frac=data[k].usd/total,len=frac*C;
+    segs+='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="'+donutColor(k)+'" stroke-width="'+sw+'" stroke-dasharray="'+len.toFixed(3)+' '+(C-len).toFixed(3)+'" stroke-dashoffset="'+(-off).toFixed(3)+'" transform="rotate(-90 '+cx+' '+cy+')"><title>'+esc(data[k].currency)+' — '+(frac*100).toFixed(1)+'%</title></circle>';
+    off+=len;
+  }
+  return '<svg width="140" height="140" viewBox="0 0 140 140" role="img" aria-label="توزيع العملات">'+
+    '<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="var(--border)" stroke-width="'+sw+'"/>'+segs+
+    '<text x="'+cx+'" y="'+(cy-4)+'" text-anchor="middle" fill="var(--fg)" font-size="13" font-weight="800">'+data.length+'</text>'+
+    '<text x="'+cx+'" y="'+(cy+12)+'" text-anchor="middle" fill="var(--muted)" font-size="9">عملات</text></svg>';
+}
+/* تصدير تقرير الأرصدة CSV (يحمّل الملف مباشرة) */
+async function exportLiquidityCsv(){
+  try{
+    toast('جارٍ تجهيز التقرير...');
+    var res=await fetch('/api/admin/liquidity/export.csv',{headers:{'Authorization':'Bearer '+TOKEN}});
+    if(!res.ok)throw new Error('http '+res.status);
+    var blob=await res.blob();
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');
+    a.href=url;a.download='apex-balances-'+new Date().toISOString().slice(0,10)+'.csv';
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(function(){URL.revokeObjectURL(url);},2000);
+    toast('تم تنزيل التقرير');
+  }catch(e){toast('تعذّر تصدير التقرير');}
+}
+/* ---- سجل تغييرات الأرصدة (Audit Log) ---- */
+var AUDIT_ROWS=[];
+function auditSrcBadge(s){var m={applyDeltas:'approved',addDeposit:'approved',debitBalance:'banned',setBalances:'pending'};return m[s]||'pending';}
+async function loadAudit(){
+  try{var d=await api('/api/admin/balance-audit?limit=1000');AUDIT_ROWS=d.entries||[];renderAudit();}catch(e){var el=$('auditTable');if(el)el.innerHTML='<div class="empty">تعذّر جلب السجل</div>';}
+}
+function renderAudit(){
+  var el=$('auditTable');if(!el)return;
+  var q=((($('auditSearch')||{}).value)||'').trim().toLowerCase();
+  var rows=AUDIT_ROWS;
+  if(q)rows=rows.filter(function(e){return (String(e.currency||'').toLowerCase().indexOf(q)>=0)||(String(e.userId||'').toLowerCase().indexOf(q)>=0)||(String(e.userName||'').toLowerCase().indexOf(q)>=0)||(String(e.userEmail||'').toLowerCase().indexOf(q)>=0);});
+  if(!rows.length){el.innerHTML='<div class="empty">لا توجد تغييرات مسجّلة</div>';return;}
+  el.innerHTML='<table><thead><tr><th>الحساب</th><th>العملة</th><th>قبل</th><th>بعد</th><th>الفرق</th><th>المصدر</th><th>الوقت</th></tr></thead><tbody>'+
+    rows.slice(0,500).map(function(e){
+      var up=(Number(e.delta)||0)>=0;
+      var dc=up?'var(--up,#3fb68b)':'var(--down,#e2574a)';
+      var sign=up?'+':'';
+      return '<tr><td class="u-name">'+esc(e.userName||e.userId||'—')+'<div class="u-mail">'+esc(e.userEmail||'')+'</div></td>'+
+        '<td style="font-weight:800">'+esc(e.currency)+'</td>'+
+        '<td style="direction:ltr;text-align:right;color:var(--muted)">'+fmtCoin(e.before)+'</td>'+
+        '<td style="direction:ltr;text-align:right">'+fmtCoin(e.after)+'</td>'+
+        '<td style="direction:ltr;text-align:right;font-weight:800;color:'+dc+'">'+sign+fmtCoin(e.delta)+'</td>'+
+        '<td><span class="pill '+auditSrcBadge(e.source)+'">'+esc(e.sourceLabel||e.source||'')+'</span></td>'+
+        '<td style="color:var(--muted)">'+fmtTime(e.at)+'</td></tr>';
+    }).join('')+'</tbody></table>';
 }
 /* ---- platform commission (trading-fee revenue) ---- */
 function comSrc(s){return ({spot:'سبوت',futures:'عقود',trade:'تداول',withdraw:'سحب'})[s]||esc(s||'تداول');}
@@ -1249,7 +1330,7 @@ async function withdrawCommission(){
   try{const d=await api('/api/admin/commission/withdraw',{method:'POST',body:JSON.stringify(body)});
     toast('تم سحب العمولات ('+fmtUsd(d.totalUsd||0)+') إلى '+((d.account&&d.account.name)||v));
     $('comUid').value='';loadCommission();
-    if($('pg-liquidity').classList.contains('on'))loadLiquidity();
+    if($('pg-liquidity').classList.contains('on')){loadLiquidity();loadAudit();}
   }catch(e){toast('تعذّر السحب — تأكد من الحساب ووجود رصيد عمولات');}
 }
 /* ---- financial transactions ledger ---- */
