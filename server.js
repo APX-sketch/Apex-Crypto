@@ -3550,83 +3550,47 @@ app.listen(3000, '0.0.0.0', () => {
     console.log('Server is running');
 });
 app.post('/api/auth/register', strictLimiter, async (req, res) => {
-  try {
-    const { name, email, password, country, idDocType, idImage } = req.body || {};
-
-    if (!name || String(name).trim().length < 2) return res.status(400).json({ error: 'bad_name' });
-    if (!EMAIL_RE.test(String(email || ''))) return res.status(400).json({ error: 'bad_email' });
-    if (!password || String(password).length < 8) return res.status(400).json({ error: 'weak_password' });
-
-    const emailNorm = String(email).trim().toLowerCase();
-    const cleanName = String(name).trim().slice(0, 120);
-    const cleanCountry = String(country || '').trim().slice(0, 80);
-    const img = validIdImage(idImage);
-    const docType = ID_DOC_TYPES.has(String(idDocType || '')) ? String(idDocType) : null;
-
-    // التحقق من وجود الإيميل مسبقاً
-    const [existingUsers] = await pool.query('SELECT id FROM users WHERE email = ?', [emailNorm]);
-    if (existingUsers.length > 0) {
-      return res.status(409).json({ error: 'email_exists' });
-    }
-
-    // حالة الحساب: pending إذا كان التوثيق يتطلّب موافقة الأدمن (الافتراضي)
-    const status = REQUIRE_APPROVAL ? 'pending' : 'approved';
-
-    // إدخال المستخدم مع كلمة مرور مشفّرة والحالة
-    const [result] = await pool.query(
-      'INSERT INTO users (username, name, email, password, status, country) VALUES (?, ?, ?, ?, ?, ?)',
-      [cleanName, cleanName, emailNorm, hashPassword(password), status, cleanCountry]
-    );
-    const userId = result.insertId;
-
-    // حفظ وثيقة الهوية (KYC) إن وجدت
-    if (img && docType) {
-      try {
-        await pool.query(
-          'INSERT INTO id_documents (user_id, doc_type, image) VALUES (?, ?, ?) ' +
-          'ON DUPLICATE KEY UPDATE doc_type = VALUES(doc_type), image = VALUES(image)',
-          [userId, docType, img]);
-        try { store.setIdDoc(String(userId), docType, img); } catch (e) {}
-      } catch (e) { console.warn('[register] id-doc save failed:', e.message); }
-    }
-
-    // إنشاء محفظة افتراضية برصيد 0
-    await pool.query(
-      'INSERT INTO wallets (user_id, currency, balance, locked_balance) VALUES (?, ?, ?, ?) ' +
-      'ON DUPLICATE KEY UPDATE balance = balance',
-      [userId, 'USDT', 0.00000000, 0.00000000]
-    );
-
-    // أنشئ سجل الدفتر الموحّد (store) بنفس معرّف MySQL لتوحيد الأرصدة
-    try { store.ensureUser(String(userId), { uid: userId, name: cleanName, email: emailNorm, country: cleanCountry, status }); } catch (e) {}
-
-    // سجل العمليات: إنشاء حساب + حالة التوثيق
     try {
-      logOps(req, {
-        user: { id: String(userId), uid: userId, name: cleanName, email: emailNorm },
-        category: 'kyc',
-        kind: (img && docType) ? 'kyc_submitted' : 'account_created',
-        status: (status === 'approved') ? 'ok' : 'pending',
-        detail: (img && docType)
-          ? ('تسجيل حساب مع رفع وثيقة (' + docType + ') — بانتظار المراجعة')
-          : 'تسجيل حساب جديد',
-        meta: { status, hasDoc: !!(img && docType) },
-      });
-    } catch (e) {}
+        const { name, email, password, country, idDocType, idImage } = req.body || {};
 
-    // أصدر توكناً حتى يستطيع المستخدم دخول واجهة الانتظار (تحت المراجعة)
-    const token = signUserToken(userId);
-    res.json({
-      ok: true,
-      token,
-      status,
-      user: { id: String(userId), uid: userId, username: cleanName, name: cleanName, email: emailNorm, status }
-    });
-  } catch (err) {
-    console.error('MySQL Register Error:', err);
-    res.status(500).json({ error: 'Database insertion failed' });
-  }
+        if (!name || String(name).trim().length < 2) return res.status(400).json({ error: 'bad_name' });
+        if (!EMAIL_RE.test(String(email || ''))) return res.status(400).json({ error: 'bad_email' });
+        if (!password || String(password).length < 8) return res.status(400).json({ error: 'weak_password' });
+
+        const emailNorm = String(email).trim().toLowerCase();
+        const cleanName = String(name).trim().slice(0, 120);
+        const cleanCountry = String(country || '').trim().slice(0, 80);
+        const cleanIdType = String(idDocType || '').trim().slice(0, 50);
+        const cleanIdImage = String(idImage || '').trim();
+
+        // التحقق من وجود الإيميل مسبقاً
+        const [existingUsers] = await pool.query('SELECT id FROM users WHERE email = ?', [emailNorm]);
+        if (existingUsers.length > 0) {
+            return res.status(400).json({ error: 'email_exists' });
+        }
+
+        const status = 'pending'; // أو approved حسب إعداداتك
+        const hashedPassword = await bcrypt.hash(password, 10); // تأكد من استخدام bcrypt لتشفيق كلمة المرور
+
+        // إدخال المستخدم مع بيانات الهوية والدولة
+        const [result] = await pool.query(
+            `INSERT INTO users (name, email, password, status, country, id_type, id_image) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [cleanName, emailNorm, hashedPassword, status, cleanCountry, cleanIdType, cleanIdImage]
+        );
+
+        const userId = result.insertId;
+
+        // إنشاء محفظة افتراضية للمستخدم الجديد (USDT و APX)
+        await pool.query('INSERT INTO wallets (user_id, currency, balance) VALUES (?, "USDT", 0.00), (?, "APX", 0.00)', [userId, userId]);
+
+        res.json({ success: true, userId });
+
+    } catch (e) {
+        console.error('[register_error]', e);
+        res.status(500).json({ error: 'server_error', details: e.message });
+    }
 });
+
 // ---- OTP تأكيد السحب + تسجيل الدخول ----
 // مخزنان مستقلان (بالذاكرة): رمز 6 خانات، صالح 5 دقائق، 5 محاولات.
 const withdrawOtps = new OtpStore({ ttlMs: 5 * 60 * 1000, maxTries: 5 });
