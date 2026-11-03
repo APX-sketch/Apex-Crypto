@@ -5,6 +5,50 @@
 =================================================================== */
 (function(){
 'use strict';
+
+/* ===================================================================
+   حارس الجلسة الواحدة (single-device login)
+   — إن أعاد الخادم 401 مع {error:'session_revoked'} فهذا يعني أنّ
+     الحساب فُتح على جهاز آخر وتمّ فصل هذا الجهاز. نمسح التوكن
+     ونحوّل المستخدم إلى صفحة الدخول مع رسالة واضحة.
+   — يُطبَّق على كل الصفحات لأنه ملفّ مشترك، ويعمل قبل أي طلب API
+     لأنّه يلفّ window.fetch فور تحميل الملف.
+=================================================================== */
+(function(){
+  try{
+    var _p=(location.pathname||'').toLowerCase();
+    if(/login\.html$/.test(_p)) return;            // لا نلفّ داخل صفحة الدخول
+    if(!window.fetch || window.__apexSessionGuard) return;
+    window.__apexSessionGuard=true;
+    var _orig=window.fetch.bind(window);
+    var _kicked=false;
+    function _kick(){
+      if(_kicked) return; _kicked=true;
+      try{
+        localStorage.removeItem('skygo_session');
+        localStorage.removeItem('apex_token');
+        localStorage.setItem('apex_logout_reason','device');
+      }catch(e){}
+      try{ location.replace('login.html?reason=device'); }
+      catch(e){ location.href='login.html?reason=device'; }
+    }
+    window.fetch=function(){
+      return _orig.apply(null,arguments).then(function(res){
+        try{
+          if(res && res.status===401){
+            var ct=(res.headers && res.headers.get && res.headers.get('content-type'))||'';
+            if(ct.indexOf('application/json')!==-1){
+              res.clone().json().then(function(d){
+                if(d && d.error==='session_revoked') _kick();
+              }).catch(function(){});
+            }
+          }
+        }catch(e){}
+        return res;
+      });
+    };
+  }catch(e){}
+})();
 var LKEY='apex_lang', TKEY='apex_theme', CKEY='apex_set_color';
 var AR=/[\u0600-\u06FF]/;
 var LANGS=[

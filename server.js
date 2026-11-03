@@ -82,6 +82,7 @@ const PERSIST_FILES = [
   'apex-copywallet.json', 'apex-prefs.json', 'apex-security.json',
   'apex-ops.json', 'apex-commission.json', 'apex-apx.json',
   'apex-admin-2fa.json', 'apex-orderalerts.json',
+  'apex-sessions.json',
 ];
 function _persistHash(s) {
   let h = 2166136261 >>> 0; s = String(s);
@@ -293,6 +294,39 @@ const TOKEN_TTL_MS = Number(process.env.SESSION_TTL_MS || 30 * 24 * 60 * 60 * 10
 function b64url(buf) {
   return Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
+
+// ============================================================
+// Single-device login: each user may have only ONE active
+// session id (sid) at a time. Logging in from another phone
+// mints a new sid and revokes the previous one. The map is
+// persisted to data/apex-sessions.json (part of PERSIST_FILES)
+// so it survives Render redeploys.
+// ============================================================
+const SESSIONS_FILE = join(__dirname, 'data', 'apex-sessions.json');
+let activeSessions = {}; // { [userId:string]: sid:string }
+(function loadSessions() {
+  try {
+    if (existsSync(SESSIONS_FILE)) {
+      const d = JSON.parse(readFileSync(SESSIONS_FILE, 'utf8'));
+      if (d && typeof d === 'object') activeSessions = d.sessions && typeof d.sessions === 'object' ? d.sessions : d;
+    }
+  } catch (e) { activeSessions = {}; }
+  if (!activeSessions || typeof activeSessions !== 'object') activeSessions = {};
+})();
+function saveSessions() {
+  try {
+    mkdirSync(dirname(SESSIONS_FILE), { recursive: true });
+    writeFileSync(SESSIONS_FILE, JSON.stringify({ sessions: activeSessions }));
+  } catch (e) {}
+}
+function setActiveSid(userId, sid) {
+  activeSessions[String(userId)] = String(sid);
+  saveSessions();
+}
+function getActiveSid(userId) {
+  const v = activeSessions[String(userId)];
+  return v == null ? '' : String(v);
+}
 // Hash a password with scrypt. Format: s2$<saltHex>$<hashHex>
 function hashPassword(plain) {
   const salt = randomBytes(16);
@@ -320,13 +354,19 @@ function verifyPassword(plain, stored) {
   const ok = a.length === b.length && timingSafeEqual(a, b);
   return { ok, legacy: ok };
 }
-// Issue a stateless signed session token for a user id.
+// Issue a stateless signed session token for a user id. Also mints a fresh
+// single-device session id (sid), stores it as the ONLY active sid for this
+// user, and embeds it in the payload (userId.exp.sid). Any token carrying a
+// different sid is then rejected by requireUser -> single-device login.
 function signUserToken(userId) {
-  const payload = String(userId) + '.' + (Date.now() + TOKEN_TTL_MS);
+  const sid = b64url(randomBytes(12));
+  setActiveSid(userId, sid);
+  const payload = String(userId) + '.' + (Date.now() + TOKEN_TTL_MS) + '.' + sid;
   const sig = createHmac('sha256', SESSION_SECRET).update(payload).digest();
   return b64url(payload) + '.' + b64url(sig);
 }
-// Verify a user token; returns the user id string or null.
+// Verify a user token; returns { id, sid } or null. `sid` is '' for legacy
+// tokens issued before single-device login was added (payload without sid).
 function verifyUserToken(token) {
   try {
     const t = String(token || '');
@@ -338,9 +378,12 @@ function verifyUserToken(token) {
     const expected = createHmac('sha256', SESSION_SECRET).update(payload).digest();
     const got = Buffer.from(sigB64.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
     if (expected.length !== got.length || !timingSafeEqual(expected, got)) return null;
-    const [id, exp] = payload.split('.');
+    const parts = payload.split('.');
+    const id = parts[0];
+    const exp = parts[1];
+    const sid = parts[2] || '';
     if (!id || Number(exp) < Date.now()) return null;
-    return String(id);
+    return { id: String(id), sid: String(sid) };
   } catch (e) { return null; }
 }
 
@@ -1336,8 +1379,16 @@ function bearer(req) {
 // merged from the JSON store ledger, keyed by the SAME user id (as a string).
 async function requireUser(req, res, next) {
   try {
-    const uid = verifyUserToken(bearer(req));
-    if (!uid) return res.status(401).json({ error: 'unauthorized' });
+    const tok = verifyUserToken(bearer(req));
+    if (!tok) return res.status(401).json({ error: 'unauthorized' });
+    const uid = tok.id;
+    // Single-device login: reject if another device minted a newer sid.
+    // Grandfather: if no sid is stored yet for this user (fresh deploy /
+    // legacy token), allow — the next login will set the active sid.
+    const activeSid = getActiveSid(uid);
+    if (activeSid && tok.sid !== activeSid) {
+      return res.status(401).json({ error: 'session_revoked' });
+    }
     const dbu = await dbGetUserById(uid);
     if (!dbu) return res.status(401).json({ error: 'unauthorized' });
     if (dbu.status === 'banned') return res.status(403).json({ error: 'banned' });

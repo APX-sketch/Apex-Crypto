@@ -108,11 +108,14 @@ table.cmp-tbl td .px.eq{color:var(--txt)}
 .bnav a.active{color:var(--gold2)}
 
 /* drawer */
-.scrim{position:fixed;inset:0;background:rgba(4,6,9,.6);backdrop-filter:blur(3px);z-index:40;opacity:0;
+.scrim{position:fixed;inset:0;background:rgba(4,6,9,.72);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);z-index:40;opacity:0;
   pointer-events:none;transition:.28s}
 .scrim.show{opacity:1;pointer-events:auto}
-.drawer{position:fixed;top:0;right:0;height:100%;width:82%;max-width:360px;background:var(--panel);
+/* قفل تمرير الخلفية عند فتح أي طبقة (drawer/sheet) — يمنع تداخل العناصر وظهور الخلفية خلف النوافذ */
+body.ov-open{overflow:hidden!important;touch-action:none}
+.drawer{position:fixed;top:0;right:0;height:100%;height:100dvh;width:82%;max-width:360px;background:var(--panel);
   z-index:50;transform:translateX(100%);transition:.3s cubic-bezier(.2,.7,.2,1);display:flex;flex-direction:column;
+  overscroll-behavior:contain;
   border-left:1px solid var(--border);box-shadow:-12px 0 40px rgba(0,0,0,.5)}
 .drawer.show{transform:translateX(0)}
 .dhead{padding:calc(22px + env(safe-area-inset-top)) 20px 20px;background:linear-gradient(135deg,#1b1f24,#12151a);
@@ -160,8 +163,9 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
 .toast.show{transform:translate(-50%,0);opacity:1}
 
 /* ===== SHEETS (لوحات فرعية) ===== */
-.sheet{position:fixed;top:0;right:0;height:100%;width:100%;max-width:480px;left:50%;transform:translateX(-50%) translateY(100%);
+.sheet{position:fixed;top:0;right:0;height:100%;height:100dvh;width:100%;max-width:480px;left:50%;transform:translateX(-50%) translateY(100%);
   background:var(--bg);z-index:60;transition:.32s cubic-bezier(.2,.7,.2,1);display:flex;flex-direction:column;
+  overscroll-behavior:contain;
   visibility:hidden;opacity:0}
 .sheet.show{transform:translateX(-50%) translateY(0);visibility:visible;opacity:1}
 .sheet .sh-top{display:flex;align-items:center;gap:12px;padding:calc(16px + env(safe-area-inset-top)) 16px 14px;
@@ -681,8 +685,9 @@ $('dAv').textContent=initial;
 $('dName').textContent=uname;
 $('dUid').textContent=UID;
 
-function openDrawer(){$('drawer').classList.add('show');$('scrim').classList.add('show');}
-function closeDrawer(){$('drawer').classList.remove('show');$('scrim').classList.remove('show');}
+function _syncOvLock(){try{var open=document.querySelector('.drawer.show, .sheet.show');document.body.classList.toggle('ov-open',!!open);}catch(e){}}
+function openDrawer(){$('drawer').classList.add('show');$('scrim').classList.add('show');_syncOvLock();}
+function closeDrawer(){$('drawer').classList.remove('show');$('scrim').classList.remove('show');_syncOvLock();}
 function copyUid(){navigator.clipboard&&navigator.clipboard.writeText(''+UID);toast('تم نسخ رقم المستخدم');}
 function doLogout(){localStorage.removeItem('skygo_session');localStorage.removeItem('apex_token');localStorage.removeItem('apex_kyc_status');location.replace('login.html');}
 async function deleteAccount(){
@@ -973,10 +978,11 @@ if(window.APX&&APX.onChange){APX.onChange(function(){try{poll();}catch(e){}});}
 $('searchInp').addEventListener('keydown',e=>{if(e.key==='Enter'){const q=e.target.value.trim();location.href='markets.html'+(q?'?q='+encodeURIComponent(q):'');}});
 
 /* ================= الأوراق المنبثقة (Sheets) ================= */
-function openSheet(id){$(id).classList.add('show');$('scrim').classList.add('show');}
+function openSheet(id){$(id).classList.add('show');$('scrim').classList.add('show');_syncOvLock();}
 function closeSheet(id){$(id).classList.remove('show');
   const anyOpen=document.querySelector('.sheet.show')||document.querySelector('.drawer.show');
   if(!anyOpen)$('scrim').classList.remove('show');
+  _syncOvLock();
 }
 
 /* ================= الأمان ================= */
