@@ -104,7 +104,42 @@ tr:last-child td{border-bottom:0}
 .modal-box .mt{color:var(--muted);font-size:12.5px;margin-bottom:14px}
 .modal-box img{width:100%;border-radius:10px;border:1px solid var(--border);background:#000}
 .modal-box .x{float:left;background:var(--panel2);color:var(--txt);border:1px solid var(--border);border-radius:9px;padding:6px 12px;font-size:13px}
-@media(max-width:640px){.side{width:60px}.navi span{display:none}.navi{justify-content:center}.chat-layout{grid-template-columns:1fr}.chat-list{max-height:200px}}
+/* ===== استجابة شاملة لكل أحجام الشاشات ===== */
+/* شاشات واسعة جداً */
+@media(min-width:1600px){.main{max-width:1500px;margin:0 auto}}
+/* أجهزة لوحية / شاشات متوسطة */
+@media(max-width:980px){
+  .side{width:66px}.navi span{display:none}.navi{justify-content:center;padding:12px 0}
+  .navi .badge{left:6px}
+  .main{padding:16px}
+  .chat-layout{grid-template-columns:1fr;height:auto}.chat-list{max-height:220px}
+  .chat-main{min-height:420px}
+}
+/* هواتف */
+@media(max-width:640px){
+  .topbar{padding:10px 12px;gap:8px;flex-wrap:wrap}
+  .topbar .tag{display:none}
+  .topbar .out{font-size:12px;padding:4px 6px}
+  .layout{min-height:calc(100vh - 53px)}
+  .side{width:54px;padding:10px 6px}
+  .navi{padding:11px 0}.navi svg{width:21px;height:21px}
+  .main{padding:12px}
+  h2.tt{font-size:17px}.psub{font-size:12px;margin-bottom:14px}
+  .stats{grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:16px}
+  .stat{padding:13px}.stat .v{font-size:21px}
+  /* تمرير أفقي للجداول العريضة بدل قصّها */
+  .card{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table{min-width:560px}
+  th,td{padding:10px 11px;font-size:12px}
+  .acts{flex-wrap:wrap}
+  .btn.sm{padding:6px 9px;font-size:11.5px}
+  .modal{padding:12px}.modal-box{padding:14px;max-height:94vh}
+}
+/* هواتف صغيرة */
+@media(max-width:380px){
+  .side{width:46px}.navi svg{width:19px;height:19px}
+  .stats{grid-template-columns:1fr 1fr}
+}
 </style>
 <script src="apx-coin.js"></script>
 <script src="i18n.js"></script>
@@ -162,11 +197,12 @@ tr:last-child td{border-bottom:0}
       <div class="navi" data-pg="requests" onclick="nav('requests')"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg><span>طلبات التسجيل</span><span class="badge" id="badgeReq"></span></div>
       <div class="navi" data-pg="users" onclick="nav('users')"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5"/><path d="M16 5a3 3 0 010 6M21 20c0-2.5-1.5-4-3.5-4.5"/></svg><span>المستخدمون</span></div>
       <div class="navi" data-pg="liquidity" onclick="nav('liquidity')"><svg viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg><span>الأرصدة والسيولة</span></div>
-      <div class="navi" data-pg="orders" onclick="nav('orders')"><svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h12"/></svg><span>دفتر الأوامر</span><span class="badge" id="badgeOrders"></span></div>
+      <div class="navi" data-pg="orders" onclick="nav('orders')"><svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h12"/></svg><span>دفتر الأوامر</span><span class="badge" id="badgeOrders"></span><span class="badge" id="badgeAlerts" style="left:34px;background:var(--green)"></span></div>
       <div class="navi" data-pg="finance" onclick="nav('finance')"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l3-3 3 3 4-5"/></svg><span>العمليات المالية</span></div>
       <div class="navi" data-pg="commission" onclick="nav('commission')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15 9.5a2.5 2.5 0 00-2.5-1.5h-1a2 2 0 000 4h1a2 2 0 010 4h-1A2.5 2.5 0 019 15M12 6v12"/></svg><span>عمولات المنصة</span></div>
       <div class="navi" data-pg="apx" onclick="nav('apx')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 15l3-7 3 7M10 13h4"/></svg><span>عملة APX</span><span class="badge" id="badgeApx"></span></div>
       <div class="navi" data-pg="logs" onclick="nav('logs')"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><span>سجل الأدمن</span></div>
+      <div class="navi" data-pg="backup" onclick="nav('backup')"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg><span>النسخ الاحتياطي</span></div>
       <div class="navi" data-pg="security" onclick="nav('security')"><svg viewBox="0 0 24 24"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z"/><path d="M12 8v4M12 16h.01"/></svg><span>سجل الأمان</span><span class="badge" id="badgeSec"></span></div>
       <div class="navi" data-pg="support" onclick="nav('support')"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg><span>الدعم والشكاوى</span><span class="badge" id="badgeChat"></span></div>
     </div>
@@ -229,6 +265,10 @@ tr:last-child td{border-bottom:0}
         <div class="card">
           <div class="card-h"><b>أوامر معلّقة (بانتظار التنفيذ)</b><div class="sp"></div><button class="btn ghost sm" onclick="loadOrders()">تحديث ↻</button></div>
           <div id="openOrdersTable"></div>
+        </div>
+        <div class="card" style="margin-top:16px;border:1px solid rgba(14,203,129,.35)">
+          <div class="card-h"><b>⚡ تنبيهات تنفيذ الأوامر (فوري)</b><span id="alBadge" style="background:var(--green);color:#04220f;font-size:11px;font-weight:800;padding:2px 8px;border-radius:10px;margin-right:8px;display:none"></span><div class="sp"></div><button class="btn ghost sm" onclick="alMarkRead()">تعليم الكل كمقروء</button></div>
+          <div id="alertsTable"></div>
         </div>
         <div class="card" style="margin-top:16px">
           <div class="card-h"><b>آخر الأوامر المنفّذة / الملغاة</b></div>
@@ -348,6 +388,16 @@ tr:last-child td{border-bottom:0}
           </div>
           <div id="finTable"></div>
         </div>
+      </div>
+      <!-- BACKUP (auto-backup + point-in-time restore) -->
+      <div class="page" id="pg-backup">
+        <h2 class="tt">النسخ الاحتياطي التلقائي</h2>
+        <div class="psub">تُحفظ كل البيانات (الأرصدة + العملات المشتراة + الأوامر المعلّقة) تلقائياً في قاعدة البيانات كل  6 ساعات. يمكنك أخذ نسخة يدوية الآن، أو الاستعادة إلى أي نسخة سابقة.</div>
+        <div class="card" style="max-width:900px">
+          <div class="card-h"><b>النسخ المحفوظة</b><div class="sp"></div><button class="btn green sm" onclick="createBackupNow()">➕ نسخة احتياطية الآن</button><button class="btn ghost sm" onclick="loadBackups()">تحديث ↻</button></div>
+          <div id="backupTable"></div>
+        </div>
+        <div class="psub" style="max-width:900px;margin-top:12px">ملاحظة: عند الاستعادة يُعاد تشغيل الخادم لثوانٍ قليلة لتحميل البيانات المستعادة، وتُأخذ نسخة أمان تلقائياً من الحالة الحالية قبل الاستعادة.</div>
       </div>
       <!-- ADMIN ACTIVITY LOG -->
       <div class="page" id="pg-logs">
@@ -839,7 +889,7 @@ $('verifyCode')&&$('verifyCode').addEventListener('keydown',e=>{if(e.key==='Ente
 function startApp(){
   $('loginWrap').style.display='none';$('app').style.display='block';
   refreshAll();
-  POLL=setInterval(()=>{refreshStats();if($('pg-overview').classList.contains('on'))refreshHealth();if($('pg-requests').classList.contains('on'))loadRequests();if($('pg-liquidity').classList.contains('on'))loadLiquidity();if($('pg-orders').classList.contains('on'))loadOrders();if($('pg-commission').classList.contains('on'))loadCommission();if($('pg-security').classList.contains('on'))loadSecurity();if($('pg-support').classList.contains('on'))loadChats();},6000);
+  POLL=setInterval(()=>{refreshStats();if($('pg-overview').classList.contains('on'))refreshHealth();if($('pg-requests').classList.contains('on'))loadRequests();if($('pg-liquidity').classList.contains('on'))loadLiquidity();if($('pg-orders').classList.contains('on')){loadOrders();loadAlerts();}if($('pg-commission').classList.contains('on'))loadCommission();if($('pg-security').classList.contains('on'))loadSecurity();if($('pg-support').classList.contains('on'))loadChats();},6000);
 }
 function nav(pg){
   document.querySelectorAll('.navi').forEach(n=>n.classList.toggle('on',n.dataset.pg===pg));
@@ -849,11 +899,12 @@ function nav(pg){
   if(pg==='requests')loadRequests();
   if(pg==='users')loadUsers();
   if(pg==='liquidity')loadLiquidity();
-  if(pg==='orders')loadOrders();
+  if(pg==='orders'){loadOrders();loadAlerts();}
   if(pg==='apx')axLoad();
   if(pg==='commission')loadCommission();
   if(pg==='finance')loadFinance();
   if(pg==='logs')loadLogs();
+  if(pg==='backup')loadBackups();
   if(pg==='security')loadSecurity();
   if(pg==='support')loadChats();
 }
@@ -996,6 +1047,59 @@ function axBadge(n){
 }
 async function axMarkRead(){ try{ await api('/api/admin/apx/notifications/read',{method:'POST',body:JSON.stringify({})}); }catch(e){} axLoadNotif(); }
 
+/* ======== ⚡ تنبيهات تنفيذ الأوامر الفورية ======== */
+var _alPrevUnread=-1;
+function alBadge(n){
+  var b1=$('alBadge'); if(b1){b1.textContent=n;b1.style.display=n>0?'inline-block':'none';}
+  var b2=$('badgeAlerts'); if(b2){b2.textContent=n;b2.classList.toggle('on',n>0);}
+}
+async function refreshAlertBadge(){
+  try{var d=await api('/api/admin/order-alerts');var n=d.unread||0;
+    // نغمة + إشعار عند وصول تنبيه جديد
+    if(_alPrevUnread>=0 && n>_alPrevUnread){
+      var top=(d.items&&d.items[0])||null;
+      if(top){toast('⚡ تنفيذ أمر: '+(top.side==='buy'?'شراء':'بيع')+' '+Number(top.qty).toLocaleString('en-US')+' '+esc(top.base));}
+      try{alBeep();}catch(e){}
+    }
+    _alPrevUnread=n; alBadge(n);
+  }catch(e){}
+}
+var _alAC=null;
+function alBeep(){
+  try{_alAC=_alAC||new (window.AudioContext||window.webkitAudioContext)();var ctx=_alAC;var o=ctx.createOscillator();var g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.type='sine';o.frequency.value=880;g.gain.setValueAtTime(0.0001,ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.25,ctx.currentTime+0.02);g.gain.exponentialRampToValueAtTime(0.0001,ctx.currentTime+0.35);o.start();o.stop(ctx.currentTime+0.36);}catch(e){}
+}
+async function loadAlerts(){
+  try{var d=await api('/api/admin/order-alerts');var items=d.items||[];alBadge(d.unread||0);_alPrevUnread=d.unread||0;
+    if(!items.length){$('alertsTable').innerHTML='<div class="empty">لا توجد تنبيهات بعد — ستظهر هنا فور تنفيذ أي أمر معلّق</div>';return;}
+    $('alertsTable').innerHTML='<table><thead><tr><th>الحساب</th><th>الزوج</th><th>النوع</th><th>السعر</th><th>الكمية</th><th>القيمة (USD)</th><th>الحالة</th><th>الوقت</th></tr></thead><tbody>'+
+      items.map(function(a){var pill=a.status==='filled'?'<span class="pill approved">منفّذ</span>':'<span class="pill banned">ملغى</span>';
+        return '<tr style="'+(a.read?'':'background:rgba(14,203,129,.07)')+'"><td class="u-name">'+esc(a.userName||a.userEmail||'—')+'<div class="u-mail">'+esc(a.userEmail||'')+'</div></td><td style="font-weight:700">'+esc(a.base)+'/'+esc(a.quote)+'</td><td>'+(a.side==='buy'?'<span class="pill approved">شراء</span>':'<span class="pill banned">بيع</span>')+'</td><td style="direction:ltr;text-align:right">'+Number(a.price).toLocaleString('en-US',{maximumFractionDigits:8})+'</td><td style="direction:ltr;text-align:right">'+Number(a.qty).toLocaleString('en-US',{maximumFractionDigits:8})+'</td><td style="direction:ltr;text-align:right;font-weight:800;color:var(--gold1)">'+fmtUsd(a.notional)+'</td><td>'+pill+'</td><td style="color:var(--muted)">'+fmtTime(a.at)+'</td></tr>';}).join('')+'</tbody></table>';
+  }catch(e){}
+}
+async function alMarkRead(){ try{ await api('/api/admin/order-alerts/read',{method:'POST',body:JSON.stringify({})}); }catch(e){} _alPrevUnread=0; loadAlerts(); }
+
+/* ======== النسخ الاحتياطي ======== */
+function fmtBytes(n){n=Number(n)||0;if(n<1024)return n+' B';if(n<1048576)return (n/1024).toFixed(1)+' KB';return (n/1048576).toFixed(2)+' MB';}
+function backupLabel(l){var m={'auto':'تلقائي','auto-boot':'تلقائي (إقلاع)','manual':'يدوي','pre-restore':'قبل استعادة'};return m[l]||esc(l||'—');}
+async function loadBackups(){
+  try{var d=await api('/api/admin/backups');var items=d.items||[];
+    if(!items.length){$('backupTable').innerHTML='<div class="empty">لا توجد نسخ بعد — ستُنشأ تلقائياً، أو اضغط (نسخة احتياطية الآن)</div>';return;}
+    $('backupTable').innerHTML='<table><thead><tr><th>#</th><th>النوع</th><th>التاريخ</th><th>الحجم</th><th></th></tr></thead><tbody>'+
+      items.map(function(b){return '<tr><td style="direction:ltr">'+b.id+'</td><td>'+backupLabel(b.label)+'</td><td style="color:var(--muted)">'+fmtTime(b.createdAt)+'</td><td style="direction:ltr;color:var(--muted)">'+fmtBytes(b.size)+'</td><td class="acts"><button class="btn ghost sm" onclick="restoreBackup('+b.id+')">استعادة</button></td></tr>';}).join('')+'</tbody></table>';
+  }catch(e){$('backupTable').innerHTML='<div class="empty">تعذّر تحميل النسخ</div>';}
+}
+async function createBackupNow(){
+  toast('جارٍ أخذ نسخة…');
+  try{await api('/api/admin/backups',{method:'POST',body:JSON.stringify({label:'manual'})});toast('✓ تم حفظ النسخة الاحتياطية');loadBackups();}catch(e){toast('تعذّر أخذ النسخة');}
+}
+async function restoreBackup(id){
+  if(!confirm('استعادة هذه النسخة ستستبدل كل البيانات الحالية (الأرصدة والعملات والأوامر) ويُعاد تشغيل الخادم. متابعة؟'))return;
+  toast('جارٍ الاستعادة… سيُعاد التشغيل');
+  try{await api('/api/admin/backups/'+id+'/restore',{method:'POST',body:JSON.stringify({})});}catch(e){}
+  // الخادم يُعاد تشغيله بعد الاستجابة؛ ننتظر ثم نعيد التحميل
+  setTimeout(function(){toast('✓ تمت الاستعادة — تم إعادة تشغيل الخادم');loadBackups();},9000);
+}
+
 /* ---- stats ---- */
 async function refreshStats(){
   try{const {stats}=await api('/api/admin/stats');
@@ -1009,6 +1113,8 @@ async function refreshStats(){
   try{const sd=await api('/api/admin/security-logs?severity=critical');const b=$('badgeSec');if(b){const n=(sd.summary&&sd.summary.critical)||0;b.textContent=n;b.classList.toggle('on',n>0);}}catch(e){}
   /* شارة إشعارات أوامر APX الكبيرة غير المقروءة */
   try{const ad=await api('/api/admin/apx/notifications?unread=1');const n=(ad.unread)||0;const b2=$('badgeApx');if(b2){b2.textContent=n;b2.classList.toggle('on',n>0);}}catch(e){}
+  /* شارة + نغمة تنبيهات تنفيذ الأوامر */
+  refreshAlertBadge();
 }
 
 /* ---- overview recent ---- */

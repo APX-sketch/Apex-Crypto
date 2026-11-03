@@ -81,7 +81,7 @@ const PERSIST_FILES = [
   'apex-data.json', 'apex-orders.json', 'apex-futures.json',
   'apex-copywallet.json', 'apex-prefs.json', 'apex-security.json',
   'apex-ops.json', 'apex-commission.json', 'apex-apx.json',
-  'apex-admin-2fa.json',
+  'apex-admin-2fa.json', 'apex-orderalerts.json',
 ];
 function _persistHash(s) {
   let h = 2166136261 >>> 0; s = String(s);
@@ -96,6 +96,7 @@ function _persistDbConfig() {
   };
 }
 const _lastSnapshotHash = {};
+let _restoreInProgress = false;
 async function restoreDataFromDb() {
   let conn;
   try {
@@ -157,6 +158,7 @@ const pool = mysql.createPool({
 // يرفع كل ملف تغيّر فقط (بمقارنة بصمة)؛ فالأرصدة والعملات والأوامر
 // تُحفظ خلال ثوانٍ من أي تغيير ثم تُستعاد بالكامل عند الإقلاع.
 async function snapshotDataToDb(force) {
+  if (_restoreInProgress) return;
   try {
     for (const f of PERSIST_FILES) {
       const p = join(DATA_DIR, f);
@@ -185,6 +187,44 @@ async function _persistFinalSnapshot(sig) {
 }
 process.on('SIGTERM', function () { _persistFinalSnapshot('SIGTERM'); });
 process.on('SIGINT', function () { _persistFinalSnapshot('SIGINT'); });
+
+// ============================================================
+//  النسخ الاحتياطي التلقائي (AUTO-BACKUP)
+//  غير اللقطة الحيّة (kv_store): هذا يحفظ نسخاً تاريخية مُؤرّخة
+//  كاملة لكل البيانات في جدول kv_backups، تلقائياً كل 6 ساعات
+//  + نسخة يدوية من لوحة الإدارة، مع إمكانية الاستعادة إلى أي نقطة.
+// ============================================================
+const BACKUP_KEEP = 30;         // أقصى عدد نسخ محفوظة
+const BACKUP_EVERY_MS = 6 * 60 * 60 * 1000; // كل 6 ساعات
+let _backupTableReady = false;
+async function _ensureBackupTable() {
+  if (_backupTableReady) return;
+  await pool.query('CREATE TABLE IF NOT EXISTS kv_backups (id BIGINT AUTO_INCREMENT PRIMARY KEY, created_at BIGINT, label VARCHAR(190), payload LONGTEXT) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
+  _backupTableReady = true;
+}
+async function createBackup(label) {
+  await _ensureBackupTable();
+  const files = {};
+  for (const f of PERSIST_FILES) {
+    const p = join(DATA_DIR, f);
+    if (!existsSync(p)) continue;
+    try { const c = readFileSync(p, 'utf8'); if (c && c.trim() !== '') files[f] = c; } catch (e) {}
+  }
+  const payload = JSON.stringify({ v: 1, at: Date.now(), files });
+  const [r] = await pool.query(
+    'INSERT INTO kv_backups (created_at, label, payload) VALUES (?, ?, ?)',
+    [Date.now(), String(label || 'auto').slice(0, 180), payload]);
+  // الإبقاء على آخر BACKUP_KEEP نسخة فقط
+  try {
+    const [rows] = await pool.query('SELECT id FROM kv_backups ORDER BY id DESC LIMIT ?, 1', [BACKUP_KEEP]);
+    if (rows && rows.length) await pool.query('DELETE FROM kv_backups WHERE id <= ?', [rows[0].id]);
+  } catch (e) {}
+  console.log('[backup] أُنشئت نسخة احتياطية #' + (r && r.insertId) + ' (' + Object.keys(files).length + ' ملف)');
+  return r && r.insertId;
+}
+// نسخة تلقائية دورية + واحدة بعد الإقلاع بدقيقة
+setTimeout(function () { createBackup('auto-boot').catch(function () {}); }, 60000);
+setInterval(function () { createBackup('auto').catch(function () {}); }, BACKUP_EVERY_MS);
 
 // ============================================================
 //  MySQL USER LAYER (identity + status + KYC) — source of truth
@@ -1733,6 +1773,38 @@ function saveOrders() {
     writeFileSync(ORDERS_FILE, JSON.stringify(orders));
   } catch (e) { console.warn('[orders] save failed:', e.message); }
 }
+
+// ---- تنبيهات الأدمن الفورية عند تنفيذ الأوامر المعلّقة ----
+// سجل خفيف يُظهِر في لوحة الإدارة شارة + إشعاراً فورياً لحظة تنفيذ/إلغاء أي أمر.
+const ORDER_ALERTS_FILE = join(__dirname, 'data', 'apex-orderalerts.json');
+function loadOrderAlerts() {
+  try {
+    if (existsSync(ORDER_ALERTS_FILE)) {
+      const d = JSON.parse(readFileSync(ORDER_ALERTS_FILE, 'utf8'));
+      if (d && Array.isArray(d.items)) return d;
+    }
+  } catch (e) {}
+  return { items: [], lastReadAt: 0 };
+}
+let orderAlerts = loadOrderAlerts();
+function saveOrderAlerts() {
+  try {
+    mkdirSync(dirname(ORDER_ALERTS_FILE), { recursive: true });
+    writeFileSync(ORDER_ALERTS_FILE, JSON.stringify(orderAlerts));
+  } catch (e) {}
+}
+function pushOrderAlert(a) {
+  orderAlerts.items.unshift({
+    id: 'a_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7),
+    at: Date.now(), read: false, kind: a.kind || 'fill',
+    userName: a.userName || '', userEmail: a.userEmail || '', uid: a.uid || '',
+    sym: a.sym || '', base: a.base || '', quote: a.quote || '', side: a.side || '',
+    qty: Number(a.qty) || 0, price: Number(a.price) || 0, notional: Number(a.notional) || 0,
+    status: a.status || 'filled', note: a.note || '',
+  });
+  if (orderAlerts.items.length > 300) orderAlerts.items = orderAlerts.items.slice(0, 300);
+  saveOrderAlerts();
+}
 const CCY_RE = /^[A-Z0-9]{2,12}$/;
 function newOrderId() {
   return 'o_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
@@ -1917,7 +1989,6 @@ app.post('/api/orders/market', requireUser, (req, res) => {
 });
 
 // ---- Matching engine: fills pending orders when OUR price reaches them ----
-// Runs on the server every 2s.
 //  - limit orders trigger when OUR price crosses the limit price,
 //  - TP/SL orders trigger when OUR price hits tp (>=) or sl (<=) and fill at
 //    the current market price,
@@ -1964,6 +2035,13 @@ function matchOrders() {
         title: '\u062a\u0639\u0630\u0651\u0631 \u062a\u0646\u0641\u064a\u0630 \u0623\u0645\u0631',
         body: '\u0623\u064f\u0644\u063a\u064a \u0623\u0645\u0631\u0643 \u0639\u0644\u0649 ' + o.base + '/' + o.quote + ' \u0644\u0639\u062f\u0645 \u0643\u0641\u0627\u064a\u0629 \u0627\u0644\u0631\u0635\u064a\u062f \u0644\u062d\u0638\u0629 \u0627\u0644\u062a\u0646\u0641\u064a\u0630.',
       });
+      pushOrderAlert({
+        kind: 'cancel', status: 'canceled',
+        userName: (store.findUserById(o.userId) || {}).name || '',
+        userEmail: (store.findUserById(o.userId) || {}).email || '',
+        sym: o.sym, base: o.base, quote: o.quote, side: o.side, qty: o.qty,
+        price: execPx, notional: execPx * o.qty, note: 'ألغي لعدم كفاية الرصيد',
+      });
       changed = true;
       continue;
     }
@@ -1981,6 +2059,13 @@ function matchOrders() {
     store.addNotification(o.userId, {
       title: '\u062a\u0645 \u062a\u0646\u0641\u064a\u0630 \u0623\u0645\u0631\u0643',
       body: (o.side === 'buy' ? '\u0634\u0631\u0627\u0621' : '\u0628\u064a\u0639') + ' ' + o.qty + ' ' + o.base + ' @ ' + execPx + ' ' + o.quote + (o.type === 'tpsl' ? ' (TP/SL)' : '') + '.',
+    });
+    pushOrderAlert({
+      kind: 'fill', status: 'filled',
+      userName: user.name || '', userEmail: user.email || '',
+      sym: o.sym, base: o.base, quote: o.quote, side: o.side, qty: o.qty,
+      price: execPx, notional: execPx * o.qty,
+      note: (o.side === 'buy' ? 'شراء' : 'بيع') + (o.type === 'tpsl' ? ' (TP/SL)' : ''),
     });
     changed = true;
   }
@@ -2936,6 +3021,83 @@ app.post('/api/admin/apx/notifications/read', requireAdmin, (req, res) => {
 });
 
 // ============================================================
+//  تنبيهات تنفيذ الأوامر المعلّقة (للأدمن — فوري)
+// ============================================================
+app.get('/api/admin/order-alerts', requireAdmin, (req, res) => {
+  const items = orderAlerts.items.slice(0, 60);
+  const unread = orderAlerts.items.filter((a) => !a.read).length;
+  res.json({ ok: true, items, unread });
+});
+app.post('/api/admin/order-alerts/read', requireAdmin, (req, res) => {
+  const ids = (req.body && req.body.ids) || null;
+  if (Array.isArray(ids) && ids.length) {
+    const set = new Set(ids);
+    orderAlerts.items.forEach((a) => { if (set.has(a.id)) a.read = true; });
+  } else {
+    orderAlerts.items.forEach((a) => { a.read = true; });
+  }
+  orderAlerts.lastReadAt = Date.now();
+  saveOrderAlerts();
+  res.json({ ok: true, unread: orderAlerts.items.filter((a) => !a.read).length });
+});
+
+// ============================================================
+//  النسخ الاحتياطي لقاعدة البيانات (للأدمن)
+//  عرض النسخ + إنشاء نسخة يدوية + استعادة إلى أي نقطة
+// ============================================================
+app.get('/api/admin/backups', requireAdmin, async (req, res) => {
+  try {
+    await _ensureBackupTable();
+    const [rows] = await pool.query('SELECT id, created_at, label, LENGTH(payload) AS size FROM kv_backups ORDER BY id DESC LIMIT 60');
+    const items = rows.map((r) => {
+      let files = 0;
+      return { id: r.id, createdAt: Number(r.created_at) || 0, label: r.label || '', size: Number(r.size) || 0, files };
+    });
+    res.json({ ok: true, items });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+app.post('/api/admin/backups', requireAdmin, async (req, res) => {
+  try {
+    await snapshotDataToDb(true); // تأكد أن الملفات أحدث ما يكون على القرص
+    const label = String((req.body && req.body.label) || 'manual').slice(0, 180);
+    const id = await createBackup(label);
+    res.json({ ok: true, id });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+app.post('/api/admin/backups/:id/restore', requireAdmin, async (req, res) => {
+  try {
+    await _ensureBackupTable();
+    const [rows] = await pool.query('SELECT payload FROM kv_backups WHERE id = ?', [req.params.id]);
+    if (!rows || !rows.length) return res.status(404).json({ ok: false, error: 'not_found' });
+    let data;
+    try { data = JSON.parse(rows[0].payload); } catch (e) { return res.status(400).json({ ok: false, error: 'bad_payload' }); }
+    const files = (data && data.files) || {};
+    // خذ نسخة أمان من الحالة الراهنة قبل الاستعادة (حتى يمكن التراجع)
+    try { await createBackup('pre-restore'); } catch (e) {}
+    _restoreInProgress = true;
+    // اكتب محتوى النسخة إلى القرص + kv_store (حتى يُستعاد بعد إعادة التشغيل)
+    mkdirSync(DATA_DIR, { recursive: true });
+    for (const f of PERSIST_FILES) {
+      const content = files[f];
+      if (content == null) continue;
+      const p = join(DATA_DIR, f);
+      try { writeFileSync(p, content); } catch (e) {}
+      try {
+        await pool.query('INSERT INTO kv_store (k, v, updated_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE v=VALUES(v), updated_at=VALUES(updated_at)', [f, content, Date.now()]);
+      } catch (e) {}
+      _lastSnapshotHash[f] = _persistHash(content);
+    }
+    res.json({ ok: true, restarting: true });
+    // أعد تشغيل الخادم لتحميل البيانات المستعادة بشكل نظيف ومتسق
+    _persistFinalDone = true; // امنع اللقطة النهائية من الكتابة فوق kv_store
+    setTimeout(function () { console.log('[backup] إعادة تشغيل بعد استعادة نسخة #' + req.params.id); process.exit(0); }, 900);
+  } catch (e) {
+    _restoreInProgress = false;
+    try { res.status(500).json({ ok: false, error: e.message }); } catch (ee) {}
+  }
+});
+
+// ============================================================
 //  COPY TRADING (نسخ التداول — مخزّن على السيرفر ويراه الجميع)
 // ============================================================
 app.get('/api/copy/traders', requireUser, async (req, res) => {
@@ -3550,47 +3712,83 @@ app.listen(3000, '0.0.0.0', () => {
     console.log('Server is running');
 });
 app.post('/api/auth/register', strictLimiter, async (req, res) => {
-    try {
-        const { name, email, password, country, idDocType, idImage } = req.body || {};
+  try {
+    const { name, email, password, country, idDocType, idImage } = req.body || {};
 
-        if (!name || String(name).trim().length < 2) return res.status(400).json({ error: 'bad_name' });
-        if (!EMAIL_RE.test(String(email || ''))) return res.status(400).json({ error: 'bad_email' });
-        if (!password || String(password).length < 8) return res.status(400).json({ error: 'weak_password' });
+    if (!name || String(name).trim().length < 2) return res.status(400).json({ error: 'bad_name' });
+    if (!EMAIL_RE.test(String(email || ''))) return res.status(400).json({ error: 'bad_email' });
+    if (!password || String(password).length < 8) return res.status(400).json({ error: 'weak_password' });
 
-        const emailNorm = String(email).trim().toLowerCase();
-        const cleanName = String(name).trim().slice(0, 120);
-        const cleanCountry = String(country || '').trim().slice(0, 80);
-        const cleanIdType = String(idDocType || '').trim().slice(0, 50);
-        const cleanIdImage = String(idImage || '').trim();
+    const emailNorm = String(email).trim().toLowerCase();
+    const cleanName = String(name).trim().slice(0, 120);
+    const cleanCountry = String(country || '').trim().slice(0, 80);
+    const img = validIdImage(idImage);
+    const docType = ID_DOC_TYPES.has(String(idDocType || '')) ? String(idDocType) : null;
 
-        // التحقق من وجود الإيميل مسبقاً
-        const [existingUsers] = await pool.query('SELECT id FROM users WHERE email = ?', [emailNorm]);
-        if (existingUsers.length > 0) {
-            return res.status(400).json({ error: 'email_exists' });
-        }
-
-        const status = 'pending'; // أو approved حسب إعداداتك
-        const hashedPassword = await bcrypt.hash(password, 10); // تأكد من استخدام bcrypt لتشفيق كلمة المرور
-
-        // إدخال المستخدم مع بيانات الهوية والدولة
-        const [result] = await pool.query(
-            `INSERT INTO users (name, email, password, status, country, id_type, id_image) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [cleanName, emailNorm, hashedPassword, status, cleanCountry, cleanIdType, cleanIdImage]
-        );
-
-        const userId = result.insertId;
-
-        // إنشاء محفظة افتراضية للمستخدم الجديد (USDT و APX)
-        await pool.query('INSERT INTO wallets (user_id, currency, balance) VALUES (?, "USDT", 0.00), (?, "APX", 0.00)', [userId, userId]);
-
-        res.json({ success: true, userId });
-
-    } catch (e) {
-        console.error('[register_error]', e);
-        res.status(500).json({ error: 'server_error', details: e.message });
+    // التحقق من وجود الإيميل مسبقاً
+    const [existingUsers] = await pool.query('SELECT id FROM users WHERE email = ?', [emailNorm]);
+    if (existingUsers.length > 0) {
+      return res.status(409).json({ error: 'email_exists' });
     }
-});
 
+    // حالة الحساب: pending إذا كان التوثيق يتطلّب موافقة الأدمن (الافتراضي)
+    const status = REQUIRE_APPROVAL ? 'pending' : 'approved';
+
+    // إدخال المستخدم مع كلمة مرور مشفّرة والحالة
+    const [result] = await pool.query(
+      'INSERT INTO users (username, name, email, password, status, country) VALUES (?, ?, ?, ?, ?, ?)',
+      [cleanName, cleanName, emailNorm, hashPassword(password), status, cleanCountry]
+    );
+    const userId = result.insertId;
+
+    // حفظ وثيقة الهوية (KYC) إن وجدت
+    if (img && docType) {
+      try {
+        await pool.query(
+          'INSERT INTO id_documents (user_id, doc_type, image) VALUES (?, ?, ?) ' +
+          'ON DUPLICATE KEY UPDATE doc_type = VALUES(doc_type), image = VALUES(image)',
+          [userId, docType, img]);
+        try { store.setIdDoc(String(userId), docType, img); } catch (e) {}
+      } catch (e) { console.warn('[register] id-doc save failed:', e.message); }
+    }
+
+    // إنشاء محفظة افتراضية برصيد 0
+    await pool.query(
+      'INSERT INTO wallets (user_id, currency, balance, locked_balance) VALUES (?, ?, ?, ?) ' +
+      'ON DUPLICATE KEY UPDATE balance = balance',
+      [userId, 'USDT', 0.00000000, 0.00000000]
+    );
+
+    // أنشئ سجل الدفتر الموحّد (store) بنفس معرّف MySQL لتوحيد الأرصدة
+    try { store.ensureUser(String(userId), { uid: userId, name: cleanName, email: emailNorm, country: cleanCountry, status }); } catch (e) {}
+
+    // سجل العمليات: إنشاء حساب + حالة التوثيق
+    try {
+      logOps(req, {
+        user: { id: String(userId), uid: userId, name: cleanName, email: emailNorm },
+        category: 'kyc',
+        kind: (img && docType) ? 'kyc_submitted' : 'account_created',
+        status: (status === 'approved') ? 'ok' : 'pending',
+        detail: (img && docType)
+          ? ('تسجيل حساب مع رفع وثيقة (' + docType + ') — بانتظار المراجعة')
+          : 'تسجيل حساب جديد',
+        meta: { status, hasDoc: !!(img && docType) },
+      });
+    } catch (e) {}
+
+    // أصدر توكناً حتى يستطيع المستخدم دخول واجهة الانتظار (تحت المراجعة)
+    const token = signUserToken(userId);
+    res.json({
+      ok: true,
+      token,
+      status,
+      user: { id: String(userId), uid: userId, username: cleanName, name: cleanName, email: emailNorm, status }
+    });
+  } catch (err) {
+    console.error('MySQL Register Error:', err);
+    res.status(500).json({ error: 'Database insertion failed' });
+  }
+});
 // ---- OTP تأكيد السحب + تسجيل الدخول ----
 // مخزنان مستقلان (بالذاكرة): رمز 6 خانات، صالح 5 دقائق، 5 محاولات.
 const withdrawOtps = new OtpStore({ ttlMs: 5 * 60 * 1000, maxTries: 5 });
