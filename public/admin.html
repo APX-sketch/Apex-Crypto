@@ -398,6 +398,11 @@ tr:last-child td{border-bottom:0}
           <div id="backupTable"></div>
         </div>
         <div class="psub" style="max-width:900px;margin-top:12px">ملاحظة: عند الاستعادة يُعاد تشغيل الخادم لثوانٍ قليلة لتحميل البيانات المستعادة، وتُأخذ نسخة أمان تلقائياً من الحالة الحالية قبل الاستعادة.</div>
+        <div class="card" style="max-width:900px;margin-top:16px">
+          <div class="card-h"><b>📊 التقرير الإحصائي الأسبوعي</b><div class="sp"></div><button class="btn ghost sm" onclick="previewWeekly()">معاينة الأرقام</button><button class="btn green sm" onclick="sendWeekly()">إرسال الآن ✉️</button></div>
+          <div class="psub" style="margin:4px 0 10px">يُرسل تلقائياً كل أسبوع إلى بريد الأدمن (اضبط متغيّر البيئة <b style="direction:ltr;display:inline-block">ADMIN_EMAIL</b> على Render). يمكنك الإرسال الآن أو معاينة الأرقام قبل الإرسال.</div>
+          <div id="weeklyBox"></div>
+        </div>
       </div>
       <!-- ADMIN ACTIVITY LOG -->
       <div class="page" id="pg-logs">
@@ -1098,6 +1103,38 @@ async function restoreBackup(id){
   try{await api('/api/admin/backups/'+id+'/restore',{method:'POST',body:JSON.stringify({})});}catch(e){}
   // الخادم يُعاد تشغيله بعد الاستجابة؛ ننتظر ثم نعيد التحميل
   setTimeout(function(){toast('✓ تمت الاستعادة — تم إعادة تشغيل الخادم');loadBackups();},9000);
+}
+
+/* ---- التقرير الأسبوعي ---- */
+function weeklyRows(s){
+  var comm=s.commission&&Object.keys(s.commission).length?Object.keys(s.commission).map(function(c){return (Number(s.commission[c])||0).toFixed(2)+' '+esc(c);}).join(' + '):'0';
+  return '<table class="tbl"><tbody>'+
+    '<tr><td>إجمالي المستخدمين</td><td><b>'+(s.users||0)+'</b></td></tr>'+
+    '<tr><td>مستخدمون جدد هذا الأسبوع</td><td><b>'+(s.newUsers||0)+'</b></td></tr>'+
+    '<tr><td>بانتظار المراجعة</td><td>'+(s.pending||0)+'</td></tr>'+
+    '<tr><td>موثّقون</td><td>'+(s.approved||0)+'</td></tr>'+
+    '<tr><td>مرفوضون / محظورون</td><td>'+((s.rejected||0)+(s.banned||0))+'</td></tr>'+
+    '<tr><td>عمولة المنصّة التراكمية</td><td><b>'+comm+'</b></td></tr>'+
+    '<tr><td>عمليات هذا الأسبوع</td><td>'+(s.opsWeek||0)+'</td></tr>'+
+    '<tr><td>أحداث أمنية هذا الأسبوع</td><td>'+(s.securityWeek||0)+'</td></tr>'+
+    '<tr><td>النسخ الاحتياطية المخزّنة</td><td>'+(s.backups||0)+'</td></tr>'+
+    '</tbody></table>';
+}
+async function previewWeekly(){
+  var box=$('weeklyBox');if(box)box.innerHTML='<div class="empty">جارٍ جلب الأرقام…</div>';
+  try{var d=await api('/api/admin/weekly-report/preview');
+    box.innerHTML=weeklyRows(d.stats||{})+'<div class="psub" style="margin-top:8px">'+(d.to?('سيُرسل إلى: <b style="direction:ltr;display:inline-block">'+esc(d.to)+'</b>'):'⚠️ لم يُضبط ADMIN_EMAIL بعد — الإرسال لن يعمل حتى تضبطه على Render')+'</div>';
+  }catch(e){box.innerHTML='<div class="empty">تعذّر جلب الأرقام</div>';}
+}
+async function sendWeekly(){
+  if(!confirm('إرسال التقرير الأسبوعي الآن إلى بريد الأدمن؟'))return;
+  toast('جارٍ الإرسال…');
+  try{var d=await api('/api/admin/weekly-report/send',{method:'POST',body:JSON.stringify({})});
+    if(d.ok){toast('✓ أُرسل التقرير إلى '+(d.to||''));}
+    else if(d.error==='no_admin_email'){toast('⚠️ اضبط ADMIN_EMAIL على Render أولاً');}
+    else{toast('تعذّر الإرسال (تحقّق من إعداد البريد)');}
+    if(d.stats){$('weeklyBox').innerHTML=weeklyRows(d.stats);}
+  }catch(e){toast('تعذّر الإرسال');}
 }
 
 /* ---- stats ---- */

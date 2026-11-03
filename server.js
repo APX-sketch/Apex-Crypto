@@ -408,16 +408,45 @@ function dbPublicUser(u) {
 // are missing. Safe to run on every startup (checks information_schema first,
 // so it never errors on an already-migrated DB).
 async function ensureColumn(table, column, ddl) {
-  const [rows] = await pool.query(
-    'SELECT COUNT(*) AS n FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?',
-    [table, column]);
-  if (rows[0] && rows[0].n === 0) {
-    await pool.query('ALTER TABLE `' + table + '` ADD COLUMN ' + ddl);
-    console.log('[schema] added ' + table + '.' + column);
+  // Resilient on purpose: one bad column/definition must never abort the whole
+  // schema bootstrap (which previously left register/login throwing 500).
+  try {
+    const [rows] = await pool.query(
+      'SELECT COUNT(*) AS n FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?',
+      [table, column]);
+    if (rows[0] && Number(rows[0].n) === 0) {
+      await pool.query('ALTER TABLE `' + table + '` ADD COLUMN ' + ddl);
+      console.log('[schema] added ' + table + '.' + column);
+    }
+  } catch (e) {
+    console.warn('[schema] ensureColumn ' + table + '.' + column + ' failed:', e.message);
   }
 }
 async function ensureSchema() {
-  // users: identity columns already exist (id, username, email, password).
+  // ROOT-CAUSE FIX (register/login 500): the app never created the `users`
+  // table itself, so a brand-new / empty Aiven database made every register
+  // and login call fail with a 500. Create the base identity table first
+  // (IF NOT EXISTS = safe on already-populated DBs), THEN patch any columns a
+  // hand-made or older table might be missing.
+  await pool.query(
+    'CREATE TABLE IF NOT EXISTS users (' +
+    ' id INT AUTO_INCREMENT PRIMARY KEY,' +
+    ' username VARCHAR(120) NULL,' +
+    ' name VARCHAR(120) NULL,' +
+    ' email VARCHAR(190) NOT NULL,' +
+    ' password VARCHAR(255) NOT NULL,' +
+    " status VARCHAR(20) NOT NULL DEFAULT 'pending'," +
+    ' country VARCHAR(80) NULL,' +
+    ' reject_reason VARCHAR(400) NULL,' +
+    ' created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,' +
+    ' last_seen BIGINT NOT NULL DEFAULT 0,' +
+    ' UNIQUE KEY uq_email (email)' +
+    ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
+  // Repair older / partial tables (columns added as NULLable so ALTER never
+  // fails on an existing table that already holds rows).
+  await ensureColumn('users', 'username', '`username` VARCHAR(120) NULL');
+  await ensureColumn('users', 'password', '`password` VARCHAR(255) NULL');
+  await ensureColumn('users', 'email', '`email` VARCHAR(190) NULL');
   await ensureColumn('users', 'name', '`name` VARCHAR(120) NULL');
   await ensureColumn('users', 'status', "`status` VARCHAR(20) NOT NULL DEFAULT 'pending'");
   await ensureColumn('users', 'country', '`country` VARCHAR(80) NULL');
@@ -3061,6 +3090,8 @@ app.post('/api/admin/backups', requireAdmin, async (req, res) => {
     await snapshotDataToDb(true); // تأكد أن الملفات أحدث ما يكون على القرص
     const label = String((req.body && req.body.label) || 'manual').slice(0, 180);
     const id = await createBackup(label);
+    // Audit log: record who created a manual backup and when.
+    try { logSecurity(req, { kind: 'backup_created', severity: 'info', detail: 'إنشاء نسخة احتياطية يدوية #' + id + ' (' + label + ')', meta: { id, label } }); } catch (e) {}
     res.json({ ok: true, id });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
@@ -3072,8 +3103,22 @@ app.post('/api/admin/backups/:id/restore', requireAdmin, async (req, res) => {
     let data;
     try { data = JSON.parse(rows[0].payload); } catch (e) { return res.status(400).json({ ok: false, error: 'bad_payload' }); }
     const files = (data && data.files) || {};
+    // Audit log (critical): a restore overwrites live data + restarts the
+    // server, so record who triggered it, from which backup, and how many
+    // files it carried BEFORE we begin.
+    try {
+      logSecurity(req, {
+        kind: 'backup_restore',
+        severity: 'critical',
+        detail: 'استعادة قاعدة البيانات من النسخة الاحتياطية #' + req.params.id + ' (سيُعاد تشغيل الخادم)',
+        meta: { backupId: String(req.params.id), fileCount: Object.keys(files).length },
+      });
+    } catch (e) {}
     // خذ نسخة أمان من الحالة الراهنة قبل الاستعادة (حتى يمكن التراجع)
-    try { await createBackup('pre-restore'); } catch (e) {}
+    try {
+      const preId = await createBackup('pre-restore');
+      try { logSecurity(req, { kind: 'backup_created', severity: 'info', detail: 'نسخة أمان تلقائية قبل الاستعادة #' + preId, meta: { id: preId, label: 'pre-restore', beforeRestoreOf: String(req.params.id) } }); } catch (e) {}
+    } catch (e) {}
     _restoreInProgress = true;
     // اكتب محتوى النسخة إلى القرص + kv_store (حتى يُستعاد بعد إعادة التشغيل)
     mkdirSync(DATA_DIR, { recursive: true });
@@ -3095,6 +3140,95 @@ app.post('/api/admin/backups/:id/restore', requireAdmin, async (req, res) => {
     _restoreInProgress = false;
     try { res.status(500).json({ ok: false, error: e.message }); } catch (ee) {}
   }
+});
+
+// ============================================================
+//  التقرير الإحصائي الأسبوعي (Weekly report) — يُرسل للأدمن
+//  يجمع أرقام المنصّة الرئيسية مرّة كل أسبوع ويُرسلها بالبريد.
+//  وقت آخر إرسال محفوظ على القرص حتى لا يتكرّر الإرسال عند إعادة التشغيل.
+// ============================================================
+const WEEKLY_REPORT_FILE = join(__dirname, 'data', 'apex-weekly-report.json');
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+function adminReportEmail() {
+  return String(process.env.ADMIN_EMAIL || process.env.REPORT_EMAIL || process.env.MAIL_FROM_EMAIL || '').trim();
+}
+function loadWeeklyState() {
+  try { if (existsSync(WEEKLY_REPORT_FILE)) return JSON.parse(readFileSync(WEEKLY_REPORT_FILE, 'utf8')) || {}; } catch (e) {}
+  return {};
+}
+function saveWeeklyState(s) {
+  try { mkdirSync(dirname(WEEKLY_REPORT_FILE), { recursive: true }); writeFileSync(WEEKLY_REPORT_FILE, JSON.stringify(s)); } catch (e) {}
+}
+async function buildWeeklyStats() {
+  const now = Date.now();
+  const since = now - WEEK_MS;
+  const out = { generatedAt: now, users: 0, newUsers: 0, pending: 0, approved: 0, rejected: 0, banned: 0,
+    commission: {}, opsWeek: 0, securityWeek: 0, backups: 0 };
+  try { const [[t]] = await pool.query('SELECT COUNT(*) AS n FROM users'); out.users = Number(t.n) || 0; } catch (e) {}
+  try {
+    const [bs] = await pool.query('SELECT status, COUNT(*) AS n FROM users GROUP BY status');
+    for (const r of bs) { const k = r.status || 'pending'; if (k in out) out[k] = Number(r.n) || 0; }
+  } catch (e) {}
+  try { const [[nu]] = await pool.query('SELECT COUNT(*) AS n FROM users WHERE created_at >= FROM_UNIXTIME(?)', [Math.floor(since / 1000)]); out.newUsers = Number(nu.n) || 0; } catch (e) {}
+  try { out.commission = Object.assign({}, commission.totals || {}); } catch (e) {}
+  try { out.opsWeek = (opsLog.entries || []).filter((x) => (x.at || 0) >= since).length; } catch (e) {}
+  try { out.securityWeek = (security.entries || []).filter((x) => (x.at || 0) >= since).length; } catch (e) {}
+  try { const [[b]] = await pool.query('SELECT COUNT(*) AS n FROM kv_backups'); out.backups = Number(b.n) || 0; } catch (e) {}
+  return out;
+}
+function weeklyReportHtml(s) {
+  const d = new Date(s.generatedAt);
+  const fmtCommission = Object.keys(s.commission || {}).length
+    ? Object.entries(s.commission).map(([c, v]) => (Number(v) || 0).toFixed(2) + ' ' + c).join(' + ')
+    : '0';
+  return '<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;max-width:560px;margin:auto">' +
+    '<h2 style="color:#111">📊 تقرير Apex الأسبوعي</h2>' +
+    '<p style="color:#666">حتى ' + d.toLocaleString('ar') + '</p>' +
+    '<table style="width:100%;border-collapse:collapse" cellpadding="8">' +
+    '<tr style="background:#f4f4f6"><td>إجمالي المستخدمين</td><td><b>' + s.users + '</b></td></tr>' +
+    '<tr><td>مستخدمون جدد هذا الأسبوع</td><td><b>' + s.newUsers + '</b></td></tr>' +
+    '<tr style="background:#f4f4f6"><td>بانتظار المراجعة</td><td>' + s.pending + '</td></tr>' +
+    '<tr><td>موثّقون</td><td>' + s.approved + '</td></tr>' +
+    '<tr style="background:#f4f4f6"><td>مرفوضون</td><td>' + s.rejected + '</td></tr>' +
+    '<tr><td>محظورون</td><td>' + s.banned + '</td></tr>' +
+    '<tr style="background:#f4f4f6"><td>عمولة المنصّة التراكمية</td><td><b>' + fmtCommission + '</b></td></tr>' +
+    '<tr><td>عمليات مسجّلة هذا الأسبوع</td><td>' + s.opsWeek + '</td></tr>' +
+    '<tr style="background:#f4f4f6"><td>أحداث أمنية هذا الأسبوع</td><td>' + s.securityWeek + '</td></tr>' +
+    '<tr><td>عدد النسخ الاحتياطية المخزّنة</td><td>' + s.backups + '</td></tr>' +
+    '</table>' +
+    '<p style="color:#999;font-size:12px">تقرير تلقائي من خادم Apex.</p></div>';
+}
+async function sendWeeklyReport(reason) {
+  const to = adminReportEmail();
+  const s = await buildWeeklyStats();
+  if (!to) { console.warn('[weekly] لا يوجد ADMIN_EMAIL — تخطّي الإرسال'); return { ok: false, error: 'no_admin_email', stats: s }; }
+  let sent = false;
+  try {
+    sent = await sendMail({ to, subject: 'تقرير Apex الأسبوعي 📊', html: weeklyReportHtml(s),
+      text: 'إجمالي المستخدمين: ' + s.users + ' | جدد: ' + s.newUsers });
+  } catch (e) { console.warn('[weekly] send failed:', e.message); }
+  const st = loadWeeklyState(); st.lastSentAt = Date.now(); st.lastReason = reason || 'auto'; saveWeeklyState(st);
+  try { logSecurity(null, { kind: 'weekly_report', severity: 'info', detail: 'أُرسل التقرير الأسبوعي إلى ' + to + ' (' + (sent ? 'نجح' : 'فشل الإرسال') + ')', meta: { to, sent, reason: reason || 'auto' } }); } catch (e) {}
+  return { ok: !!sent, stats: s, to };
+}
+// نبضة كل ساعة: يُطلق التقرير عند مرور أسبوع من آخر إرسال.
+setInterval(function () {
+  try {
+    const st = loadWeeklyState();
+    if (!st.lastSentAt || (Date.now() - Number(st.lastSentAt)) >= WEEK_MS) {
+      sendWeeklyReport('scheduled').catch(function () {});
+    }
+  } catch (e) {}
+}, 60 * 60 * 1000);
+// إطلاق يدوي من لوحة الأدمن (مفيد أيضاً لاختبار وصول البريد).
+app.post('/api/admin/weekly-report/send', requireAdmin, async (req, res) => {
+  try { const r = await sendWeeklyReport('manual'); res.json(r); }
+  catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+// معاينة الأرقام الحالية دون إرسال بريد.
+app.get('/api/admin/weekly-report/preview', requireAdmin, async (req, res) => {
+  try { const s = await buildWeeklyStats(); res.json({ ok: true, stats: s, to: adminReportEmail() }); }
+  catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 // ============================================================
@@ -3752,12 +3886,16 @@ app.post('/api/auth/register', strictLimiter, async (req, res) => {
       } catch (e) { console.warn('[register] id-doc save failed:', e.message); }
     }
 
-    // إنشاء محفظة افتراضية برصيد 0
-    await pool.query(
-      'INSERT INTO wallets (user_id, currency, balance, locked_balance) VALUES (?, ?, ?, ?) ' +
-      'ON DUPLICATE KEY UPDATE balance = balance',
-      [userId, 'USDT', 0.00000000, 0.00000000]
-    );
+    // إنشاء محفظة افتراضية برصيد 0 (best-effort: الرصيد الفعلي يعيش في الدفتر
+    // الموحّد داخل store، وجدول wallets هنا لعرض السيولة في لوحة الأدمن فقط —
+    // فلا يجوز أن يُفشِل خللٌ فيه عملية التسجيل كلها).
+    try {
+      await pool.query(
+        'INSERT INTO wallets (user_id, currency, balance, locked_balance) VALUES (?, ?, ?, ?) ' +
+        'ON DUPLICATE KEY UPDATE balance = balance',
+        [userId, 'USDT', 0.00000000, 0.00000000]
+      );
+    } catch (e) { console.warn('[register] wallet seed failed:', e.message); }
 
     // أنشئ سجل الدفتر الموحّد (store) بنفس معرّف MySQL لتوحيد الأرصدة
     try { store.ensureUser(String(userId), { uid: userId, name: cleanName, email: emailNorm, country: cleanCountry, status }); } catch (e) {}
