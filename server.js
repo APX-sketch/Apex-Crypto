@@ -1592,66 +1592,39 @@ function validIdImage(v) {
 // approved / rejected) is returned so the app can show the right state
 // ("under review" banner, verified badge, or a re-verify prompt). Only
 // BANNED accounts are refused entry.
-app.post('/api/auth/login', strictLimiter, async (req, res) => {
-  try {
-    const { email, password } = req.body || {};
-    if (!email || !password) {
-      return res.status(400).json({ error: 'invalid_credentials' });
-    }
+app.post('/api/auth/login', async (req, res) => {
+    try {
+        const { email, password } = req.body || {};
 
-    // 1. البحث عن المستخدم في MySQL (مصدر الحقيقة للهوية والحالة)
-    const user = await dbGetUserByEmail(email);
-    if (!user) {
-      return res.status(401).json({ error: 'invalid_credentials' });
-    }
+        if (!email || !password) {
+            return res.status(400).json({ success: false, message: 'يرجى إدخال البريد وكلمة المرور' });
+        }
 
-    // 2. التحقق من كلمة المرور (مع ترقية الكلمات القديمة غير المشفّرة)
-    const vr = verifyPassword(password, user.password);
-    if (!vr.ok) {
-      return res.status(401).json({ error: 'invalid_credentials' });
-    }
-    if (vr.legacy) {
-      try { await pool.query('UPDATE users SET password = ? WHERE id = ?', [hashPassword(password), user.id]); }
-      catch (e) { console.warn('[login] password upgrade failed:', e.message); }
-    }
+        const emailNorm = String(email).trim().toLowerCase();
 
-    // 3. الحسابات المحظورة ممنوعة من الدخول
-    if (user.status === 'banned') {
-      return res.status(403).json({ error: 'banned' });
+        // البحث عن المستخدم في قاعدة البيانات
+        const [users] = await pool.query('SELECT * FROM users WHERE email = ?', [emailNorm]);
+        if (users.length === 0) {
+            return res.status(400).json({ success: false, message: 'البريد أو كلمة المرور غير صحيحة' });
+        }
+
+        const user = users[0];
+
+        // التحقق من كلمة المرور المشفرة
+        const match = await bcrypt.compare(password, user.password);
+        if (!match) {
+            return res.status(400).json({ success: false, message: 'البريد أو كلمة المرور غير صحيحة' });
+        }
+
+        // تسجيل الدخول بنجاح (يمكنك تخزين الجلسة أو إرسال الـ user ID)
+        res.json({ success: true, message: 'تم تسجيل الدخول بنجاح', userId: user.id });
+
+    } catch (e) {
+        console.error('[LOGIN_ERROR]:', e);
+        res.status(500).json({ success: false, message: 'خطأ في الاتصال بالخادم' });
     }
-
-    // 4. خطوة OTP لتسجيل الدخول (تحقق ثنائي):
-    //    بعد نجاح كلمة المرور نُرسِل رمزاً للبريد ولا نُصدِر التوكن
-    //    إلا بعد التحقق من الرمز (/api/auth/login/verify-otp).
-    //    يُعطّل بضبط LOGIN_OTP=false.
-    if (String(process.env.LOGIN_OTP || 'true') !== 'false') {
-      // 4-أ. جهاز موثوق؟ إن أرسل العميل trustToken + deviceId صالحين
-      //      لهذا المستخدم → نتجاوز OTP ونُصدِر التوكن مباشرة.
-      const deviceId = String((req.body || {}).deviceId || '').slice(0, 64);
-      const trustToken = String((req.body || {}).trustToken || '');
-      if (deviceId && trustToken && DEVICE_ID_RE.test(deviceId) && verifyDeviceToken(trustToken, user.id, deviceId)) {
-        try { await pool.query('UPDATE users SET last_seen = ? WHERE id = ?', [Date.now(), user.id]); } catch (e) {}
-        const token = signUserToken(user.id);
-        return res.json({ ok: true, token, status: user.status || 'pending', user: dbPublicUser(user), trusted: true });
-      }
-
-      const emailNorm = String(user.email || '').trim().toLowerCase();
-      const { code, expiresInSec } = loginOtps.issue(emailNorm, { uid: user.id });
-      try { await sendOtp({ to: user.email, code, purpose: 'login' }); } catch (e) {}
-      const devMode = !isMailerConfigured() || process.env.OTP_DEBUG === 'true';
-      return res.json({ ok: true, otpRequired: true, email: user.email || '',
-        expiresInSec, devCode: devMode ? code : undefined });
-    }
-
-    // 5. (بدون OTP) نجاح الدخول: أصدر توكناً موقّعاً
-    try { await pool.query('UPDATE users SET last_seen = ? WHERE id = ?', [Date.now(), user.id]); } catch (e) {}
-    const token = signUserToken(user.id);
-    res.json({ ok: true, token, status: user.status || 'pending', user: dbPublicUser(user) });
-  } catch (err) {
-    console.error('Login Error:', err);
-    res.status(500).json({ error: 'Login failed' });
-  }
 });
+
 
 // ---- تأكيد دخول برمز OTP ----
 // الخطوة الثانية من تسجيل الدخول: يُرسِل العميل البريد + الرمز،
