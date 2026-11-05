@@ -1214,13 +1214,13 @@ async function loadUsers(){
         else if(u.status==='approved')a='<button class="btn ghost sm" onclick="ban(\''+u.id+'\')">حظر</button><button class="btn ghost sm" onclick="banTemp(\''+u.id+'\')">⏱ حظر مؤقّت</button>';
         else if(u.status==='banned')a='<button class="btn green sm" onclick="unban(\''+u.id+'\')">رفع الحظر</button>';
         else if(u.status==='rejected')a='<button class="btn green sm" onclick="approve(\''+u.id+'\')">موافقة</button>';
-        if(u.status!=='rejected'){a+=u.frozen?('<button class="btn green sm" onclick="unfreeze(\''+u.id+'\')">❄ فك التجميد</button>'):('<button class="btn ghost sm" onclick="freeze(\''+u.id+'\')">❄ تجميد الرصيد</button>');}
+        if(u.status!=='rejected'){a+=u.frozen?('<button class="btn green sm" onclick="unfreeze(\''+u.id+'\')">❄ فك التجميد</button>'):('<button class="btn ghost sm" onclick="freeze(\''+u.id+'\')">❄ تجميد الرصيد</button><button class="btn ghost sm" onclick="freezeTemp(\''+u.id+'\')">⏳ تجميد مؤقّت</button>');}
         a+='<button class="btn ghost sm" onclick="openNotify(\''+u.id+'\',\''+nm+'\')">🔔 إشعار/رصيد</button>';
         a+='<button class="btn ghost sm" onclick="openBal(\''+u.id+'\',\''+nm+'\')">أرصدة وعملات</button>';
         a+='<button class="btn ghost sm" onclick="delUser(\''+u.id+'\')">حذف</button>';
         var badges='<span class="pill '+u.status+'">'+st[u.status]+'</span>';
         if(u.status==='banned'&&u.banUntil&&u.banUntil>Date.now())badges+=' <span class="pill pending" title="حظر مؤقّت">⏱ '+banLeft(u.banUntil)+'</span>';
-        if(u.frozen)badges+=' <span class="pill banned" title="الرصيد مجمّد">❄ مجمّد</span>';
+        if(u.frozen)badges+=' <span class="pill banned" title="الرصيد مجمّد">❄ مجمّد'+(u.freezeUntil&&u.freezeUntil>Date.now()?(' · '+freezeLeft(u.freezeUntil)):' (دائم)')+'</span>';
         return '<tr><td class="u-name">'+esc(u.name)+'</td><td class="u-mail">'+esc(u.email)+'</td><td style="direction:ltr">'+u.uid+'</td>'+idCell(u)+'<td>'+badges+'</td><td class="acts">'+a+'</td></tr>';}).join('')+'</tbody></table>';
   }catch(e){}
 }
@@ -1230,8 +1230,20 @@ async function banTemp(id){
   if(v===null)return;var hours=Number(v);if(!(hours>0)){toast('مدة غير صالحة');return;}
   try{await api('/api/admin/users/'+id+'/ban-temp',{method:'POST',body:JSON.stringify({hours:hours})});toast('تم الحظر المؤقّت '+hours+' ساعة');loadUsers();refreshStats();}catch(e){toast('تعذّر التنفيذ');}
 }
-async function freeze(id){if(!confirm('تجميد رصيد هذا المستخدم؟ لن يستطيع السحب أو التحويل.'))return;try{await api('/api/admin/users/'+id+'/freeze',{method:'POST'});toast('تم تجميد الرصيد');loadUsers();}catch(e){toast('تعذّر التنفيذ');}}
+async function freeze(id){if(!confirm('تجميد رصيد هذا المستخدم بشكل دائم؟ لن يستطيع السحب أو التحويل حتى ترفعه يدوياً.'))return;try{await api('/api/admin/users/'+id+'/freeze',{method:'POST',body:JSON.stringify({})});toast('تم تجميد الرصيد (دائم)');loadUsers();}catch(e){toast('تعذّر التنفيذ');}}
 async function unfreeze(id){try{await api('/api/admin/users/'+id+'/unfreeze',{method:'POST'});toast('تم رفع التجميد');loadUsers();}catch(e){toast('تعذّر التنفيذ');}}
+function freezeLeft(until){var ms=until-Date.now();if(ms<=0)return 'انتهى';var m=Math.round(ms/60000);if(m<60)return 'متبقٍّ '+m+' د';var h=Math.floor(m/60),mm=m%60;if(h<24)return 'متبقٍّ '+h+'س'+(mm?(' '+mm+'د'):'');var d=Math.floor(h/24);return 'متبقٍّ '+d+' يوم';}
+async function freezeTemp(id){
+  var v=prompt('مدة تجميد الرصيد:\nاكتب رقمًا ثم اختر الوحدة من السؤال التالي.\nمثال: 30 = ثلاثون حسب الوحدة.','30');
+  if(v===null)return;var num=Number(v);if(!(num>0)){toast('مدة غير صالحة');return;}
+  var u=(prompt('اختر الوحدة: اكتب د = دقائق، س = ساعات، ي = أيام','س')||'س').trim();
+  var body={};
+  if(u==='د'||u==='دقائق'||u.toLowerCase()==='m')body.minutes=num;
+  else if(u==='ي'||u==='يوم'||u==='أيام'||u.toLowerCase()==='a')body.days=num;
+  else body.hours=num;
+  try{var r=await api('/api/admin/users/'+id+'/freeze-temp',{method:'POST',body:JSON.stringify(body)});
+    toast('تم التجميد المؤقّت حتى '+new Date(r.freezeUntil).toLocaleString('ar'));loadUsers();}catch(e){toast('تعذّر التنفيذ');}
+}
 async function ban(id){if(!confirm('حظر هذا المستخدم؟'))return;try{await api('/api/admin/users/'+id+'/ban',{method:'POST'});toast('تم الحظر');loadUsers();refreshStats();}catch(e){}}
 async function unban(id){try{await api('/api/admin/users/'+id+'/unban',{method:'POST'});toast('تم رفع الحظر');loadUsers();refreshStats();}catch(e){}}
 async function delUser(id){if(!confirm('حذف المستخدم نهائياً؟'))return;try{await api('/api/admin/users/'+id,{method:'DELETE'});toast('تم الحذف');loadUsers();refreshStats();}catch(e){}}

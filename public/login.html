@@ -22,66 +22,171 @@ h1{font-size:20px;margin:0 0 4px}
 .fld input:focus{border-color:var(--gold2)}
 .btn{width:100%;padding:13px;border:0;border-radius:12px;font-family:inherit;font-weight:800;font-size:15px;cursor:pointer;background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#231a02;margin-top:6px}
 .btn:disabled{opacity:.6;cursor:default}
+.btn.ghost{background:transparent;border:1px solid var(--border);color:var(--muted);font-weight:700;font-size:13px}
 .alt{text-align:center;margin-top:16px;font-size:13px;color:var(--muted)}
 .alt a{color:var(--gold2);font-weight:700;text-decoration:none}
 .msg{padding:11px 14px;border-radius:10px;font-size:13px;margin-bottom:14px;display:none}
 .msg.err{display:block;background:rgba(246,70,93,.12);color:#ff8a97;border:1px solid rgba(246,70,93,.3)}
 .msg.warn{display:block;background:rgba(224,166,21,.12);color:var(--gold1);border:1px solid rgba(224,166,21,.3)}
 .msg.ok{display:block;background:rgba(14,203,129,.12);color:#5be0a8;border:1px solid rgba(14,203,129,.3)}
-.adminlink{text-align:center;margin-top:22px;font-size:12px}
-.adminlink a{color:var(--muted);text-decoration:none}
+.codeinp{letter-spacing:8px;text-align:center;font-size:22px;font-weight:800;direction:ltr}
+.hint{color:var(--muted);font-size:12px;margin-top:8px;text-align:center}
+.chk{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);margin:4px 0 14px;cursor:pointer}
+.chk input{width:16px;height:16px;accent-color:var(--gold2)}
+.dev{background:rgba(224,166,21,.12);border:1px solid rgba(224,166,21,.3);color:var(--gold1);border-radius:10px;padding:9px 12px;font-size:12.5px;margin-bottom:12px;display:none}
+.hide{display:none!important}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="logo"><b>Apex</b><span>\\\\\\</span></div>
+  <div class="logo"><b>Apex</b><span>منصة التداول</span></div>
   <div class="card">
-    <h1 data-i18n="loginTitle">تسجيل الدخول</h1>
-    <div class="sub" data-i18n="loginSub">أدخل بيانات حسابك للمتابعة</div>
+    <h1 id="ttl" data-i18n="loginTitle">تسجيل الدخول</h1>
+    <div class="sub" id="sub" data-i18n="loginSub">أدخل بيانات حسابك للمتابعة</div>
     <div class="msg" id="msg"></div>
-    <div class="fld"><label data-i18n="email">البريد الإلكتروني</label><input id="email" type="email" autocomplete="email" placeholder="name@email.com" dir="ltr" style="text-align:right"></div>
-    <div class="fld"><label data-i18n="password">كلمة المرور</label><input id="pass" type="password" autocomplete="current-password" placeholder="••••••••"></div>
-    <button class="btn" id="submitBtn" onclick="doLogin()">دخول</button>
+
+    <!-- الخطوة 1: البيانات -->
+    <div id="step1">
+      <div class="fld"><label data-i18n="email">البريد الإلكتروني</label><input id="email" type="email" autocomplete="email" placeholder="name@email.com" dir="ltr" style="text-align:right"></div>
+      <div class="fld"><label data-i18n="password">كلمة المرور</label><input id="pass" type="password" autocomplete="current-password" placeholder="••••••••"></div>
+      <button class="btn" id="submitBtn" onclick="doLogin()">دخول</button>
+    </div>
+
+    <!-- الخطوة 2: رمز التحقق OTP -->
+    <div id="step2" class="hide">
+      <div class="dev" id="devBox"></div>
+      <div class="fld">
+        <label>رمز التحقق (6 أرقام)</label>
+        <input id="otp" class="codeinp" inputmode="numeric" maxlength="6" placeholder="------" autocomplete="one-time-code">
+      </div>
+      <label class="chk"><input type="checkbox" id="remember"> تذكّر هذا الجهاز (لا تطلب الرمز مرة أخرى)</label>
+      <button class="btn" id="verifyBtn" onclick="doVerify()">تأكيد الدخول</button>
+      <button class="btn ghost" style="margin-top:10px" onclick="backToLogin()">‹ رجوع</button>
+      <div class="hint" id="otpHint"></div>
+    </div>
+
     <div class="alt">ليس لديك حساب؟ <a href="register.html">إنشاء حساب</a></div>
   </div>
 </div>
 <script>
 const $=id=>document.getElementById(id);
+let pendingEmail='',devId='';
 function getNext(){const p=new URLSearchParams(location.search);const n=p.get('next')||'index.html';return /^[a-zA-Z0-9_\-]+\.html$/.test(n)?n:'index.html';}
 function showMsg(t,cls){const m=$('msg');m.textContent=t;m.className='msg '+(cls||'err');}
+function hideMsg(){const m=$('msg');m.textContent='';m.className='msg';}
+
+// معرّف جهاز ثابت لهذا المتصفح (لخيار "تذكّر هذا الجهاز").
+function getDeviceId(){
+  try{
+    let d=localStorage.getItem('apex_device_id')||'';
+    if(!/^[A-Za-z0-9_-]{8,64}$/.test(d)){
+      d='d'+Math.random().toString(36).slice(2)+Date.now().toString(36);
+      d=d.replace(/[^A-Za-z0-9_-]/g,'').slice(0,48);
+      localStorage.setItem('apex_device_id',d);
+    }
+    return d;
+  }catch(e){return '';}
+}
+
+// طلب مع مهلة زمنية واضحة حتى لا تظهر "خطأ اتصال" بشكل مضلّل.
+async function postJSON(url,body,timeoutMs){
+  const ctrl=new AbortController();
+  const t=setTimeout(()=>ctrl.abort(), timeoutMs||60000);
+  try{
+    const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{}),signal:ctrl.signal});
+    let d=null; try{ d=await r.json(); }catch(e){ d=null; }
+    return {status:r.status, ok:r.ok, data:d};
+  } finally { clearTimeout(t); }
+}
+
+// ترجمة ردّ الخادم إلى رسالة عربية واضحة.
+function msgForError(status,data){
+  const e=(data&&data.error)||'';
+  if(e==='invalid_credentials') return 'البريد أو كلمة المرور غير صحيحة';
+  if(e==='pending') return 'حسابك قيد المراجعة من الإدارة. الرجاء الانتظار حتى الموافقة.';
+  if(e==='rejected') return 'تم رفض طلبك'+((data&&data.reason)?(': '+data.reason):'.');
+  if(e==='banned') return 'تم حظر هذا الحساب. تواصل مع الدعم.';
+  if(e==='otp_required') return 'الرجاء إدخال رمز التحقق المُرسَل إلى بريدك.';
+  if(e==='otp_invalid'||e==='bad_code'||e==='invalid_code') return 'رمز التحقق غير صحيح.';
+  if(e==='otp_expired'||e==='expired') return 'انتهت صلاحية رمز التحقق. اطلب رمزاً جديداً.';
+  if(e==='too_many_attempts'||e==='max_tries') return 'محاولات كثيرة خاطئة. أعد إرسال رمز جديد.';
+  if(status===429) return 'محاولات كثيرة. انتظر قليلاً ثم أعد المحاولة.';
+  if(status>=500) return 'خطأ داخلي في الخادم ('+status+'). حاول لاحقاً.';
+  if(status===404) return 'خدمة الدخول غير متوفّرة على الخادم.';
+  return 'تعذّر إتمام الطلب ('+status+'). حاول مجدداً.';
+}
+
 async function doLogin(){
+  hideMsg();
   const email=$('email').value.trim(),pass=$('pass').value;
   if(!email||!pass)return showMsg('الرجاء إدخال البريد وكلمة المرور');
   const btn=$('submitBtn');btn.disabled=true;btn.textContent='جارٍ الدخول...';
-  try{
-    const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password:pass})});
-    const d=await r.json();
-    if(!r.ok){
-      if(d.error==='pending')showMsg('حسابك قيد المراجعة من الإدارة. الرجاء الانتظار حتى الموافقة.','warn');
-      else if(d.error==='rejected')showMsg('تم رفض طلبك'+(d.reason?(': '+d.reason):'.'),'err');
-      else if(d.error==='banned')showMsg('تم حظر هذا الحساب. تواصل مع الدعم.','err');
-      else showMsg('البريد أو كلمة المرور غير صحيحة','err');
-      btn.disabled=false;btn.textContent='دخول';return;
-    }
-const sess = {
-      id: d.user.id,
-      uid: d.user.id,
-      username: d.user.username,
-      name: d.user.username,
-      email: d.user.email,
-      token: d.token
-    };
+  let res;
+  let trust=''; try{ trust=localStorage.getItem('apex_trust_token')||''; }catch(e){}
+  try{ res=await postJSON('/api/auth/login',{email,password:pass,deviceId:getDeviceId(),trustToken:trust},60000); }
+  catch(e){
+    btn.disabled=false;btn.textContent='دخول';
+    if(e&&e.name==='AbortError') return showMsg('الخادم يأخذ وقتاً طويلاً للاستجابة (ربما يستفيق من وضع الخمول). أعد المحاولة.','warn');
+    return showMsg('تعذّر الوصول إلى الخادم. تأكّد من اتصالك بالإنترنت وأن الخادم يعمل.','err');
+  }
+  const d=res.data||{};
+  if(!res.ok){ btn.disabled=false;btn.textContent='دخول'; return showMsg(msgForError(res.status,d), (res.status>=500||res.status===429)?'warn':'err'); }
 
-    localStorage.setItem('skygo_session', JSON.stringify(sess));
-    localStorage.setItem('apex_user', JSON.stringify(sess));
-    localStorage.setItem('apex_token', d.token);
-    localStorage.setItem('currentUser', JSON.stringify(sess));
-    
-    location.replace(getNext());
-  
-  }catch(e){showMsg('خطأ في الاتصال بالخادم','err');btn.disabled=false;btn.textContent='دخول';}
+  // يحتاج رمز OTP؟ انتقل للخطوة 2
+  if(d.otpRequired){
+    pendingEmail=d.email||email;devId=getDeviceId();
+    $('step1').classList.add('hide');$('step2').classList.remove('hide');
+    $('ttl').textContent='رمز التحقق';$('sub').textContent='أدخل الرمز المُرسَل إلى '+(pendingEmail||'بريدك');
+    showMsg('تم إرسال رمز التحقق إلى بريدك الإلكتروني.','ok');
+    if(d.devCode){ $('devBox').style.display='block'; $('devBox').textContent='وضع التجربة — الرمز: '+d.devCode; }
+    else { $('devBox').style.display='none'; }
+    if(d.expiresInSec)$('otpHint').textContent='الرمز صالح لمدة '+Math.round(d.expiresInSec/60)+' دقيقة.';
+    $('otp').focus();
+    return;
+  }
+
+  if(!d.token||!d.user){ btn.disabled=false;btn.textContent='دخول'; return showMsg('ردّ غير متوقّع من الخادم. حاول مجدداً.','err'); }
+  finishLogin(d,pendingEmail||email);
 }
+
+async function doVerify(){
+  hideMsg();
+  const code=($('otp').value||'').trim();
+  if(!/^\d{4,8}$/.test(code))return showMsg('أدخل رمز التحقق المكوّن من 6 أرقام.');
+  const btn=$('verifyBtn');btn.disabled=true;btn.textContent='جارٍ التحقق...';
+  let res;
+  try{ res=await postJSON('/api/auth/login/verify-otp',{email:pendingEmail,code,deviceId:devId,rememberDevice:$('remember').checked},60000); }
+  catch(e){ btn.disabled=false;btn.textContent='تأكيد الدخول'; return showMsg('تعذّر الوصول إلى الخادم. حاول مجدداً.','err'); }
+  const d=res.data||{};
+  if(!res.ok){ btn.disabled=false;btn.textContent='تأكيد الدخول'; return showMsg(msgForError(res.status,d),'err'); }
+  if(!d.token||!d.user){ btn.disabled=false;btn.textContent='تأكيد الدخول'; return showMsg('ردّ غير متوقّع من الخادم.','err'); }
+  // خزّن رمز الثقة بالجهاز إن أرسله الخادم
+  if(d.trustToken&&devId){ try{ localStorage.setItem('apex_trust_token',d.trustToken); }catch(e){} }
+  finishLogin(d,pendingEmail);
+}
+
+function backToLogin(){
+  hideMsg();$('step2').classList.add('hide');$('step1').classList.remove('hide');
+  $('ttl').textContent='تسجيل الدخول';$('sub').textContent='أدخل بيانات حسابك للمتابعة';
+  const b=$('submitBtn');b.disabled=false;b.textContent='دخول';$('otp').value='';
+}
+
+function finishLogin(d,email){
+  const sess={ id:d.user.id, uid:d.user.id, username:d.user.username, name:d.user.username, email:d.user.email, token:d.token };
+  try{
+    localStorage.setItem('skygo_session',JSON.stringify(sess));
+    localStorage.setItem('apex_user',JSON.stringify(sess));
+    localStorage.setItem('apex_token',d.token);
+    localStorage.setItem('currentUser',JSON.stringify(sess));
+    if(d.user.status)localStorage.setItem('apex_kyc_status',d.user.status);
+  }catch(e){}
+  location.replace(getNext());
+}
+
 $('pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+$('otp').addEventListener('keydown',e=>{if(e.key==='Enter')doVerify();});
+$('email').addEventListener('keydown',e=>{if(e.key==='Enter')$('pass').focus();});
+
 /* رسالة الجلسة الواحدة: إن تمّ فصل الجهاز لأنّ الحساب فُتح على جهاز آخر */
 (function(){
   try{
