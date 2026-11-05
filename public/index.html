@@ -1218,7 +1218,8 @@ async function scanSend(){
       var er=(d&&d.error)||'';
       var msg=er==='account_not_approved'?'حسابك قيد المراجعة — السحب متاح بعد توثيق الإدارة':
               (er==='insufficient_balance'?'الرصيد غير كافٍ':
-              (er==='banned'?'الحساب محظور':'تعذّر الإرسال'));
+              (er==='balance_frozen'?'رصيدك مجمّد مؤقتاً — تواصل مع الإدارة':
+              (er==='banned'?'الحساب محظور':'تعذّر الإرسال')));
       toast(msg);
     }
   }catch(e){toast('تعذّر الاتصال بالسيرفر');}

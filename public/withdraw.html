@@ -154,7 +154,7 @@ async function doWithdraw(){
     var r=await fetch('/api/wallet/withdraw',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({amount:v,currency:sel,address:addr})});
     if(r.status===401){logout();return;}
     var d=await r.json().catch(function(){return {};});
-    if(r.status===403&&(d.error==='account_not_approved'||d.error==='banned')){toast(d.error==='banned'?'الحساب محظور':'حسابك قيد المراجعة — السحب متاح بعد توثيق الإدارة','err');return;}
+    if(r.status===403&&(d.error==='account_not_approved'||d.error==='banned'||d.error==='balance_frozen')){toast(d.error==='banned'?'الحساب محظور':(d.error==='balance_frozen'?'رصيدك مجمّد مؤقتاً — تواصل مع الإدارة':'حسابك قيد المراجعة — السحب متاح بعد توثيق الإدارة'),'err');return;}
     if(!r.ok){
       var msg=d.error==='insufficient_balance'?'الرصيد غير كافٍ':(d.error==='invalid_amount'?'مبلغ غير صالح':'تعذّر تنفيذ السحب');
       toast(msg,'err');onAmt();return;

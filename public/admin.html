@@ -219,6 +219,10 @@ tr:last-child td{border-bottom:0}
           <div class="stat y"><div class="k"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>محادثات جديدة</div><div class="v" id="stChats">0</div></div>
         </div>
         <div class="card">
+          <div class="card-h"><b>⚠ تنبيهات فورية — سحوبات كبيرة</b><span id="aaBadge" class="pill banned" style="display:none;margin-inline-start:8px">0</span><div class="sp"></div><button class="btn ghost sm" onclick="markAdminAlertsRead()">تعليم الكل كمقروء</button><button class="btn ghost sm" onclick="loadAdminAlerts()">تحديث ↻</button></div>
+          <div id="adminAlertsBox"></div>
+        </div>
+        <div class="card">
           <div class="card-h"><b>حالة المصادر والاتصال</b><div class="sp"></div><span id="hzDot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#888;margin-inline-end:6px"></span><span id="hzState" style="color:var(--muted);font-size:13px">—</span></div>
           <div id="hzBody" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;padding:4px 2px">
             <div class="stat"><div class="k">مصدر البيانات</div><div class="v" id="hzSource" style="font-size:18px">—</div></div>
@@ -332,6 +336,21 @@ tr:last-child td{border-bottom:0}
           <div class="stat g"><div class="k"><svg viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>إجمالي السيولة (USD)</div><div class="v" id="stLiq">$0.00</div></div>
           <div class="stat b"><div class="k"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5"/></svg>عدد الحسابات</div><div class="v" id="stLiqCount">0</div></div>
           <div class="stat y"><div class="k"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg>نشط الآن</div><div class="v" id="stLiqOnline">0</div></div>
+        </div>
+        <div class="card">
+          <div class="card-h"><b>لوحة السيولة اليومية</b><div class="sp"></div>
+            <select id="dailyRange" onchange="loadDaily()" style="background:var(--panel2);border:1px solid var(--border);color:var(--fg);border-radius:8px;padding:6px 10px;font-size:12.5px;margin-inline-end:8px">
+              <option value="7">آخر 7 أيام</option><option value="14" selected>آخر 14 يوم</option><option value="30">آخر 30 يوم</option>
+            </select>
+            <button class="btn ghost sm" onclick="loadDaily()">تحديث ↻</button>
+          </div>
+          <div class="stats" style="margin-bottom:10px">
+            <div class="stat g"><div class="k">داخل اليوم (USD)</div><div class="v" id="dInToday" style="color:var(--up,#3fb68b)">$0.00</div></div>
+            <div class="stat r"><div class="k">خارج اليوم (USD)</div><div class="v" id="dOutToday" style="color:var(--down,#e2574a)">$0.00</div></div>
+            <div class="stat b"><div class="k">صافي اليوم (USD)</div><div class="v" id="dNetToday">$0.00</div></div>
+            <div class="stat y"><div class="k">عمليات اليوم</div><div class="v" id="dCntToday">0</div></div>
+          </div>
+          <div id="dailyChart" style="overflow-x:auto"></div>
         </div>
         <div class="card">
           <div class="card-h"><b>أرصدة الحسابات</b><div class="sp"></div><button class="btn ghost sm" onclick="exportLiquidityCsv()">تصدير CSV ⬇</button><button class="btn ghost sm" onclick="loadLiquidity()">تحديث ↻</button></div>
@@ -902,7 +921,7 @@ $('verifyCode')&&$('verifyCode').addEventListener('keydown',e=>{if(e.key==='Ente
 function startApp(){
   $('loginWrap').style.display='none';$('app').style.display='block';
   refreshAll();
-  POLL=setInterval(()=>{refreshStats();if($('pg-overview').classList.contains('on'))refreshHealth();if($('pg-requests').classList.contains('on'))loadRequests();if($('pg-liquidity').classList.contains('on')){loadLiquidity();loadAudit();}if($('pg-orders').classList.contains('on')){loadOrders();loadAlerts();}if($('pg-commission').classList.contains('on'))loadCommission();if($('pg-security').classList.contains('on'))loadSecurity();if($('pg-support').classList.contains('on'))loadChats();},6000);
+  POLL=setInterval(()=>{refreshStats();if($('pg-overview').classList.contains('on')){refreshHealth();loadAdminAlerts();}if($('pg-requests').classList.contains('on'))loadRequests();if($('pg-liquidity').classList.contains('on')){loadLiquidity();loadAudit();loadDaily();}if($('pg-orders').classList.contains('on')){loadOrders();loadAlerts();}if($('pg-commission').classList.contains('on'))loadCommission();if($('pg-security').classList.contains('on'))loadSecurity();if($('pg-support').classList.contains('on'))loadChats();},6000);
 }
 function nav(pg){
   document.querySelectorAll('.navi').forEach(n=>n.classList.toggle('on',n.dataset.pg===pg));
@@ -911,7 +930,7 @@ function nav(pg){
   if(pg==='overview')refreshAll();
   if(pg==='requests')loadRequests();
   if(pg==='users')loadUsers();
-  if(pg==='liquidity'){loadLiquidity();loadAudit();}
+  if(pg==='liquidity'){loadLiquidity();loadAudit();loadDaily();}
   if(pg==='orders'){loadOrders();loadAlerts();}
   if(pg==='apx')axLoad();
   if(pg==='commission')loadCommission();
@@ -921,7 +940,7 @@ function nav(pg){
   if(pg==='security')loadSecurity();
   if(pg==='support')loadChats();
 }
-async function refreshAll(){await refreshStats();refreshHealth();loadRecent();}
+async function refreshAll(){await refreshStats();refreshHealth();loadRecent();loadAdminAlerts();}
 
 /* ---- لوحة حالة المصادر والاتصال (تقرأ /api/health) ---- */
 function fmtAge(ms){if(ms==null)return'—';if(ms<1000)return'الآن';var s=Math.round(ms/1000);if(s<60)return s+' ث';var m=Math.floor(s/60);return m+' د '+(s%60)+' ث';}
@@ -1190,17 +1209,29 @@ async function loadUsers(){
     if(!users.length){$('usersTable').innerHTML='<div class="empty">لا يوجد مستخدمون</div>';return;}
     const st={pending:'قيد المراجعة',approved:'موافَق',rejected:'مرفوض',banned:'محظور'};
     $('usersTable').innerHTML='<table><thead><tr><th>الاسم</th><th>البريد</th><th>UID</th><th>الهوية</th><th>الحالة</th><th></th></tr></thead><tbody>'+
-      users.map(u=>{let a='';
+      users.map(u=>{let a='';var nm=esc(u.name).replace(/'/g,"\\'");
         if(u.status==='pending')a='<button class="btn green sm" onclick="approve(\''+u.id+'\')">موافقة</button><button class="btn red sm" onclick="reject(\''+u.id+'\')">رفض</button>';
-        else if(u.status==='approved')a='<button class="btn ghost sm" onclick="ban(\''+u.id+'\')">حظر</button>';
+        else if(u.status==='approved')a='<button class="btn ghost sm" onclick="ban(\''+u.id+'\')">حظر</button><button class="btn ghost sm" onclick="banTemp(\''+u.id+'\')">⏱ حظر مؤقّت</button>';
         else if(u.status==='banned')a='<button class="btn green sm" onclick="unban(\''+u.id+'\')">رفع الحظر</button>';
         else if(u.status==='rejected')a='<button class="btn green sm" onclick="approve(\''+u.id+'\')">موافقة</button>';
-        a+='<button class="btn ghost sm" onclick="openNotify(\''+u.id+'\',\''+esc(u.name).replace(/'/g,"\\'")+'\')">🔔 إشعار/رصيد</button>';
-        a+='<button class="btn ghost sm" onclick="openBal(\''+u.id+'\',\''+esc(u.name).replace(/'/g,"\\'")+'\')">أرصدة وعملات</button>';
+        if(u.status!=='rejected'){a+=u.frozen?('<button class="btn green sm" onclick="unfreeze(\''+u.id+'\')">❄ فك التجميد</button>'):('<button class="btn ghost sm" onclick="freeze(\''+u.id+'\')">❄ تجميد الرصيد</button>');}
+        a+='<button class="btn ghost sm" onclick="openNotify(\''+u.id+'\',\''+nm+'\')">🔔 إشعار/رصيد</button>';
+        a+='<button class="btn ghost sm" onclick="openBal(\''+u.id+'\',\''+nm+'\')">أرصدة وعملات</button>';
         a+='<button class="btn ghost sm" onclick="delUser(\''+u.id+'\')">حذف</button>';
-        return '<tr><td class="u-name">'+esc(u.name)+'</td><td class="u-mail">'+esc(u.email)+'</td><td style="direction:ltr">'+u.uid+'</td>'+idCell(u)+'<td><span class="pill '+u.status+'">'+st[u.status]+'</span></td><td class="acts">'+a+'</td></tr>';}).join('')+'</tbody></table>';
+        var badges='<span class="pill '+u.status+'">'+st[u.status]+'</span>';
+        if(u.status==='banned'&&u.banUntil&&u.banUntil>Date.now())badges+=' <span class="pill pending" title="حظر مؤقّت">⏱ '+banLeft(u.banUntil)+'</span>';
+        if(u.frozen)badges+=' <span class="pill banned" title="الرصيد مجمّد">❄ مجمّد</span>';
+        return '<tr><td class="u-name">'+esc(u.name)+'</td><td class="u-mail">'+esc(u.email)+'</td><td style="direction:ltr">'+u.uid+'</td>'+idCell(u)+'<td>'+badges+'</td><td class="acts">'+a+'</td></tr>';}).join('')+'</tbody></table>';
   }catch(e){}
 }
+function banLeft(until){var ms=until-Date.now();if(ms<=0)return 'انتهى';var m=Math.round(ms/60000);if(m<60)return 'متبقٍّ '+m+' د';var h=Math.floor(m/60),mm=m%60;if(h<24)return 'متبقٍّ '+h+'س'+(mm?(' '+mm+'د'):'');var d=Math.floor(h/24);return 'متبقٍّ '+d+' يوم';}
+async function banTemp(id){
+  var v=prompt('مدة الحظر المؤقّت بالساعات (مثلاً 1 أو 24):','24');
+  if(v===null)return;var hours=Number(v);if(!(hours>0)){toast('مدة غير صالحة');return;}
+  try{await api('/api/admin/users/'+id+'/ban-temp',{method:'POST',body:JSON.stringify({hours:hours})});toast('تم الحظر المؤقّت '+hours+' ساعة');loadUsers();refreshStats();}catch(e){toast('تعذّر التنفيذ');}
+}
+async function freeze(id){if(!confirm('تجميد رصيد هذا المستخدم؟ لن يستطيع السحب أو التحويل.'))return;try{await api('/api/admin/users/'+id+'/freeze',{method:'POST'});toast('تم تجميد الرصيد');loadUsers();}catch(e){toast('تعذّر التنفيذ');}}
+async function unfreeze(id){try{await api('/api/admin/users/'+id+'/unfreeze',{method:'POST'});toast('تم رفع التجميد');loadUsers();}catch(e){toast('تعذّر التنفيذ');}}
 async function ban(id){if(!confirm('حظر هذا المستخدم؟'))return;try{await api('/api/admin/users/'+id+'/ban',{method:'POST'});toast('تم الحظر');loadUsers();refreshStats();}catch(e){}}
 async function unban(id){try{await api('/api/admin/users/'+id+'/unban',{method:'POST'});toast('تم رفع الحظر');loadUsers();refreshStats();}catch(e){}}
 async function delUser(id){if(!confirm('حذف المستخدم نهائياً؟'))return;try{await api('/api/admin/users/'+id,{method:'DELETE'});toast('تم الحذف');loadUsers();refreshStats();}catch(e){}}
@@ -1310,6 +1341,69 @@ function renderAudit(){
         '<td style="color:var(--muted)">'+fmtTime(e.at)+'</td></tr>';
     }).join('')+'</tbody></table>';
 }
+/* ---- تنبيهات الأدمن الفورية (سحب كبير) ---- */
+var ADMIN_ALERTS=[],AA_LAST_UNREAD=0;
+async function loadAdminAlerts(){
+  try{var d=await api('/api/admin/admin-alerts');ADMIN_ALERTS=d.items||[];
+    var unread=d.unread||0;
+    var bd=$('aaBadge');if(bd){bd.textContent=unread;bd.style.display=unread>0?'':'none';}
+    if(unread>AA_LAST_UNREAD&&AA_LAST_UNREAD>=0&&ADMIN_ALERTS[0])toast('⚠ تنبيه سحب كبير: '+(ADMIN_ALERTS[0].body||''));
+    AA_LAST_UNREAD=unread;
+    renderAdminAlerts();
+  }catch(e){}
+}
+function renderAdminAlerts(){
+  var el=$('adminAlertsBox');if(!el)return;
+  if(!ADMIN_ALERTS.length){el.innerHTML='<div class="empty">لا توجد تنبيهات</div>';return;}
+  el.innerHTML='<table><thead><tr><th>الوقت</th><th>التنبيه</th><th>الحساب</th><th>القيمة (USD)</th><th></th></tr></thead><tbody>'+
+    ADMIN_ALERTS.slice(0,60).map(function(a){
+      var crit=a.severity==='critical';
+      return '<tr'+(a.read?'':' style="background:rgba(226,87,74,.07)"')+'><td style="color:var(--muted);white-space:nowrap">'+fmtTime(a.at)+'</td>'+
+        '<td><span class="pill '+(crit?'banned':'pending')+'">'+(crit?'حرج':'تنبيه')+'</span> '+esc(a.body||a.title||'')+'</td>'+
+        '<td class="u-name">'+esc(a.userName||a.userId||'—')+'<div class="u-mail">'+esc(a.userEmail||'')+'</div></td>'+
+        '<td style="direction:ltr;text-align:right;font-weight:800;color:var(--down,#e2574a)">'+fmtUsd(a.usd)+'</td>'+
+        '<td>'+(a.read?'':'<span class="pill banned">جديد</span>')+'</td></tr>';
+    }).join('')+'</tbody></table>';
+}
+async function markAdminAlertsRead(){try{await api('/api/admin/admin-alerts/read',{method:'POST',body:JSON.stringify({})});AA_LAST_UNREAD=0;loadAdminAlerts();}catch(e){}}
+/* ---- لوحة السيولة اليومية ---- */
+async function loadDaily(){
+  try{
+    var days=Number((($('dailyRange')||{}).value)||14);
+    var d=await api('/api/admin/liquidity/daily?days='+days);
+    var t=d.today||{};
+    $('dInToday').textContent=fmtUsd(t.inUsd);
+    $('dOutToday').textContent=fmtUsd(t.outUsd);
+    var net=$('dNetToday');net.textContent=(t.netUsd>=0?'+':'')+fmtUsd(Math.abs(t.netUsd));net.style.color=t.netUsd>=0?'var(--up,#3fb68b)':'var(--down,#e2574a)';
+    $('dCntToday').textContent=(Number(t.deposits)||0)+(Number(t.withdrawals)||0);
+    renderDailyChart(d.series||[]);
+  }catch(e){var el=$('dailyChart');if(el)el.innerHTML='<div class="empty">تعذّر جلب الإحصائيات</div>';}
+}
+/* رسم أعمدة بـ SVG خالص (داخل/خارج لكل يوم) — بلا أي مكتبة */
+function renderDailyChart(series){
+  var el=$('dailyChart');if(!el)return;
+  if(!series.length){el.innerHTML='<div class="empty">لا توجد بيانات</div>';return;}
+  var W=Math.max(series.length*54+60,520),H=240,padT=16,padB=46,padL=52,padR=12;
+  var plotH=H-padT-padB,plotW=W-padL-padR;
+  var maxV=0;series.forEach(function(b){maxV=Math.max(maxV,b.inUsd,b.outUsd);});
+  if(maxV<=0)maxV=1;
+  var slot=plotW/series.length,bw=Math.min(slot*0.34,20);
+  var g='';
+  for(var i=0;i<=4;i++){var gy=padT+plotH*i/4;var val=maxV*(1-i/4);g+='<line x1="'+padL+'" y1="'+gy.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+gy.toFixed(1)+'" stroke="var(--border)" stroke-width="1"/>'+'<text x="'+(padL-6)+'" y="'+(gy+3).toFixed(1)+'" text-anchor="end" fill="var(--muted)" font-size="9">'+shortUsd(val)+'</text>';}
+  var bars='';
+  series.forEach(function(b,i){
+    var cx=padL+slot*i+slot/2;
+    var hin=b.inUsd/maxV*plotH,hout=b.outUsd/maxV*plotH;
+    var xin=cx-bw-1,xout=cx+1;
+    bars+='<rect x="'+xin.toFixed(1)+'" y="'+(padT+plotH-hin).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+hin.toFixed(1)+'" rx="2" fill="#3fb68b"><title>'+esc(b.date)+' — داخل '+fmtUsd(b.inUsd)+'</title></rect>';
+    bars+='<rect x="'+xout.toFixed(1)+'" y="'+(padT+plotH-hout).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+hout.toFixed(1)+'" rx="2" fill="#e2574a"><title>'+esc(b.date)+' — خارج '+fmtUsd(b.outUsd)+'</title></rect>';
+    var lbl=b.date.slice(5);
+    bars+='<text x="'+cx.toFixed(1)+'" y="'+(H-padB+16)+'" text-anchor="middle" fill="var(--muted)" font-size="9" transform="rotate(0 '+cx.toFixed(1)+' '+(H-padB+16)+')">'+lbl+'</text>';
+  });
+  el.innerHTML='<svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="السيولة اليومية">'+g+bars+'</svg>'+
+    '<div style="display:flex;gap:16px;font-size:12px;color:var(--muted);padding:4px 2px"><span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#3fb68b;margin-inline-end:5px"></span>داخل (إيداع/ربح)</span><span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#e2574a;margin-inline-end:5px"></span>خارج (سحب/خسارة)</span></div>';
+}
+function shortUsd(n){n=Number(n)||0;if(n>=1e6)return '$'+(n/1e6).toFixed(1)+'M';if(n>=1e3)return '$'+(n/1e3).toFixed(1)+'k';return '$'+n.toFixed(0);}
 /* ---- platform commission (trading-fee revenue) ---- */
 function comSrc(s){return ({spot:'سبوت',futures:'عقود',trade:'تداول',withdraw:'سحب'})[s]||esc(s||'تداول');}
 async function loadCommission(){
@@ -1351,7 +1445,7 @@ function renderFinance(){
     rows.map(r=>'<tr><td class="u-name">'+esc(r.userName||'-')+'</td><td class="u-mail">'+esc(r.userEmail||'-')+'</td><td>'+esc(txLabel(r.type))+'</td><td style="font-weight:800;direction:ltr;text-align:right;color:'+txColor(r.type)+'">'+txSign(r.type)+fmtAmt(r.amount)+' '+esc(r.currency||'USDT')+'</td><td style="color:var(--muted)">'+esc(r.counterparty||'-')+'</td><td style="color:var(--muted)">'+fmtTime(r.at)+'</td></tr>').join('')+'</tbody></table>';
 }
 /* ---- admin activity log ---- */
-function logLabel(a){return ({credit:'شحن رصيد',balance_adjust:'تعديل رصيد',notify:'إرسال إشعار',ban:'حظر حساب',unban:'رفع الحظر'})[a]||a;}
+function logLabel(a){return ({credit:'شحن رصيد',balance_adjust:'تعديل رصيد',notify:'إرسال إشعار',ban:'حظر حساب',unban:'رفع الحظر',ban_temp:'حظر مؤقّت',freeze:'تجميد رصيد',unfreeze:'فك تجميد'})[a]||a;}
 async function loadLogs(){
   try{const d=await api('/api/admin/logs');const logs=d.logs||[];
     if(!logs.length){$('logsTable').innerHTML='<div class="empty">لا توجد عمليات مسجّلة</div>';return;}

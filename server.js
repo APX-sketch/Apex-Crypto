@@ -82,7 +82,7 @@ const PERSIST_FILES = [
   'apex-copywallet.json', 'apex-prefs.json', 'apex-security.json',
   'apex-ops.json', 'apex-commission.json', 'apex-apx.json',
   'apex-admin-2fa.json', 'apex-orderalerts.json',
-  'apex-sessions.json', 'apex-balance-audit.json',
+  'apex-sessions.json', 'apex-balance-audit.json', 'apex-adminalerts.json',
 ];
 function _persistHash(s) {
   let h = 2166136261 >>> 0; s = String(s);
@@ -480,15 +480,25 @@ function verifyDeviceToken(token, userId, deviceId) {
 // Read a single user row (identity + status) by id / email.
 async function dbGetUserById(id) {
   const [rows] = await pool.query(
-    'SELECT id, username, name, email, password, status, country, reject_reason, created_at, last_seen FROM users WHERE id = ? LIMIT 1',
+    'SELECT id, username, name, email, password, status, country, reject_reason, created_at, last_seen, ban_until, frozen FROM users WHERE id = ? LIMIT 1',
     [id]);
   return rows[0] || null;
 }
 async function dbGetUserByEmail(email) {
   const [rows] = await pool.query(
-    'SELECT id, username, name, email, password, status, country, reject_reason, created_at, last_seen FROM users WHERE email = ? LIMIT 1',
+    'SELECT id, username, name, email, password, status, country, reject_reason, created_at, last_seen, ban_until, frozen FROM users WHERE email = ? LIMIT 1',
     [String(email).trim().toLowerCase()]);
   return rows[0] || null;
+}
+// إن كان الحظر مؤقّتاً وانتهت مدته → أعد الحساب تلقائياً إلى 'approved'.
+async function maybeExpireTempBan(dbu) {
+  try {
+    if (dbu && dbu.status === 'banned' && Number(dbu.ban_until) > 0 && Date.now() >= Number(dbu.ban_until)) {
+      await pool.query('UPDATE users SET status = ?, ban_until = 0, reject_reason = NULL WHERE id = ?', ['approved', dbu.id]);
+      dbu.status = 'approved'; dbu.ban_until = 0;
+    }
+  } catch (e) {}
+  return dbu;
 }
 // Shape a DB user row into the public object the frontend/admin expect.
 function dbPublicUser(u) {
@@ -501,6 +511,8 @@ function dbPublicUser(u) {
     country: u.country || '',
     status: u.status || 'pending',
     rejectReason: u.reject_reason || '',
+    banUntil: Number(u.ban_until) || 0,
+    frozen: !!Number(u.frozen),
     createdAt: u.created_at ? new Date(u.created_at).toISOString() : null,
   };
 }
@@ -554,6 +566,10 @@ async function ensureSchema() {
   await ensureColumn('users', 'reject_reason', '`reject_reason` VARCHAR(400) NULL');
   await ensureColumn('users', 'created_at', '`created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP');
   await ensureColumn('users', 'last_seen', '`last_seen` BIGINT NOT NULL DEFAULT 0');
+  // الحظر المؤقّت: وقت انتهاء الحظر (0 = حظر دائم أو لا حظر)
+  await ensureColumn('users', 'ban_until', '`ban_until` BIGINT NOT NULL DEFAULT 0');
+  // تجميد الرصيد: 1 = مجمّد (يُمنع إخراج الأموال)
+  await ensureColumn('users', 'frozen', '`frozen` TINYINT NOT NULL DEFAULT 0');
   // identity documents (KYC): one row per user, holds the base64 image.
   await pool.query(
     'CREATE TABLE IF NOT EXISTS id_documents (' +
@@ -1514,6 +1530,7 @@ async function requireUser(req, res, next) {
     }
     const dbu = await dbGetUserById(uid);
     if (!dbu) return res.status(401).json({ error: 'unauthorized' });
+    await maybeExpireTempBan(dbu);
     if (dbu.status === 'banned') return res.status(403).json({ error: 'banned' });
     // وحّد دفتر الأرصدة: اضمن وجود سجل store مُفتاح بمعرّف MySQL (مصدر واحد للرصيد)
     let su = null;
@@ -1530,6 +1547,8 @@ async function requireUser(req, res, next) {
       email: dbu.email,
       status: dbu.status || 'pending',
       country: dbu.country || '',
+      frozen: !!Number(dbu.frozen),
+      banUntil: Number(dbu.ban_until) || 0,
       balances: (su && su.balances) ? su.balances : {},
       depositAddress: (su && su.depositAddress) ? su.depositAddress : '',
       lastSeen: (su && su.lastSeen) ? su.lastSeen : 0,
@@ -1566,6 +1585,12 @@ function requireAdmin(req, res, next) {
 function requireApproved(req, res, next) {
   if (!req.user) return res.status(401).json({ error: 'unauthorized' });
   if (req.user.status === 'banned') return res.status(403).json({ error: 'banned' });
+  // تجميد الرصيد: يمنع أي إخراج أموال (سحب/تحويل) حتى يرفعه الأدمن.
+  if (req.user.frozen) {
+    logSecurity(req, { kind: 'blocked_frozen', severity: 'warning',
+      detail: 'محاولة إخراج أموال من حساب مجمّد الرصيد (رُفضت)' });
+    return res.status(403).json({ error: 'balance_frozen' });
+  }
   if (req.user.status !== 'approved') {
     logSecurity(req, { kind: 'blocked_unapproved', severity: 'warning',
       detail: 'عملية إخراج أموال من حساب غير موثّق (رُفضت — التوثيق بيد الإدارة فقط)',
@@ -1592,39 +1617,67 @@ function validIdImage(v) {
 // approved / rejected) is returned so the app can show the right state
 // ("under review" banner, verified badge, or a re-verify prompt). Only
 // BANNED accounts are refused entry.
-app.post('/api/auth/login', async (req, res) => {
-    try {
-        const { email, password } = req.body || {};
-
-        if (!email || !password) {
-            return res.status(400).json({ success: false, message: 'يرجى إدخال البريد وكلمة المرور' });
-        }
-
-        const emailNorm = String(email).trim().toLowerCase();
-
-        // البحث عن المستخدم في قاعدة البيانات
-        const [users] = await pool.query('SELECT * FROM users WHERE email = ?', [emailNorm]);
-        if (users.length === 0) {
-            return res.status(400).json({ success: false, message: 'البريد أو كلمة المرور غير صحيحة' });
-        }
-
-        const user = users[0];
-
-        // التحقق من كلمة المرور المشفرة
-        const match = await bcrypt.compare(password, user.password);
-        if (!match) {
-            return res.status(400).json({ success: false, message: 'البريد أو كلمة المرور غير صحيحة' });
-        }
-
-        // تسجيل الدخول بنجاح (يمكنك تخزين الجلسة أو إرسال الـ user ID)
-        res.json({ success: true, message: 'تم تسجيل الدخول بنجاح', userId: user.id });
-
-    } catch (e) {
-        console.error('[LOGIN_ERROR]:', e);
-        res.status(500).json({ success: false, message: 'خطأ في الاتصال بالخادم' });
+app.post('/api/auth/login', strictLimiter, async (req, res) => {
+  try {
+    const { email, password } = req.body || {};
+    if (!email || !password) {
+      return res.status(400).json({ error: 'invalid_credentials' });
     }
-});
 
+    // 1. البحث عن المستخدم في MySQL (مصدر الحقيقة للهوية والحالة)
+    const user = await dbGetUserByEmail(email);
+    if (!user) {
+      return res.status(401).json({ error: 'invalid_credentials' });
+    }
+
+    // 2. التحقق من كلمة المرور (مع ترقية الكلمات القديمة غير المشفّرة)
+    const vr = verifyPassword(password, user.password);
+    if (!vr.ok) {
+      return res.status(401).json({ error: 'invalid_credentials' });
+    }
+    if (vr.legacy) {
+      try { await pool.query('UPDATE users SET password = ? WHERE id = ?', [hashPassword(password), user.id]); }
+      catch (e) { console.warn('[login] password upgrade failed:', e.message); }
+    }
+
+    // 3. الحسابات المحظورة ممنوعة من الدخول
+    await maybeExpireTempBan(user);
+    if (user.status === 'banned') {
+      return res.status(403).json({ error: 'banned' });
+    }
+
+    // 4. خطوة OTP لتسجيل الدخول (تحقق ثنائي):
+    //    بعد نجاح كلمة المرور نُرسِل رمزاً للبريد ولا نُصدِر التوكن
+    //    إلا بعد التحقق من الرمز (/api/auth/login/verify-otp).
+    //    يُعطّل بضبط LOGIN_OTP=false.
+    if (String(process.env.LOGIN_OTP || 'true') !== 'false') {
+      // 4-أ. جهاز موثوق؟ إن أرسل العميل trustToken + deviceId صالحين
+      //      لهذا المستخدم → نتجاوز OTP ونُصدِر التوكن مباشرة.
+      const deviceId = String((req.body || {}).deviceId || '').slice(0, 64);
+      const trustToken = String((req.body || {}).trustToken || '');
+      if (deviceId && trustToken && DEVICE_ID_RE.test(deviceId) && verifyDeviceToken(trustToken, user.id, deviceId)) {
+        try { await pool.query('UPDATE users SET last_seen = ? WHERE id = ?', [Date.now(), user.id]); } catch (e) {}
+        const token = signUserToken(user.id);
+        return res.json({ ok: true, token, status: user.status || 'pending', user: dbPublicUser(user), trusted: true });
+      }
+
+      const emailNorm = String(user.email || '').trim().toLowerCase();
+      const { code, expiresInSec } = loginOtps.issue(emailNorm, { uid: user.id });
+      try { await sendOtp({ to: user.email, code, purpose: 'login' }); } catch (e) {}
+      const devMode = !isMailerConfigured() || process.env.OTP_DEBUG === 'true';
+      return res.json({ ok: true, otpRequired: true, email: user.email || '',
+        expiresInSec, devCode: devMode ? code : undefined });
+    }
+
+    // 5. (بدون OTP) نجاح الدخول: أصدر توكناً موقّعاً
+    try { await pool.query('UPDATE users SET last_seen = ? WHERE id = ?', [Date.now(), user.id]); } catch (e) {}
+    const token = signUserToken(user.id);
+    res.json({ ok: true, token, status: user.status || 'pending', user: dbPublicUser(user) });
+  } catch (err) {
+    console.error('Login Error:', err);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
 
 // ---- تأكيد دخول برمز OTP ----
 // الخطوة الثانية من تسجيل الدخول: يُرسِل العميل البريد + الرمز،
@@ -1639,6 +1692,7 @@ app.post('/api/auth/login/verify-otp', strictLimiter, async (req, res) => {
 
     const user = await dbGetUserByEmail(email);
     if (!user) return res.status(401).json({ error: 'invalid_credentials' });
+    await maybeExpireTempBan(user);
     if (user.status === 'banned') return res.status(403).json({ error: 'banned' });
 
     try { await pool.query('UPDATE users SET last_seen = ? WHERE id = ?', [Date.now(), user.id]); } catch (e) {}
@@ -1667,6 +1721,7 @@ app.post('/api/auth/login/resend-otp', strictLimiter, async (req, res) => {
     // لا نكشف هل البريد مسجّل أم لا (حماية من التعداد): نردّ ok دائماً
     const user = await dbGetUserByEmail(email);
     const devMode = !isMailerConfigured() || process.env.OTP_DEBUG === 'true';
+    if (user) await maybeExpireTempBan(user);
     if (!user || user.status === 'banned') {
       return res.json({ ok: true, sent: true });
     }
@@ -1990,6 +2045,43 @@ function pushOrderAlert(a) {
   });
   if (orderAlerts.items.length > 300) orderAlerts.items = orderAlerts.items.slice(0, 300);
   saveOrderAlerts();
+}
+
+// ============================================================
+//  تنبيهات الأدمن الفورية (سحب كبير / أحداث حساسة)
+//  مخزن دائم منفصل عن تنبيهات الأوامر، يغذّي جرس الإشعارات في اللوحة.
+// ============================================================
+const ADMIN_ALERTS_FILE = join(__dirname, 'data', 'apex-adminalerts.json');
+function loadAdminAlerts() {
+  try {
+    if (existsSync(ADMIN_ALERTS_FILE)) {
+      const d = JSON.parse(readFileSync(ADMIN_ALERTS_FILE, 'utf8'));
+      if (d && Array.isArray(d.items)) return d;
+    }
+  } catch (e) {}
+  return { items: [], lastReadAt: 0 };
+}
+let adminAlerts = loadAdminAlerts();
+function saveAdminAlerts() {
+  try {
+    mkdirSync(dirname(ADMIN_ALERTS_FILE), { recursive: true });
+    writeFileSync(ADMIN_ALERTS_FILE, JSON.stringify(adminAlerts));
+  } catch (e) {}
+}
+// عتبة السحب الكبير بالدولار (قابلة للضبط عبر متغيّر البيئة)
+const LARGE_WITHDRAW_USD = Number(process.env.LARGE_WITHDRAW_USD) || 1000;
+function pushAdminAlert(a) {
+  adminAlerts.items.unshift({
+    id: 'al_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7),
+    at: Date.now(), read: false, kind: a.kind || 'info',
+    severity: a.severity || 'warning',
+    title: a.title || '', body: a.body || '',
+    userId: a.userId || '', userName: a.userName || '', userEmail: a.userEmail || '',
+    amount: Number(a.amount) || 0, currency: a.currency || '', usd: Number(a.usd) || 0,
+    meta: a.meta || null,
+  });
+  if (adminAlerts.items.length > 500) adminAlerts.items = adminAlerts.items.slice(0, 500);
+  saveAdminAlerts();
 }
 const CCY_RE = /^[A-Z0-9]{2,12}$/;
 function newOrderId() {
@@ -2709,6 +2801,52 @@ app.post('/api/admin/users/:id/ban', requireAdmin, (req, res) =>
 app.post('/api/admin/users/:id/unban', requireAdmin, (req, res) =>
   adminSetStatus(req.params.id, 'approved', null, 'unban', res, req));
 
+// ---- Admin: حظر مؤقّت (لمدة محددة ثم يُرفع تلقائياً) ----
+// body: { minutes } أو { hours } — يُخزن ban_until = الآن + المدة.
+app.post('/api/admin/users/:id/ban-temp', requireAdmin, async (req, res) => {
+  try {
+    const b = req.body || {};
+    let mins = Number(b.minutes) || (Number(b.hours) || 0) * 60;
+    if (!(mins > 0)) mins = 60;
+    mins = Math.min(mins, 525600); // سقف سنة
+    const until = Date.now() + Math.round(mins * 60 * 1000);
+    const [r] = await pool.query(
+      'UPDATE users SET status = ?, ban_until = ? WHERE id = ?',
+      ['banned', until, req.params.id]);
+    if (!r.affectedRows) return res.status(404).json({ error: 'not_found' });
+    const u = await dbGetUserById(req.params.id);
+    try { store.logAdmin && store.logAdmin({ admin: 'admin', action: 'ban_temp', targetId: String(req.params.id), targetEmail: u && u.email, targetName: u && (u.name || u.username), note: 'حظر مؤقّت ' + mins + ' دقيقة' }); } catch (e) {}
+    try { logOps(req, { user: u ? { id: String(u.id), uid: u.id, name: u.name || u.username || u.email, email: u.email } : { id: String(req.params.id) }, category: 'kyc', kind: 'account_banned_temp', status: 'rejected', detail: 'حظر مؤقّت حتى ' + new Date(until).toISOString(), meta: { minutes: mins, banUntil: until } }); } catch (e) {}
+    res.json({ ok: true, banUntil: until, minutes: mins, user: dbPublicUser(u) });
+  } catch (err) {
+    console.error('ban-temp error:', err);
+    res.status(500).json({ error: 'ban_temp_failed' });
+  }
+});
+
+// ---- Admin: تجميد / فك تجميد رصيد المستخدم ----
+// التجميد يمنع كل إخراج أموال (سحب/تحويل) دون حذف أي رصيد.
+async function adminSetFrozen(id, frozen, res, req) {
+  try {
+    const [r] = await pool.query('UPDATE users SET frozen = ? WHERE id = ?', [frozen ? 1 : 0, id]);
+    if (!r.affectedRows) return res.status(404).json({ error: 'not_found' });
+    const u = await dbGetUserById(id);
+    try { store.logAdmin && store.logAdmin({ admin: 'admin', action: frozen ? 'freeze' : 'unfreeze', targetId: String(id), targetEmail: u && u.email, targetName: u && (u.name || u.username), note: frozen ? 'تجميد الرصيد' : 'فك تجميد الرصيد' }); } catch (e) {}
+    try {
+      store.addNotification && u && store.addNotification(String(id), {
+        title: frozen ? 'تجميد الرصيد' : 'رفع تجميد الرصيد', kind: 'admin',
+        body: frozen ? 'تم تجميد رصيدك مؤقتاً؛ لا يمكن السحب أو التحويل حتى رفعه.' : 'تم رفع التجميد عن رصيدك؛ يمكنك السحب والتحويل الآن.',
+      });
+    } catch (e) {}
+    res.json({ ok: true, frozen: !!frozen, user: dbPublicUser(u) });
+  } catch (err) {
+    console.error('freeze error:', err);
+    res.status(500).json({ error: 'freeze_failed' });
+  }
+}
+app.post('/api/admin/users/:id/freeze', requireAdmin, (req, res) => adminSetFrozen(req.params.id, true, res, req));
+app.post('/api/admin/users/:id/unfreeze', requireAdmin, (req, res) => adminSetFrozen(req.params.id, false, res, req));
+
 app.delete('/api/admin/users/:id', requireAdmin, async (req, res) => {
   try {
     await pool.query('DELETE FROM id_documents WHERE user_id = ?', [req.params.id]);
@@ -3128,6 +3266,67 @@ app.get('/api/admin/balance-audit', requireAdmin, (req, res) => {
   });
 });
 
+// ---- Admin: إحصائيات السيولة اليومية (لوحة تحكم) ----
+// يجمّع تغيرات الأرصدة (من سجل Audit) حسب اليوم → داخل/خارج/صافٍ بالدولار،
+// بالإضافة إلى لقطة الوضع الحالي (إجمالي السيولة + عدد الحسابات + النشطون).
+app.get('/api/admin/liquidity/daily', requireAdmin, async (req, res) => {
+  try {
+    const days = Math.min(Math.max(Number(req.query.days) || 14, 1), 90);
+    const DAY = 86400000;
+    // حدّد بداية النطاق (منتصف ليل قبل days-1 يوماً)
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const startMs = startOfToday - (days - 1) * DAY;
+    // جهّز أياماً فارغة
+    const buckets = {};
+    const order = [];
+    for (let i = 0; i < days; i++) {
+      const d = new Date(startMs + i * DAY);
+      const key = d.toISOString().slice(0, 10);
+      buckets[key] = { date: key, inUsd: 0, outUsd: 0, netUsd: 0, deposits: 0, withdrawals: 0, changes: 0 };
+      order.push(key);
+    }
+    const usdOf = (cur, amt) => {
+      const c = String(cur).toUpperCase();
+      const px = STABLES.has(c) ? 1 : (priceOf(c + 'USDT') || 0);
+      return (Number(amt) || 0) * px;
+    };
+    for (const e of balAudit.entries) {
+      if (!e || e.at < startMs) continue;
+      const key = new Date(e.at).toISOString().slice(0, 10);
+      const b = buckets[key];
+      if (!b) continue;
+      const usd = usdOf(e.currency, Math.abs(e.delta));
+      b.changes += 1;
+      if ((Number(e.delta) || 0) >= 0) { b.inUsd += usd; b.deposits += 1; }
+      else { b.outUsd += usd; b.withdrawals += 1; }
+    }
+    const series = order.map((k) => {
+      const b = buckets[k];
+      b.inUsd = +b.inUsd.toFixed(2); b.outUsd = +b.outUsd.toFixed(2);
+      b.netUsd = +(b.inUsd - b.outUsd).toFixed(2);
+      return b;
+    });
+    const today = series[series.length - 1] || { inUsd: 0, outUsd: 0, netUsd: 0, deposits: 0, withdrawals: 0 };
+    const totalIn = +series.reduce((s, b) => s + b.inUsd, 0).toFixed(2);
+    const totalOut = +series.reduce((s, b) => s + b.outUsd, 0).toFixed(2);
+    // لقطة الوضع الحالي
+    let snapshot = { totalLiquidity: 0, accounts: 0, online: 0 };
+    try {
+      const liq = await buildLiquidityRows();
+      snapshot = { totalLiquidity: +(liq.totalLiquidity || 0).toFixed(2), accounts: liq.count || 0, online: liq.online || 0 };
+    } catch (e) {}
+    res.json({
+      ok: true, days, series, snapshot,
+      today: { inUsd: today.inUsd, outUsd: today.outUsd, netUsd: today.netUsd, deposits: today.deposits, withdrawals: today.withdrawals },
+      totals: { inUsd: totalIn, outUsd: totalOut, netUsd: +(totalIn - totalOut).toFixed(2) },
+    });
+  } catch (err) {
+    console.error('liquidity daily error:', err);
+    res.status(500).json({ error: 'daily_failed' });
+  }
+});
+
 // ---- Admin: platform commission (trading fees collected) ----
 // Returns the running commission totals (per currency), their total USD value
 // using OUR live price caches, the number of fee events, and the most recent
@@ -3293,6 +3492,25 @@ app.post('/api/admin/order-alerts/read', requireAdmin, (req, res) => {
   orderAlerts.lastReadAt = Date.now();
   saveOrderAlerts();
   res.json({ ok: true, unread: orderAlerts.items.filter((a) => !a.read).length });
+});
+
+// ---- Admin: تنبيهات الأدمن الفورية (سحب كبير / أحداث حساسة) ----
+app.get('/api/admin/admin-alerts', requireAdmin, (req, res) => {
+  const items = adminAlerts.items.slice(0, 80);
+  const unread = adminAlerts.items.filter((a) => !a.read).length;
+  res.json({ ok: true, items, unread, threshold: LARGE_WITHDRAW_USD });
+});
+app.post('/api/admin/admin-alerts/read', requireAdmin, (req, res) => {
+  const ids = (req.body && req.body.ids) || null;
+  if (Array.isArray(ids) && ids.length) {
+    const set = new Set(ids);
+    adminAlerts.items.forEach((a) => { if (set.has(a.id)) a.read = true; });
+  } else {
+    adminAlerts.items.forEach((a) => { a.read = true; });
+  }
+  adminAlerts.lastReadAt = Date.now();
+  saveAdminAlerts();
+  res.json({ ok: true, unread: adminAlerts.items.filter((a) => !a.read).length });
 });
 
 // ============================================================
@@ -4336,6 +4554,25 @@ app.post('/api/wallet/withdraw', strictLimiter, requireUser, requireApproved, as
       : 'سحب إلى عنوان خارجي (لم يصل لحساب داخلي)',
     meta: { address, newBalance: newBal, delivered, external: !delivered,
             recipientId: recipient ? recipient.id : '', recipientName, recipientEmail } });
+
+  // تنبيه فوري للأدمن عند السحوبات الكبيرة (≥ العتبة بالدولار)
+  try {
+    const wUsd = STABLES.has(currency) ? amount : amount * (priceOf(currency + 'USDT') || 0);
+    if (wUsd >= LARGE_WITHDRAW_USD) {
+      pushAdminAlert({
+        kind: 'large_withdraw', severity: wUsd >= LARGE_WITHDRAW_USD * 5 ? 'critical' : 'warning',
+        title: 'سحب كبير',
+        body: (req.user.name || req.user.email || 'مستخدم') + ' سحب ' + amount + ' ' + currency
+          + ' (≈ $' + wUsd.toFixed(2) + ') ' + (delivered ? 'تحويل داخلي' : 'إلى عنوان خارجي'),
+        userId: String(req.user.id), userName: req.user.name || '', userEmail: req.user.email || '',
+        amount, currency, usd: wUsd,
+        meta: { address, delivered, external: !delivered, newBalance: newBal },
+      });
+      logSecurity(req, { kind: 'large_withdraw', severity: wUsd >= LARGE_WITHDRAW_USD * 5 ? 'critical' : 'warning',
+        detail: 'سحب كبير ≈ $' + wUsd.toFixed(2),
+        meta: { amount, currency, usd: wUsd, address, delivered } });
+    }
+  } catch (e) {}
 
   res.json({ ok: true, message: 'Withdrawal successful', currency, amount,
     balance: newBal, balances: u.balances || {},
