@@ -270,6 +270,7 @@ body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);col
       <span class="eye" onclick="toggleEye()"><svg viewBox="0 0 24 24"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></span></div>
     <div class="big" id="ovBig">$0.00 <small>USDT</small></div>
     <div class="ovloc" id="ovLoc">≈ 0.00 USDT</div>
+    <div id="ovFrozen" style="display:none;margin-top:10px;background:rgba(246,70,93,.14);border:1px solid rgba(246,70,93,.5);color:#f6465d;font-weight:900;font-size:13px;padding:9px 12px;border-radius:12px">⛔ الرصيد مجمّد</div>
   </div>
   <!-- today's PnL + mini chart -->
   <div class="todaypnl">
@@ -308,6 +309,7 @@ body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);col
     <span class="eye" id="eye" onclick="toggleEye()"><svg viewBox="0 0 24 24"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></span></div>
   <div class="big" id="heroBig">$0.00</div>
   <div class="pnl" id="heroPnl"><span class="cur">24h PnL</span> <span id="pnlVal">+0.00 (0.00%)</span></div>
+  <div id="heroFrozen" style="display:none;margin:12px 0 0;background:rgba(246,70,93,.14);border:1px solid rgba(246,70,93,.5);color:#f6465d;font-weight:900;font-size:13px;padding:9px 12px;border-radius:12px">⛔ الرصيد مجمّد — لا يمكن تنفيذ عمليات الإيداع أو السحب أو التحويل أو التداول</div>
 </div>
 <!-- ACTION CIRCLES -->
 <div class="acts">
@@ -535,6 +537,20 @@ if('Notification' in window&&Notification.permission==='default')$('permbar').st
    شحن الإدارة والتحويلات تُحدّث الرصيد على السيرفر، وهذه الصفحة تسحبه دورياً
    وتعكسه محلياً، كما ترسل نبضة نشاط لإظهار حالة "نشط" أثناء التصفّح. */
 var TOK=SESS.token||localStorage.getItem('apex_token')||'';
+/* ===== حالة التجميد (مفروضة خادميّاً — هذه مجرد واجهة تعكسها) ===== */
+var FROZEN=false, FREEZE_UNTIL=null;
+function freezeMsg(){return FREEZE_UNTIL?('⛔ الرصيد مجمّد حتى '+fmtFreezeUntil(FREEZE_UNTIL)):'⛔ الرصيد مجمّد';}
+function fmtFreezeUntil(ts){try{var d=new Date(Number(ts));if(isNaN(d.getTime()))return '';var p=function(n){return(n<10?'0':'')+n;};return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes());}catch(e){return '';}}
+function applyFrozen(fu){FROZEN=!!fu;FREEZE_UNTIL=(fu&&fu.freezeUntil)?fu.freezeUntil:null;renderFrozen();}
+async function loadFrozen(){if(!TOK)return;try{var r=await fetch('/api/auth/me',{headers:{'Authorization':'Bearer '+TOK}});if(!r.ok)return;var d=await r.json();var u=d.user||{};applyFrozen(!!u.frozen);if(u.frozen){FREEZE_UNTIL=u.freezeUntil||null;renderFrozen();}}catch(e){}}
+function renderFrozen(){
+  var msg=freezeMsg();
+  var a=$('ovFrozen'),b=$('heroFrozen');
+  if(a){a.style.display=FROZEN?'block':'none';a.textContent=msg;}
+  if(b){b.style.display=FROZEN?'block':'none';b.textContent=msg+' — لا يمكن تنفيذ عمليات الإيداع أو السحب أو التحويل أو التداول';}
+  document.querySelectorAll('.acts .act').forEach(function(el){el.style.opacity=FROZEN?'0.45':'';el.style.pointerEvents=FROZEN?'none':'';});
+}
+function frozenGuard(msg){if(FROZEN){toast(msg||(freezeMsg()+' — لا يمكن تنفيذ العملية'));return true;}return false;}
 function saveWallet(){try{localStorage.setItem(WKEY,JSON.stringify(wallet));}catch(e){}}
 function mirrorBalances(b){if(!b)return;for(var k in wallet){wallet[k]=0;}for(var k2 in b){wallet[String(k2).toUpperCase()]=Number(b[k2])||0;}injectApx();saveWallet();renderBalances();}
 async function pullWallet(){if(!TOK)return;try{var r=await fetch('/api/wallet/me',{headers:{'Authorization':'Bearer '+TOK}});if(!r.ok)return;var d=await r.json();mirrorBalances(d.balances||{});}catch(e){}}
@@ -655,6 +671,7 @@ function renderSpark(){
   p.setAttribute('d',d);p.setAttribute('stroke',up?'#0ecb81':'#f6465d');
 }
 function renderOverview(){
+  if(typeof renderFrozen==='function')renderFrozen();
   var s=spotTotal(),f=futTotal(),total=s+f;
   if($('ovBig'))$('ovBig').innerHTML=mask('$'+fmt(total,2))+' <small>USDT</small>';
   if($('ovLoc'))$('ovLoc').textContent=mask('≈ '+fmt(total,2)+' USDT');
@@ -734,6 +751,7 @@ window.xferSwap=xferSwap;
 function xferMax(){var c=$('xCur').value||'USDT';$('xAmt').value=(+srcBal()[c]||0);}
 window.xferMax=xferMax;
 async function doTransfer(){
+  if(frozenGuard())return;
   if(!TOK){toast('يرجى تسجيل الدخول أولاً');return;}
   var c=($('xCur').value||'').toUpperCase();var amt=parseFloat($('xAmt').value);
   if(!c){toast('اختر العملة');return;}
@@ -744,7 +762,7 @@ async function doTransfer(){
   try{
     var r=await fetch('/api/wallet/transfer-internal',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOK},body:JSON.stringify({from:from,to:to,currency:c,amount:amt})});
     var d=await r.json().catch(function(){return{};});
-    if(!r.ok){toast(d.error||'تعذر التحويل');go.disabled=false;return;}
+    if(!r.ok){if(d.error==='balance_frozen'){applyFrozen(true);if(d.freezeUntil)FREEZE_UNTIL=d.freezeUntil;renderFrozen();toast(freezeMsg()+' — لا يمكن تنفيذ العملية');go.disabled=false;return;}toast(d.error||'تعذر التحويل');go.disabled=false;return;}
     if(d.balances)mirrorBalances(d.balances);
     if(d.futures){var m={};for(var k in d.futures){m[String(k).toUpperCase()]=Number(d.futures[k])||0;}FUT.bal=m;}
     $('xAmt').value='';renderOverview();renderFutures();openXfer();
@@ -758,6 +776,7 @@ window.doTransfer=doTransfer;
 var _origToggleEye=toggleEye;
 window.toggleEye=toggleEye=function(){_origToggleEye();renderOverview();renderFutures();};
 if(TOK){fetchFutures();setInterval(fetchFutures,8000);}
+if(TOK){loadFrozen();setInterval(loadFrozen,15000);}
 setInterval(function(){renderOverview();if($('view-futures').classList.contains('on'))renderFutures();},5000);
 try{var _av=new URLSearchParams(location.search).get('acc')||(location.hash||'').replace('#','');
   if(_av==='futures'||_av==='spot'||_av==='funding'||_av==='overview')switchAccView(_av);}catch(e){}

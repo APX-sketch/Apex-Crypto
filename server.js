@@ -83,6 +83,7 @@ const PERSIST_FILES = [
   'apex-ops.json', 'apex-commission.json', 'apex-apx.json',
   'apex-admin-2fa.json', 'apex-orderalerts.json',
   'apex-sessions.json', 'apex-balance-audit.json', 'apex-adminalerts.json',
+  'apex-freeze-log.json',
 ];
 function _persistHash(s) {
   let h = 2166136261 >>> 0; s = String(s);
@@ -871,6 +872,57 @@ function logBalanceDiff(userId, before, after, source, su) {
 // حفظ دوري (كل 5ث) لتجنّب كثرة الكتابة عند تداول كثيف.
 setInterval(() => { if (_balAuditDirty) saveBalanceAudit(); }, 5000).unref?.();
 
+// ============================================================
+// سجل عمليات التجميد/فك التجميد (Freeze Log) — خاص بمراقبة تجميد الرصيد
+// يُحفظ في ملفّ مستقلّ (ضمن PERSIST_FILES) فيبقى بعد إعادة النشر.
+// كل عملية تجميد/فك تجميد (يدوية من الأدمن أو تلقائية بانتهاء المدة) تُسجَّل هنا.
+// ============================================================
+const FREEZE_LOG_FILE = join(__dirname, 'data', 'apex-freeze-log.json');
+function loadFreezeLog() {
+  try {
+    if (existsSync(FREEZE_LOG_FILE)) {
+      const d = JSON.parse(readFileSync(FREEZE_LOG_FILE, 'utf8'));
+      return { count: Number(d.count) || 0, entries: Array.isArray(d.entries) ? d.entries : [] };
+    }
+  } catch (e) { /* ignore corrupt / missing */ }
+  return { count: 0, entries: [] };
+}
+const freezeLog = loadFreezeLog();
+let _freezeLogDirty = false;
+function saveFreezeLog() {
+  try {
+    mkdirSync(dirname(FREEZE_LOG_FILE), { recursive: true });
+    writeFileSync(FREEZE_LOG_FILE, JSON.stringify(freezeLog));
+    _freezeLogDirty = false;
+  } catch (e) { console.warn('[freeze-log] save failed:', e.message); }
+}
+const FREEZE_ACTION_LABEL = {
+  freeze: 'تجميد الرصيد', unfreeze: 'فكّ تجميد الرصيد', auto_unfreeze: 'رفع تلقائي (انتهت المدة)',
+};
+// سجّل عملية تجميد/فك تجميد في السجل المخصّص (يُحفظ دورياً).
+function logFreezeEvent({ userId, email, name, action, permanent = false, freezeUntil = 0, by = 'admin', note = '' }) {
+  try {
+    freezeLog.entries.unshift({
+      id: 'FZ' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+      at: Date.now(),
+      userId: String(userId),
+      email: email || '',
+      name: name || '',
+      action: String(action || ''),
+      actionLabel: FREEZE_ACTION_LABEL[action] || String(action || ''),
+      permanent: !!permanent,
+      freezeUntil: Number(freezeUntil) || 0,
+      by: String(by || 'admin'),
+      note: String(note || '').slice(0, 300),
+    });
+    freezeLog.count += 1;
+    if (freezeLog.entries.length > 3000) freezeLog.entries.length = 3000;
+    _freezeLogDirty = true;
+    saveFreezeLog();
+  } catch (e) { /* non-fatal */ }
+}
+setInterval(() => { if (_freezeLogDirty) saveFreezeLog(); }, 5000).unref?.();
+
 // ---- Futures wallet (SEPARATE from the Spot balance) ----
 // Money safety: the futures wallet is a server-authoritative store, kept in its
 // own JSON file, exactly like the commission ledger. Spot balances live inside
@@ -1501,6 +1553,7 @@ app.get('/api/wallet/:userId', requireUser, (req, res, next) => {
 
 // Demo helper to simulate a real buy (holding with a real cost basis).
 app.post('/api/wallet/:userId/buy', strictLimiter, requireUser, (req, res) => {
+  if (rejectIfFrozen(req, res, 'شراء/تداول')) return;
   // SESSION ISOLATION: force the authenticated user's own id; ignore the param.
   const userId = String(req.user.id);
   const { symbol, amount, unitCost } = req.body || {};
@@ -1593,6 +1646,30 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+// ---------------------------------------------------------------------------
+// بوابة تجميد الرصيد (خادميّة 100% — لا يمكن تجاوزها من المتصفح)
+// ---------------------------------------------------------------------------
+// حالة التجميد تُقرأ حصراً من قاعدة البيانات (عمودا frozen / freeze_until)،
+// ولا يستطيع تغييرها إلا مسارات الأدمن المحميّة بـ requireAdmin. أي محاولة
+// لتعديل الرصيد (إيداع/سحب/تحويل/تداول) من حساب مجمّد تُرفض من السيرفر نفسه.
+// تُعيد true إن كان الحساب مجمّداً (وتكون قد أرسلت الردّ) وإلا false للمتابعة.
+function rejectIfFrozen(req, res, actionLabel) {
+  if (!req.user) { res.status(401).json({ error: 'unauthorized' }); return true; }
+  if (!req.user.frozen) return false;
+  const fu = Number(req.user.freezeUntil) || 0;
+  if (fu > 0 && Date.now() >= fu) {
+    // انتهت مدة التجميد المؤقّت → ارفعه تلقائياً (خادميّاً) وامضِ في العملية.
+    try { pool.query('UPDATE users SET frozen = 0, freeze_until = 0 WHERE id = ?', [req.user.uid]); } catch (e) {}
+    req.user.frozen = false; req.user.freezeUntil = 0;
+    try { logFreezeEvent({ userId: req.user.uid, email: req.user.email, name: req.user.name, action: 'auto_unfreeze', permanent: false, freezeUntil: 0, note: 'انتهت مدة التجميد المؤقّت — رُفع تلقائياً' }); } catch (e) {}
+    return false;
+  }
+  try { logSecurity(req, { kind: 'blocked_frozen', severity: 'warning',
+    detail: 'محاولة ' + (actionLabel || 'عملية على الرصيد') + ' من حساب مجمّد الرصيد (رُفضت خادميّاً)' }); } catch (e) {}
+  res.status(403).json({ error: 'balance_frozen', freezeUntil: fu || 0 });
+  return true;
+}
+
 // Approval gate: money-OUT operations (withdraw / transfer to another account)
 // require an account that the ADMIN has verified (status === 'approved').
 // Verification is admin-only; a pending/rejected account can browse and trade
@@ -1601,18 +1678,7 @@ function requireApproved(req, res, next) {
   if (!req.user) return res.status(401).json({ error: 'unauthorized' });
   if (req.user.status === 'banned') return res.status(403).json({ error: 'banned' });
   // تجميد الرصيد: يمنع أي إخراج أموال (سحب/تحويل) حتى يرفعه الأدمن أو تنتهي المدة.
-  if (req.user.frozen) {
-    const fu = Number(req.user.freezeUntil) || 0;
-    if (fu > 0 && Date.now() >= fu) {
-      // انتهت مدة التجميد المؤقّت → ارفعه تلقائياً وامضِ في العملية.
-      try { pool.query('UPDATE users SET frozen = 0, freeze_until = 0 WHERE id = ?', [req.user.uid]); } catch (e) {}
-      req.user.frozen = false; req.user.freezeUntil = 0;
-    } else {
-      logSecurity(req, { kind: 'blocked_frozen', severity: 'warning',
-        detail: 'محاولة إخراج أموال من حساب مجمّد الرصيد (رُفضت)' });
-      return res.status(403).json({ error: 'balance_frozen', freezeUntil: fu || 0 });
-    }
-  }
+  if (rejectIfFrozen(req, res, 'إخراج أموال')) return;
   if (req.user.status !== 'approved') {
     logSecurity(req, { kind: 'blocked_unapproved', severity: 'warning',
       detail: 'عملية إخراج أموال من حساب غير موثّق (رُفضت — التوثيق بيد الإدارة فقط)',
@@ -1954,6 +2020,7 @@ app.post('/api/wallet/sync', requireUser, (req, res) => {
 // 400 if any balance would go negative. This keeps balances consistent with
 // admin credits that may have arrived concurrently (they are preserved).
 app.post('/api/wallet/apply', requireUser, (req, res) => {
+  if (rejectIfFrozen(req, res, 'تعديل رصيد/تداول')) return;
   const deltas = (req.body || {}).deltas || {};
   const chk = inspectDeltas(deltas);
   if (chk.bad.length) {
@@ -2152,6 +2219,7 @@ function availableBalance(userId, ccy, locked) {
 // created from nothing. type='tpsl' is a conditional SELL watched by the
 // matching loop and triggered by tp (take-profit) / sl (stop-loss).
 app.post('/api/orders', requireUser, (req, res) => {
+  if (rejectIfFrozen(req, res, 'وضع أمر تداول')) return;
   const b = req.body || {};
   const sym = String(b.sym || '').toUpperCase();
   const base = String(b.base || '').toUpperCase();
@@ -2405,6 +2473,7 @@ app.get('/api/wallet/futures', requireUser, (req, res) => {
 // result below zero (money can never be created); rejected over-draws are
 // logged to the security log just like the spot path.
 app.post('/api/wallet/futures/apply', requireUser, (req, res) => {
+  if (rejectIfFrozen(req, res, 'تعديل رصيد العقود')) return;
   const deltas = (req.body || {}).deltas || {};
   const chk = inspectDeltas(deltas);
   if (chk.bad.length) {
@@ -2435,6 +2504,7 @@ app.get('/api/wallet/transactions', requireUser, (req, res) => {
 // stays inside ONE user's own wallet, so no money crosses between accounts.
 const CONVERT_CUR = /^[A-Z0-9]{2,12}$/;
 app.post('/api/wallet/convert', strictLimiter, requireUser, (req, res) => {
+  if (rejectIfFrozen(req, res, 'تحويل عملة (Convert)')) return;
   const body = req.body || {};
   const from = String(body.from || '').toUpperCase();
   const to = String(body.to || '').toUpperCase();
@@ -2493,6 +2563,7 @@ app.post('/api/wallet/convert', strictLimiter, requireUser, (req, res) => {
 // fails for any reason we roll the debit back, so no balance is ever created
 // and nothing is lost. Every rejected over-draw is logged to the security log.
 app.post('/api/wallet/transfer-internal', strictLimiter, requireUser, (req, res) => {
+  if (rejectIfFrozen(req, res, 'تحويل داخلي')) return;
   const body = req.body || {};
   const from = String(body.from || '').toLowerCase();
   const to = String(body.to || '').toLowerCase();
@@ -2880,7 +2951,45 @@ async function adminSetFrozen(id, frozen, res, req) {
           : 'تم رفع التجميد عن رصيدك؛ يمكنك السحب والتحويل الآن.',
       });
     } catch (e) {}
-    try { logOps(req, { user: u ? { id: String(u.id), uid: u.id, name: u.name || u.username || u.email, email: u.email } : { id: String(id) }, category: 'kyc', kind: frozen ? 'balance_frozen' : 'balance_unfrozen', status: 'ok', detail: (frozen ? 'تجميد الرصيد' : 'رفع تجميد الرصيد') + durTxt, meta: { frozen: !!frozen, freezeUntil: until } }); } catch (e) {}
+    // ---- سجل مخصّص لعمليات التجميد/فك التجميد (مراقبة الأدمن) ----
+    try {
+      logFreezeEvent({
+        userId: id,
+        email: u && u.email,
+        name: u && (u.name || u.username),
+        action: frozen ? 'freeze' : 'unfreeze',
+        permanent: frozen && !until,
+        freezeUntil: until,
+        by: 'admin',
+        note: (frozen ? 'تجميد الرصيد' : 'فكّ تجميد الرصيد') + durTxt,
+      });
+    } catch (e) {}
+    // ---- إشعار بريد إلكتروني للمستخدم عند تجميد حسابه/رفع التجميد ----
+    try {
+      if (u && u.email) {
+        const untilTxt = until ? new Date(until).toLocaleString('ar') : '';
+        const subject = frozen ? '❄ إشعار: تم تجميد رصيد حسابك — Apex'
+                              : '✅ إشعار: تم رفع التجميد عن رصيد حسابك — Apex';
+        const html = frozen
+          ? ('<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;line-height:1.9">'
+            + '<h2 style="color:#e0a615">تم تجميد رصيد حسابك</h2>'
+            + '<p>مرحباً ' + ((u.name || u.username || '') + '') + '</p>'
+            + '<p>تم تجميد الرصيد في حسابك' + (until ? (' <b>مؤقتاً حتى ' + untilTxt + '</b>') : ' <b>دائماً</b>') + '.</p>'
+            + '<p>خلال فترة التجميد <b>لا يمكن تنفيذ أي عملية على الرصيد</b> (إيداع أو سحب أو تحويل أو تداول).</p>'
+            + (until ? '<p>سيُرفع التجميد تلقائياً عند انتهاء المدة.</p>' : '<p>يمكن رفع التجميد من إدارة المنصة فقط.</p>')
+            + '<p>إن لم تكن تعلم بسبب التجميد، تواصل مع الدعم.</p>'
+            + '<p style="color:#8a94a3;font-size:12px">فريق Apex</p></div>')
+          : ('<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;line-height:1.9">'
+            + '<h2 style="color:#0ecb81">تم رفع التجميد عن رصيد حسابك</h2>'
+            + '<p>مرحباً ' + ((u.name || u.username || '') + '') + '</p>'
+            + '<p>يمكنك الآن تنفيذ كل العمليات على رصيدك (إيداع، سحب، تحويل، تداول).</p>'
+            + '<p style="color:#8a94a3;font-size:12px">فريق Apex</p></div>');
+        const text = frozen
+          ? ('تم تجميد رصيد حسابك' + (until ? (' مؤقتاً حتى ' + untilTxt) : ' دائماً') + '. لا يمكن تنفيذ أي عملية على الرصيد خلال هذه الفترة.')
+          : 'تم رفع التجميد عن رصيد حسابك؛ يمكنك الآن تنفيذ كل العمليات.';
+        sendMail({ to: u.email, subject, text, html }).catch(() => {});
+      }
+    } catch (e) {}
     res.json({ ok: true, frozen: !!frozen, freezeUntil: until, user: dbPublicUser(u) });
   } catch (err) {
     console.error('freeze error:', err);
@@ -3089,6 +3198,12 @@ app.get('/api/admin/money-flow', requireAdmin, (req, res) => {
 // ---- Admin: activity log (credits / balance edits / bans / notifications) ----
 app.get('/api/admin/logs', requireAdmin, (req, res) => {
   res.json({ ok: true, logs: store.getAdminLogs() });
+});
+// ---- Admin: سجل عمليات التجميد/فك التجميد المخصّص ----
+// يرجّع آخر عمليات التجميد ورفع التجميد (تنازلياً). ?limit=N (افتراضي 200)
+app.get('/api/admin/freeze-log', requireAdmin, (req, res) => {
+  const limit = Math.max(1, Math.min(2000, Number(req.query.limit) || 200));
+  res.json({ ok: true, count: freezeLog.count, entries: (freezeLog.entries || []).slice(0, limit) });
 });
 // ---- Admin: SECURITY log (balance-tampering / money-safety attempts) ----
 // Returns the money-safety audit trail plus a quick summary (counts by

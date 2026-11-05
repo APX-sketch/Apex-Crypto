@@ -371,6 +371,7 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
   </div>
   <div class="amt" id="balAmt">--</div>
   <div class="sub" id="balSub">≈ <span id="balUsd">--</span> USD</div>
+  <div id="balFrozen" style="display:none;margin-top:10px;background:rgba(246,70,93,.14);border:1px solid rgba(246,70,93,.5);color:#f6465d;font-weight:900;font-size:13px;padding:8px 12px;border-radius:12px">⛔ الرصيد مجمّد</div>
 </div>
 
 <!-- ===== ACTIONS ===== -->
@@ -1127,7 +1128,16 @@ async function fetchKyc(){
     if(!r.ok)return;
     var d=await r.json();var st=d&&d.user&&d.user.status;
     if(st)handleKyc(st);
+    var u=(d&&d.user)||{};
+    window.APEX_FROZEN=!!u.frozen;window.APEX_FREEZE_UNTIL=u.freezeUntil||null;
+    renderFrozenBanner();
   }catch(e){}
+}
+function fmtFreezeUntil(ts){try{var d=new Date(Number(ts));if(isNaN(d.getTime()))return '';var p=function(n){return(n<10?'0':'')+n;};return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes());}catch(e){return '';}}
+function renderFrozenBanner(){
+  var el=document.getElementById('balFrozen');if(!el)return;
+  if(window.APEX_FROZEN){el.style.display='block';el.textContent='⛔ الرصيد مجمّد'+(window.APEX_FREEZE_UNTIL?(' حتى '+fmtFreezeUntil(window.APEX_FREEZE_UNTIL)):'');}
+  else el.style.display='none';
 }
 function initKycStatus(){
   var cached=localStorage.getItem('apex_kyc_status');
@@ -1218,7 +1228,7 @@ async function scanSend(){
       var er=(d&&d.error)||'';
       var msg=er==='account_not_approved'?'حسابك قيد المراجعة — السحب متاح بعد توثيق الإدارة':
               (er==='insufficient_balance'?'الرصيد غير كافٍ':
-              (er==='balance_frozen'?'رصيدك مجمّد مؤقتاً — تواصل مع الإدارة':
+              (er==='balance_frozen'?'⛔ الرصيد مجمّد — لا يمكن تنفيذ السحب':
               (er==='banned'?'الحساب محظور':'تعذّر الإرسال')));
       toast(msg);
     }

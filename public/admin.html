@@ -442,6 +442,13 @@ tr:last-child td{border-bottom:0}
           </div>
           <div id="logsTable"></div>
         </div>
+        <div class="card" style="margin-top:16px">
+          <div class="card-h"><b>سجل عمليات التجميد / فك التجميد</b>
+            <div class="sp"></div>
+            <button class="btn ghost sm" onclick="loadFreezeLog()">تحديث ↻</button>
+          </div>
+          <div id="freezeLogTable"></div>
+        </div>
       </div>
       <!-- SECURITY (balance-tampering / money-safety attempts) -->
       <div class="page" id="pg-security">
@@ -935,7 +942,7 @@ function nav(pg){
   if(pg==='apx')axLoad();
   if(pg==='commission')loadCommission();
   if(pg==='finance')loadFinance();
-  if(pg==='logs')loadLogs();
+  if(pg==='logs'){loadLogs();loadFreezeLog();}
   if(pg==='backup')loadBackups();
   if(pg==='security')loadSecurity();
   if(pg==='support')loadChats();
@@ -1466,7 +1473,16 @@ async function loadLogs(){
   }catch(e){}
 }
 
-/* ---- سجل الأمان: محاولات التلاعب بالرصيد ---- */
+/* ---- سجل التجميد / فك التجميد ---- */
+function freezeActionLabel(a){return ({freeze:'تجميد الرصيد',unfreeze:'فك التجميد',freeze_temp:'تجميد مؤقّت',auto_unfreeze:'فك تلقائي (انتهاء المدة)'})[a]||esc(a||'-');}
+function freezeActionPill(a){var on=(a==='freeze'||a==='freeze_temp');return (on?'<span class="pill banned">':'<span class="pill approved">')+freezeActionLabel(a)+'</span>';}
+async function loadFreezeLog(){
+  try{const d=await api('/api/admin/freeze-log');const rows=d.entries||[];
+    if(!rows.length){$('freezeLogTable').innerHTML='<div class="empty">لا توجد عمليات تجميد مسجّلة</div>';return;}
+    $('freezeLogTable').innerHTML='<table><thead><tr><th>العملية</th><th>الحساب</th><th>بواسطة</th><th>حتى</th><th>ملاحظة</th><th>التاريخ</th></tr></thead><tbody>'+
+      rows.map(function(l){return '<tr><td>'+freezeActionPill(l.action)+'</td><td class="u-mail">'+esc(l.name||l.email||l.userId||'-')+'</td><td class="u-name">'+esc(l.by||l.admin||'admin')+'</td><td style="color:var(--muted);direction:ltr;text-align:right">'+(l.freezeUntil?fmtTime(l.freezeUntil):'-')+'</td><td style="color:var(--muted)">'+esc(l.note||'-')+'</td><td style="color:var(--muted)">'+fmtTime(l.at)+'</td></tr>';}).join('')+'</tbody></table>';
+  }catch(e){$('freezeLogTable').innerHTML='<div class="empty">تعذّر تحميل السجل</div>';}
+}
 var SEC_FILTER='';
 /* ترجمة نوع الحدث إلى وصف عربي مختصر */
 function secKind(k){return ({below_zero_apply:'خصم يتجاوز الرصيد (محفظة)',below_zero_market:'أمر سوق يتجاوز الرصيد',below_zero_transfer:'تحويل يتجاوز الرصيد',order_fill_below_zero:'فشل تنفيذ أمر معلّق (رصيد)',invalid_delta:'قيم تعديل غير صالحة',symbol_mismatch:'زوج غير متطابق',oversize_order:'أمر بقيمة ضخمة',bad_fee:'رسوم مزيفة'})[k]||esc(k||'-');}
