@@ -757,6 +757,16 @@ async function ensureSchema() {
     ' PRIMARY KEY (post_id, user_id),' +
     ' INDEX idx_vw_post (post_id)' +
     ')');
+  // الوسوم (Hashtags) — صف لكل (منشور، وسم) لتصنيف وفلترة المنشورات
+  await pool.query(
+    'CREATE TABLE IF NOT EXISTS square_tags (' +
+    ' post_id INT NOT NULL,' +
+    ' tag VARCHAR(80) NOT NULL,' +
+    ' created_at BIGINT NOT NULL DEFAULT 0,' +
+    ' PRIMARY KEY (post_id, tag),' +
+    ' INDEX idx_tag (tag),' +
+    ' INDEX idx_tag_created (tag, created_at)' +
+    ')');
   // ===== تقييمات ومراجعات المتداولين (نظام الثقة) — صف واحد لكل (متداول، مُقيِّم) =====
   await pool.query(
     'CREATE TABLE IF NOT EXISTS copy_reviews (' +
@@ -4235,6 +4245,38 @@ async function copyFanout(tradeId, copierFilter, amountOverride) {
 // ============================================================
 //  SQUARE (الأخبار والمنشورات — مخزّنة على السيرفر ليراها الجميع)
 // ============================================================
+// استخراج الوسوم (#hashtag) من نص المنشور — يدعم العربية واللاتينية
+function extractHashtags(text) {
+  const out = [];
+  const seen = {};
+  const re = /#([0-9A-Za-z_\u0600-\u06FF]{1,50})/g;
+  let m;
+  while ((m = re.exec(String(text || ''))) !== null) {
+    const t = m[1].toLowerCase();
+    if (!seen[t]) { seen[t] = 1; out.push(t); }
+    if (out.length >= 10) break;
+  }
+  return out;
+}
+// تنبيه لحظي لصاحب المنشور عند التفاعل معه (إعجاب / تعليق / إعادة نشر)
+async function notifyPostOwner(pid, actorUid, actorName, action, snippet) {
+  try {
+    const [[p]] = await pool.query('SELECT user_id, content FROM square_posts WHERE id = ?', [pid]);
+    if (!p) return;
+    if (Number(p.user_id) === Number(actorUid)) return; // لا تُنبّه نفسك
+    const titles = {
+      like:    '\u2764\ufe0f ' + actorName + ' أعجبه منشورك',
+      comment: '\ud83d\udcac ' + actorName + ' علّق على منشورك',
+      repost:  '\ud83d\udd01 ' + actorName + ' أعاد نشر منشورك',
+    };
+    const body = snippet || (String(p.content || '').slice(0, 70));
+    store.addNotification(String(p.user_id), {
+      title: titles[action] || (actorName + ' تفاعل مع منشورك'),
+      kind: 'social',
+      body,
+    });
+  } catch (e) { console.warn('[square/notify-interact]', e.message); }
+}
 app.get('/api/square/posts', requireUser, async (req, res) => {
   try {
     const me = req.user.uid;
@@ -4246,6 +4288,8 @@ app.get('/api/square/posts', requireUser, async (req, res) => {
     if (q) { where += ' AND (p.content LIKE ? OR p.author LIKE ?)'; params.push('%' + q + '%', '%' + q + '%'); }
     const symbol = String(req.query.symbol || '').trim().toUpperCase().slice(0, 20);
     if (symbol) { where += ' AND p.symbol = ?'; params.push(symbol); }
+    const htag = String(req.query.tag || '').trim().toLowerCase().slice(0, 80);
+    if (htag) { where += ' AND p.id IN (SELECT post_id FROM square_tags WHERE tag = ?)'; params.push(htag); }
     let order = 'p.created_at DESC';
     if (filter === 'hot') order = 'likes DESC, p.created_at DESC';
     const [rows] = await pool.query(
@@ -4276,6 +4320,16 @@ app.post('/api/square/posts', requireUser, async (req, res) => {
     const [r] = await pool.query(
       'INSERT INTO square_posts (user_id, author, content, image, tag, symbol, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
       [req.user.uid, author, content, image || null, tag, symbol, Date.now()]);
+    // ---- تخزين الوسوم (#hashtags) لتصنيف المنشور وفلترته ----
+    try {
+      const hts = extractHashtags(content);
+      if (hts.length) {
+        const now = Date.now();
+        await pool.query(
+          'INSERT IGNORE INTO square_tags (post_id, tag, created_at) VALUES ' + hts.map(() => '(?, ?, ?)').join(', '),
+          hts.reduce((acc, t) => acc.concat([r.insertId, t, now]), []));
+      }
+    } catch (e) { console.warn('[square/tags]', e.message); }
     // ---- تنبيه لحظي للمتابعين (الناسخين) عند نشر صاحبهم خبراً جديداً (للمنشورات العامة فقط) ----
     if (!symbol) try {
       const [followers] = await pool.query('SELECT copier_id FROM copy_relations WHERE trader_id = ?', [req.user.uid]);
@@ -4302,6 +4356,7 @@ app.post('/api/square/posts/:id/like', requireUser, async (req, res) => {
     if (ex) await pool.query('DELETE FROM square_likes WHERE post_id = ? AND user_id = ?', [pid, req.user.uid]);
     else await pool.query('INSERT IGNORE INTO square_likes (post_id, user_id) VALUES (?, ?)', [pid, req.user.uid]);
     const [[c]] = await pool.query('SELECT COUNT(*) AS n FROM square_likes WHERE post_id = ?', [pid]);
+    if (!ex) { try { await notifyPostOwner(pid, req.user.uid, (req.user.name || req.user.username || req.user.email), 'like', ''); } catch (e) {} }
     res.json({ ok: true, liked: !ex, likes: c.n });
   } catch (e) { console.error('[square/like]', e.message); res.status(500).json({ error: 'server_error' }); }
 });
@@ -4315,6 +4370,7 @@ app.post('/api/square/posts/:id/repost', requireUser, async (req, res) => {
     if (ex) await pool.query('DELETE FROM square_reposts WHERE post_id = ? AND user_id = ?', [pid, req.user.uid]);
     else await pool.query('INSERT IGNORE INTO square_reposts (post_id, user_id, created_at) VALUES (?, ?, ?)', [pid, req.user.uid, Date.now()]);
     const [[c]] = await pool.query('SELECT COUNT(*) AS n FROM square_reposts WHERE post_id = ?', [pid]);
+    if (!ex) { try { await notifyPostOwner(pid, req.user.uid, (req.user.name || req.user.username || req.user.email), 'repost', ''); } catch (e) {} }
     res.json({ ok: true, reposted: !ex, reposts: c.n });
   } catch (e) { console.error('[square/repost]', e.message); res.status(500).json({ error: 'server_error' }); }
 });
@@ -4343,6 +4399,49 @@ app.get('/api/square/posts/:id/stats', requireUser, async (req, res) => {
   } catch (e) { console.error('[square/stats]', e.message); res.status(500).json({ error: 'server_error' }); }
 });
 
+// ---- الوسوم الرائجة (Trending hashtags) ----
+app.get('/api/square/hashtags/trending', requireUser, async (req, res) => {
+  try {
+    const lim = Math.min(30, Math.max(1, Number(req.query.limit) || 12));
+    const [rows] = await pool.query(
+      'SELECT t.tag, COUNT(*) AS n FROM square_tags t ' +
+      'GROUP BY t.tag ORDER BY n DESC, MAX(t.created_at) DESC LIMIT ' + lim);
+    res.json({ ok: true, tags: rows });
+  } catch (e) { console.error('[square/trending]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+// ---- لوحة إحصائيات المنشورات العامة (نظرة شاملة) ----
+app.get('/api/square/stats/overview', requireUser, async (req, res) => {
+  try {
+    const [[t]]  = await pool.query('SELECT COUNT(*) AS n FROM square_posts');
+    const [[lk]] = await pool.query('SELECT COUNT(*) AS n FROM square_likes');
+    const [[cm]] = await pool.query('SELECT COUNT(*) AS n FROM square_comments');
+    const [[rp]] = await pool.query('SELECT COUNT(*) AS n FROM square_reposts');
+    const [[vw]] = await pool.query('SELECT COUNT(*) AS n FROM square_views');
+    const [top] = await pool.query(
+      'SELECT p.id, p.author, p.content, p.created_at, ' +
+      ' (SELECT COUNT(*) FROM square_likes l WHERE l.post_id = p.id) AS likes, ' +
+      ' (SELECT COUNT(*) FROM square_comments c WHERE c.post_id = p.id) AS comments, ' +
+      ' (SELECT COUNT(*) FROM square_reposts r WHERE r.post_id = p.id) AS reposts, ' +
+      ' (SELECT COUNT(*) FROM square_views v WHERE v.post_id = p.id) AS views ' +
+      'FROM square_posts p ORDER BY (' +
+      ' (SELECT COUNT(*) FROM square_likes l WHERE l.post_id = p.id) + ' +
+      ' (SELECT COUNT(*) FROM square_comments c WHERE c.post_id = p.id) * 2 + ' +
+      ' (SELECT COUNT(*) FROM square_reposts r WHERE r.post_id = p.id) * 3' +
+      ') DESC, p.created_at DESC LIMIT 6');
+    const [authors] = await pool.query('SELECT author, COUNT(*) AS posts FROM square_posts GROUP BY author ORDER BY posts DESC LIMIT 6');
+    const [tags] = await pool.query('SELECT tag, COUNT(*) AS n FROM square_tags GROUP BY tag ORDER BY n DESC LIMIT 10');
+    const days = 14; const now = Date.now(); const dayMs = 86400000;
+    const [recent] = await pool.query('SELECT created_at FROM square_posts WHERE created_at >= ?', [now - days * dayMs]);
+    const daily = new Array(days).fill(0);
+    for (const row of recent) {
+      const idx = Math.floor((now - Number(row.created_at)) / dayMs);
+      if (idx >= 0 && idx < days) daily[days - 1 - idx]++;
+    }
+    res.json({ ok: true, totals: { posts: t.n, likes: lk.n, comments: cm.n, reposts: rp.n, views: vw.n }, top, authors, tags, daily });
+  } catch (e) { console.error('[square/overview]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
 app.get('/api/square/posts/:id/comments', requireUser, async (req, res) => {
   try {
     const pid = Number(req.params.id);
@@ -4358,6 +4457,7 @@ app.post('/api/square/posts/:id/comments', requireUser, async (req, res) => {
     if (!pid || !content) return res.status(400).json({ error: 'empty' });
     const author = req.user.name || req.user.username || req.user.email;
     const [r] = await pool.query('INSERT INTO square_comments (post_id, user_id, author, content, created_at) VALUES (?, ?, ?, ?, ?)', [pid, req.user.uid, author, content, Date.now()]);
+    try { await notifyPostOwner(pid, req.user.uid, author, 'comment', content.slice(0, 70)); } catch (e) {}
     res.json({ ok: true, id: r.insertId });
   } catch (e) { console.error('[square/comment]', e.message); res.status(500).json({ error: 'server_error' }); }
 });

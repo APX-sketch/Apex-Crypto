@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<script>
+(function(){try{var s=JSON.parse(localStorage.getItem('skygo_session')||'null');if(!s||!s.email){location.replace('login.html?next=square-stats.html');}}catch(e){location.replace('login.html');}})();
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Apex — إحصائيات Square</title>
+<style>
+:root{--bg:#0b0e11;--panel:#141920;--panel2:#1c232c;--border:#252d38;--txt:#eef2f6;--muted:#8a94a3;--gold1:#f8d979;--gold2:#e0a615;--green:#0ecb81;--red:#f6465d;--blue:#2f83fb}
+html[data-theme=light]{--bg:#f6f8fb;--panel:#ffffff;--panel2:#eef1f6;--border:#e2e7ef;--txt:#0d1421;--muted:#6b7686}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);color:var(--txt);max-width:480px;margin:0 auto;padding-bottom:40px;min-height:100vh}
+.hdr{display:flex;align-items:center;gap:10px;padding:calc(12px + env(safe-area-inset-top)) 14px 10px;background:linear-gradient(135deg,#1b1f24,#0f1216);position:sticky;top:0;z-index:20;border-bottom:1px solid var(--border)}
+html[data-theme=light] .hdr{background:linear-gradient(135deg,#fff,#eef1f6)}
+.hdr .back{width:36px;height:36px;border-radius:11px;background:var(--panel2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--txt);text-decoration:none}
+.hdr .back svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2}
+.hdr .ttl{font-size:17px;font-weight:900}
+.hdr .ttl b{background:linear-gradient(90deg,var(--gold1),var(--gold2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.wrap{padding:14px}
+.kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:8px}
+.kpi{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:13px 14px}
+.kpi .k{font-size:11.5px;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.kpi .v{font-size:23px;font-weight:900;letter-spacing:.3px}
+.kpi.g .v{color:var(--gold2)}.kpi.r .v{color:var(--red)}.kpi.gr .v{color:var(--green)}.kpi.b .v{color:var(--blue)}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:14px;margin-top:14px}
+.card h3{font-size:14px;font-weight:900;margin-bottom:12px;display:flex;align-items:center;gap:7px}
+.chart{width:100%;height:150px;display:block}
+.cbar{fill:var(--gold2)}
+.cgrid{stroke:var(--border);stroke-width:1}
+.clbl{fill:var(--muted);font-size:9px;font-family:inherit}
+.toprow{display:flex;gap:11px;padding:11px 0;border-bottom:1px solid var(--border)}
+.toprow:last-child{border-bottom:0}
+.toprow .rank{flex:0 0 auto;width:26px;height:26px;border-radius:8px;background:var(--panel2);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px;color:var(--gold2)}
+.toprow .tc{flex:1;min-width:0}
+.toprow .tc .tt{font-size:13px;line-height:1.5;color:var(--txt);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.toprow .tc .ta{font-size:11px;color:var(--muted);margin-top:3px}
+.toprow .tm{flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-size:10.5px;color:var(--muted);font-weight:700}
+.toprow .tm b{font-size:15px;color:var(--gold2);font-weight:900}
+.arow{display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid var(--border)}
+.arow:last-child{border-bottom:0}
+.arow .av{width:36px;height:36px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-weight:900;color:#fff}
+.arow .an{flex:1;font-size:13.5px;font-weight:700}
+.arow .ab{flex:0 0 auto;font-size:12px;color:var(--muted);font-weight:800}
+.arow .track{flex:0 0 120px;height:7px;border-radius:999px;background:var(--panel2);overflow:hidden}
+.arow .fill{height:100%;background:linear-gradient(90deg,var(--gold1),var(--gold2))}
+.tags{display:flex;flex-wrap:wrap;gap:8px}
+.tag{padding:7px 13px;border-radius:999px;background:var(--panel2);border:1px solid var(--border);color:var(--blue);font-size:12.5px;font-weight:800;text-decoration:none}
+.tag b{color:var(--muted);font-weight:700;margin-right:5px;font-size:11px}
+.empty{color:var(--muted);text-align:center;padding:26px 10px;font-size:13px}
+.load{color:var(--muted);text-align:center;padding:40px 10px;font-size:13px}
+</style>
+</head>
+<body>
+<div class="hdr">
+  <a class="back" href="square.html" aria-label="رجوع"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></a>
+  <div class="ttl">إحصائيات <b>Square</b></div>
+</div>
+<div class="wrap" id="wrap"><div class="load">...جارٍ تحميل الإحصائيات</div></div>
+<script>
+var $=function(id){return document.getElementById(id);};
+var SESS=JSON.parse(localStorage.getItem('skygo_session')||'{}');
+var TOKEN=SESS.token||localStorage.getItem('apex_token')||'';
+function api(path){return fetch(path,{headers:{'Authorization':'Bearer '+TOKEN}}).then(function(r){return r.json().catch(function(){return{};}).then(function(j){if(!r.ok)throw (j&&j.error)||('http_'+r.status);return j;});});}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function fmtNum(n){n=+n||0;if(n>=1e6)return (n/1e6).toFixed(n>=1e7?0:1).replace(/\.0$/,'')+'M';if(n>=1e3)return (n/1e3).toFixed(n>=1e4?0:1).replace(/\.0$/,'')+'K';return ''+n;}
+var AVC=['#e0a615','#2f83fb','#e256c9','#0ecb81','#f6465d','#7c3aed','#ff7a45','#11b5c9'];
+function avColor(s){s=String(s||'?');var h=0;for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return AVC[h%AVC.length];}
+function kpi(cls,label,val){return '<div class="kpi '+cls+'"><div class="k">'+label+'</div><div class="v">'+fmtNum(val)+'</div></div>';}
+function barChart(data){data=data||[];var n=data.length||1;var W=448,H=150,pad=18,bw=(W-pad*2)/n;var mx=Math.max.apply(null,data.concat([1]));var bars='';for(var i=0;i<data.length;i++){var h=Math.max(2,Math.round((data[i]/mx)*(H-34)));var x=pad+i*bw+bw*0.18,w=bw*0.64,y=H-20-h;bars+='<rect class="cbar" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+w.toFixed(1)+'" height="'+h+'" rx="3"></rect>';if(data[i]>0)bars+='<text class="clbl" x="'+(x+w/2).toFixed(1)+'" y="'+(y-4).toFixed(1)+'" text-anchor="middle">'+data[i]+'</text>';}var axis='<text class="clbl" x="'+pad+'" y="'+(H-6)+'">قبل 14 يوماً</text><text class="clbl" x="'+(W-pad)+'" y="'+(H-6)+'" text-anchor="end">اليوم</text>';return '<svg class="chart" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none"><line class="cgrid" x1="'+pad+'" y1="'+(H-20)+'" x2="'+(W-pad)+'" y2="'+(H-20)+'"></line>'+bars+axis+'</svg>';}
+function render(d){var t=d.totals||{};var html='';
+html+='<div class="kpis">'+kpi('','📝 المنشورات',t.posts)+kpi('b','👁️ المشاهدات',t.views)+'</div>';
+html+='<div class="kpis">'+kpi('r','❤️ الإعجابات',t.likes)+kpi('','💬 التعليقات',t.comments)+'</div>';
+html+='<div class="kpis"><div class="kpi gr" style="grid-column:1 / -1"><div class="k">🔁 إعادات النشر</div><div class="v">'+fmtNum(t.reposts)+'</div></div></div>';
+html+='<div class="card"><h3>📈 النشاط اليومي (آخر 14 يوماً)</h3>'+barChart(d.daily)+'</div>';
+var top=d.top||[];html+='<div class="card"><h3>🔥 أكثر المنشورات تفاعلاً</h3>';
+if(!top.length)html+='<div class="empty">لا منشورات بعد</div>';
+else top.forEach(function(p,i){var score=(+p.likes||0)+(+p.comments||0)+(+p.reposts||0);html+='<div class="toprow"><div class="rank">'+(i+1)+'</div><div class="tc"><div class="tt">'+esc((p.content||'').slice(0,120)||'📷 صورة')+'</div><div class="ta">'+esc(p.author)+'</div></div><div class="tm"><b>'+fmtNum(score)+'</b><span>❤ '+fmtNum(p.likes)+' · 💬 '+fmtNum(p.comments)+'</span><span>🔁 '+fmtNum(p.reposts)+' · 👁 '+fmtNum(p.views)+'</span></div></div>';});
+html+='</div>';
+var authors=d.authors||[];var amax=authors.length?(+authors[0].posts||1):1;html+='<div class="card"><h3>🏆 أكثر الناشرين نشاطاً</h3>';
+if(!authors.length)html+='<div class="empty">لا بيانات</div>';
+else authors.forEach(function(a){var nm=a.author||'?';html+='<div class="arow"><div class="av" style="background:'+avColor(nm)+'">'+esc(nm.charAt(0).toUpperCase())+'</div><div class="an">'+esc(nm)+'</div><div class="track"><div class="fill" style="width:'+Math.round((+a.posts/amax)*100)+'%"></div></div><div class="ab">'+fmtNum(a.posts)+'</div></div>';});
+html+='</div>';
+var tags=d.tags||[];html+='<div class="card"><h3>#️⃣ الوسوم الرائجة</h3>';
+if(!tags.length)html+='<div class="empty">لا وسوم بعد — أضف #وسم في منشوراتك</div>';
+else html+='<div class="tags">'+tags.map(function(t){return '<a class="tag" href="square.html#tag='+encodeURIComponent(t.tag)+'">#'+esc(t.tag)+'<b>'+fmtNum(t.n)+'</b></a>';}).join('')+'</div>';
+html+='</div>';
+$('wrap').innerHTML=html;}
+api('/api/square/stats/overview').then(render).catch(function(){$('wrap').innerHTML='<div class="empty">⚠️ تعذّر تحميل الإحصائيات</div>';});
+</script>
+</body>
+</html>
