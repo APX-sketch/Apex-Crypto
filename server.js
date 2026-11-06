@@ -740,6 +740,23 @@ async function ensureSchema() {
     ')');
   // عمود رمز العملة لمنشورات Square — لربط النقاش بكل عملة على حدة (NULL = منشور عام)
   await ensureColumn('square_posts', 'symbol', '`symbol` VARCHAR(20) NULL');
+  // إعادة النشر (ريبوست) — صف لكل (منشور، مستخدم) ليُحسب العدد ويُعرف إن أعاد المستخدم نشره
+  await pool.query(
+    'CREATE TABLE IF NOT EXISTS square_reposts (' +
+    ' post_id INT NOT NULL,' +
+    ' user_id INT NOT NULL,' +
+    ' created_at BIGINT NOT NULL DEFAULT 0,' +
+    ' PRIMARY KEY (post_id, user_id),' +
+    ' INDEX idx_rp_post (post_id)' +
+    ')');
+  // المشاهدات (الإحصائيات) — صف فريد لكل (منشور، مستخدم) فتُحسب كل مشاهدة مرّة واحدة لكل مستخدم
+  await pool.query(
+    'CREATE TABLE IF NOT EXISTS square_views (' +
+    ' post_id INT NOT NULL,' +
+    ' user_id INT NOT NULL,' +
+    ' PRIMARY KEY (post_id, user_id),' +
+    ' INDEX idx_vw_post (post_id)' +
+    ')');
   // ===== تقييمات ومراجعات المتداولين (نظام الثقة) — صف واحد لكل (متداول، مُقيِّم) =====
   await pool.query(
     'CREATE TABLE IF NOT EXISTS copy_reviews (' +
@@ -4224,7 +4241,7 @@ app.get('/api/square/posts', requireUser, async (req, res) => {
     const filter = String(req.query.filter || 'new');
     const q = String(req.query.q || '').trim();
     let where = '1=1';
-    const params = [me];
+    const params = [me, me];
     if (filter === 'mine') { where = 'p.user_id = ?'; params.push(me); }
     if (q) { where += ' AND (p.content LIKE ? OR p.author LIKE ?)'; params.push('%' + q + '%', '%' + q + '%'); }
     const symbol = String(req.query.symbol || '').trim().toUpperCase().slice(0, 20);
@@ -4235,7 +4252,10 @@ app.get('/api/square/posts', requireUser, async (req, res) => {
       'SELECT p.id, p.user_id, p.author, p.content, p.image, p.tag, p.symbol, p.created_at, ' +
       ' (SELECT COUNT(*) FROM square_likes l WHERE l.post_id = p.id) AS likes, ' +
       ' (SELECT COUNT(*) FROM square_comments c WHERE c.post_id = p.id) AS comments, ' +
-      ' (SELECT COUNT(*) FROM square_likes l WHERE l.post_id = p.id AND l.user_id = ?) AS liked ' +
+      ' (SELECT COUNT(*) FROM square_likes l WHERE l.post_id = p.id AND l.user_id = ?) AS liked, ' +
+      ' (SELECT COUNT(*) FROM square_reposts r WHERE r.post_id = p.id AND r.user_id = ?) AS reposted, ' +
+      ' (SELECT COUNT(*) FROM square_reposts r WHERE r.post_id = p.id) AS reposts, ' +
+      ' (SELECT COUNT(*) FROM square_views v WHERE v.post_id = p.id) AS views ' +
       'FROM square_posts p WHERE ' + where + ' ORDER BY ' + order + ' LIMIT 200',
       params);
     res.json({ ok: true, posts: rows });
@@ -4284,6 +4304,43 @@ app.post('/api/square/posts/:id/like', requireUser, async (req, res) => {
     const [[c]] = await pool.query('SELECT COUNT(*) AS n FROM square_likes WHERE post_id = ?', [pid]);
     res.json({ ok: true, liked: !ex, likes: c.n });
   } catch (e) { console.error('[square/like]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+// ---- إعادة نشر (ريبوست) — تبديل (toggle) مثل الإعجاب ----
+app.post('/api/square/posts/:id/repost', requireUser, async (req, res) => {
+  try {
+    const pid = Number(req.params.id);
+    if (!pid) return res.status(400).json({ error: 'bad_id' });
+    const [[ex]] = await pool.query('SELECT 1 AS n FROM square_reposts WHERE post_id = ? AND user_id = ?', [pid, req.user.uid]);
+    if (ex) await pool.query('DELETE FROM square_reposts WHERE post_id = ? AND user_id = ?', [pid, req.user.uid]);
+    else await pool.query('INSERT IGNORE INTO square_reposts (post_id, user_id, created_at) VALUES (?, ?, ?)', [pid, req.user.uid, Date.now()]);
+    const [[c]] = await pool.query('SELECT COUNT(*) AS n FROM square_reposts WHERE post_id = ?', [pid]);
+    res.json({ ok: true, reposted: !ex, reposts: c.n });
+  } catch (e) { console.error('[square/repost]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+// ---- تسجيل مشاهدة (مرّة واحدة لكل مستخدم) — تغذّي عدّاد الإحصائيات ----
+app.post('/api/square/posts/:id/view', requireUser, async (req, res) => {
+  try {
+    const pid = Number(req.params.id);
+    if (!pid) return res.status(400).json({ error: 'bad_id' });
+    await pool.query('INSERT IGNORE INTO square_views (post_id, user_id) VALUES (?, ?)', [pid, req.user.uid]);
+    const [[c]] = await pool.query('SELECT COUNT(*) AS n FROM square_views WHERE post_id = ?', [pid]);
+    res.json({ ok: true, views: c.n });
+  } catch (e) { console.error('[square/view]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+// ---- إحصائيات منشور واحد (مشاهدات / إعجابات / تعليقات / إعادات نشر) ----
+app.get('/api/square/posts/:id/stats', requireUser, async (req, res) => {
+  try {
+    const pid = Number(req.params.id);
+    if (!pid) return res.status(400).json({ error: 'bad_id' });
+    const [[lk]] = await pool.query('SELECT COUNT(*) AS n FROM square_likes WHERE post_id = ?', [pid]);
+    const [[cm]] = await pool.query('SELECT COUNT(*) AS n FROM square_comments WHERE post_id = ?', [pid]);
+    const [[rp]] = await pool.query('SELECT COUNT(*) AS n FROM square_reposts WHERE post_id = ?', [pid]);
+    const [[vw]] = await pool.query('SELECT COUNT(*) AS n FROM square_views WHERE post_id = ?', [pid]);
+    res.json({ ok: true, stats: { likes: lk.n, comments: cm.n, reposts: rp.n, views: vw.n } });
+  } catch (e) { console.error('[square/stats]', e.message); res.status(500).json({ error: 'server_error' }); }
 });
 
 app.get('/api/square/posts/:id/comments', requireUser, async (req, res) => {
