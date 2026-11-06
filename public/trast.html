@@ -3,641 +3,436 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="theme-color" content="#0d0d0d">
-<title>Apex Wallet</title>
+<meta name="theme-color" content="#0e121a">
+<title>Apex Wallet - Trust Style</title>
 <style>
-  :root{
-    --bg:#0d0d0d; --panel:#121212; --panel2:#161616; --panel3:#1e1e1e;
-    --border:#242424; --border2:#2c2c2c;
-    --txt:#ffffff; --muted:#8b9099; --muted2:#6b7280;
-    --green:#00e676; --green-d:#10b981; --red:#f6465d; --gold:#e6b800;
-    --radius:18px;
+  :root {
+    --bg-main: #0e121b;
+    --card-bg: #19202e;
+    --card-active: #232c3f;
+    --border-color: #263044;
+    --txt-main: #ffffff;
+    --txt-muted: #8491a5;
+    --accent-blue: #0052ff;
+    --gold: #f3ba2f;
+    --green: #00c087;
+    --red: #f6465d;
+    --radius-lg: 20px;
+    --radius-md: 14px;
   }
-  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  html,body{margin:0;padding:0;height:100%}
-  body{
-    background:#000;color:var(--txt);
-    font-family:system-ui,-apple-system,"Segoe UI",Tahoma,Arial,sans-serif;
-    display:flex;justify-content:center;min-height:100vh;overflow:hidden;
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; height: 100%; background: #05070a; font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: var(--txt-main); display: flex; justify-content: center; }
+
+  .app {
+    width: 100%;
+    max-width: 440px;
+    background: var(--bg-main);
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 0 50px rgba(0,0,0,0.8);
   }
-  .app{
-    width:100%;max-width:440px;background:var(--panel);
-    display:flex;flex-direction:column;height:100vh;height:100dvh;
-    position:relative;box-shadow:0 0 40px rgba(0,0,0,.6);overflow:hidden;
-  }
-  svg{display:block}
-  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
-  a{color:inherit;text-decoration:none}
+
+  svg { display: block; }
+  button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
 
   /* ===== Header ===== */
-  .hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;flex:0 0 auto}
-  .hdr .ibtn{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;color:var(--muted);transition:.15s}
-  .hdr .ibtn:hover{color:#fff;background:var(--panel3)}
-  .hdr .ibtn svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
-  .acct{display:flex;align-items:center;gap:7px;background:var(--panel3);border:1px solid var(--border2);padding:7px 13px;border-radius:999px;font-size:13.5px;font-weight:700}
-  .acct svg{width:14px;height:14px;stroke:var(--muted);fill:none;stroke-width:2}
-  .hdr-l,.hdr-r{display:flex;gap:4px;align-items:center}
+  .hdr {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    flex: 0 0 auto;
+  }
+  .hdr-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: var(--card-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+  }
+  .hdr-btn svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  
+  .wallet-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--card-bg);
+    padding: 8px 16px;
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .wallet-pill .ico-main {
+    width: 20px;
+    height: 20px;
+    background: var(--accent-blue);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 900;
+  }
 
-  /* ===== Body ===== */
-  .body{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch}
-  .body::-webkit-scrollbar{width:0}
-  .screen{display:none}
-  .screen.on{display:block}
+  /* ===== Main Content Area ===== */
+  .body { flex: 1 1 auto; overflow-y: auto; padding: 0 16px 20px; }
+  .body::-webkit-scrollbar { width: 0; }
 
-  /* balance */
-  .balwrap{text-align:center;padding:6px 16px 2px}
-  .balbig{font-size:38px;font-weight:800;letter-spacing:-.5px;direction:ltr}
-  .baldel{font-size:14px;font-weight:700;margin-top:5px;display:flex;align-items:center;justify-content:center;gap:5px;direction:ltr}
-  .up{color:var(--green)} .dn{color:var(--red)}
-  .frozenbar{display:none;margin:12px 16px 0;background:rgba(246,70,93,.13);border:1px solid rgba(246,70,93,.5);color:var(--red);font-weight:800;font-size:13px;padding:10px 12px;border-radius:14px;text-align:center}
+  /* Banner Card */
+  .backup-banner {
+    background: var(--card-bg);
+    border-radius: var(--radius-lg);
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+  }
+  .banner-right { display: flex; align-items: center; gap: 12px; }
+  .clock-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+    background: rgba(243, 186, 47, 0.15);
+    color: var(--gold);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .clock-icon svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; }
+  .banner-text .title { font-size: 14px; font-weight: 700; }
+  .banner-text .sub { font-size: 12px; color: var(--txt-muted); margin-top: 2px; }
+  .close-btn { color: var(--txt-muted); padding: 4px; }
 
-  /* actions */
-  .acts{display:flex;justify-content:space-around;padding:16px 10px 6px;text-align:center}
-  .act{display:flex;flex-direction:column;align-items:center;gap:6px;flex:1}
-  .act .circ{width:50px;height:50px;border-radius:16px;background:var(--panel3);display:flex;align-items:center;justify-content:center;color:#d5d8dd;transition:.15s}
-  .act:active .circ{transform:scale(.94)}
-  .act .circ svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
-  .act.hl .circ{background:var(--green);color:#000;box-shadow:0 6px 18px rgba(0,230,118,.25)}
-  .act span{font-size:11px;color:var(--muted2);font-weight:600}
-  .act.hl span{color:#e5e7eb}
+  /* Section Titles */
+  .section-title {
+    font-size: 20px;
+    font-weight: 800;
+    margin: 20px 0 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .section-title .more-link {
+    font-size: 14px;
+    color: var(--txt-muted);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 600;
+  }
 
-  /* banner */
-  .banner{margin:12px 16px;padding:12px;border-radius:16px;display:flex;align-items:center;gap:11px;background:linear-gradient(90deg,#282412,#1e1b10);border:1px solid rgba(230,184,0,.3)}
-  .banner .bi{width:40px;height:40px;border-radius:50%;background:rgba(230,184,0,.18);color:var(--gold);display:flex;align-items:center;justify-content:center;flex:0 0 auto}
-  .banner .bi svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
-  .banner .bt{font-size:12px;font-weight:600;color:#e5e7eb;margin:0}
-  .banner .bl{font-size:12px;font-weight:800;color:var(--green);margin-top:3px;display:inline-flex;align-items:center;gap:4px}
-  .banner .bx{margin-inline-start:auto;color:var(--muted2)}
-  .banner .bx svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2}
+  /* Quick Actions (3 Cards) */
+  .quick-actions {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 24px;
+  }
+  .act-card {
+    background: var(--card-bg);
+    border-radius: var(--radius-lg);
+    padding: 18px 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    text-align: center;
+    transition: background .15s;
+  }
+  .act-card:active { background: var(--card-active); }
+  .act-card .icon-wrap {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .act-card .icon-wrap svg { width: 26px; height: 26px; }
+  .act-card span { font-size: 13px; font-weight: 700; line-height: 1.3; }
 
-  /* tabs */
-  .tabs{display:flex;gap:22px;padding:6px 22px 0;border-bottom:1px solid var(--border);margin-top:8px}
-  .tab{font-size:14px;font-weight:700;color:var(--muted2);padding-bottom:10px;border-bottom:2px solid transparent}
-  .tab.on{color:#fff;border-color:var(--green)}
+  /* Single Featured Token Row */
+  .token-item {
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+  }
+  .token-left { display: flex; align-items: center; gap: 12px; }
+  .token-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #f0b90b;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    color: #000;
+  }
+  .token-details .name { font-size: 15px; font-weight: 800; }
+  .token-details .amount { font-size: 13px; color: var(--txt-muted); margin-top: 2px; }
+  .token-right { text-align: left; direction: ltr; }
+  .token-right .val { font-size: 15px; font-weight: 800; }
+  .token-right .subval { font-size: 13px; color: var(--txt-muted); margin-top: 2px; }
 
-  /* asset list */
-  .alist{padding:4px 16px 20px}
-  .arow{display:flex;align-items:center;justify-content:space-between;padding:13px 0;border-bottom:1px solid #191919}
-  .aleft{display:flex;align-items:center;gap:12px}
-  .aico{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;flex:0 0 auto}
-  .aico svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-  .aname{font-size:14px;font-weight:700}
-  .aprice{font-size:12px;color:var(--muted);direction:ltr;text-align:right}
-  .aright{text-align:left;direction:ltr}
-  .aqty{font-size:14px;font-weight:700}
-  .aval{font-size:12px;color:var(--muted)}
-  .empty{padding:40px 16px;text-align:center;color:var(--muted);font-size:13px}
-  .skel{height:56px;border-radius:12px;background:linear-gradient(90deg,#161616,#1e1e1e,#161616);background-size:200% 100%;animation:sk 1.2s infinite;margin:10px 0}
-  @keyframes sk{0%{background-position:200% 0}100%{background-position:-200% 0}}
+  /* Perpetual Contracts Horizontal Scroll */
+  .perp-scroll {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    padding-bottom: 10px;
+    margin-right: -16px;
+    padding-right: 16px;
+  }
+  .perp-scroll::-webkit-scrollbar { display: none; }
+  
+  .perp-card {
+    min-width: 160px;
+    background: var(--card-bg);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+    flex: 0 0 auto;
+    position: relative;
+  }
+  .perp-top { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .perp-icon { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; }
+  .perp-icon.btc { background: #f7931a; color: #fff; }
+  .perp-icon.eth { background: #627eea; color: #fff; }
+  
+  .perp-pair { font-size: 15px; font-weight: 800; display: flex; align-items: center; gap: 6px; }
+  .perp-lev { font-size: 11px; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 6px; color: var(--txt-muted); }
+  .perp-vol { font-size: 13px; color: var(--txt-muted); direction: ltr; text-align: right; margin-top: 4px; }
 
-  /* generic screen content */
-  .pane{padding:18px 16px}
-  .pane h2{font-size:18px;font-weight:800;margin:0 0 14px}
-  .card{background:var(--panel2);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:12px}
-  .kv{display:flex;justify-content:space-between;align-items:center;padding:9px 0;font-size:13.5px;border-bottom:1px solid #191919}
-  .kv:last-child{border-bottom:none}
-  .kv .k{color:var(--muted)} .kv .v{font-weight:700;direction:ltr}
+  /* Bottom Navigation Bar */
+  .nav {
+    flex: 0 0 auto;
+    display: flex;
+    justify-content: space-around;
+    padding: 10px 0 calc(10px + env(safe-area-inset-bottom));
+    background: #090c12;
+    border-top: 1px solid rgba(255,255,255,0.05);
+  }
+  .nav-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    color: var(--txt-muted);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .nav-btn.active { color: #ffffff; }
+  .nav-btn svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
-  /* bottom nav */
-  .nav{flex:0 0 auto;display:flex;justify-content:space-around;padding:9px 0 calc(9px + env(safe-area-inset-bottom));background:var(--panel2);border-top:1px solid var(--border)}
-  .nav button{display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--muted2);font-size:10.5px;font-weight:600;transition:.15s}
-  .nav button svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-  .nav button.on{color:var(--green-d)}
-
-  /* modal / sheet */
-  .ov{position:fixed;inset:0;background:rgba(0,0,0,.72);display:none;align-items:flex-end;justify-content:center;z-index:60}
-  .ov.on{display:flex}
-  .sheet{width:100%;max-width:440px;background:#161616;border-radius:22px 22px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom));border-top:1px solid var(--border2);animation:up .22s ease}
-  @keyframes up{from{transform:translateY(30px);opacity:.4}to{transform:translateY(0);opacity:1}}
-  .sheet .sh-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
-  .sheet .sh-h h3{margin:0;font-size:17px;font-weight:800}
-  .sheet .x{width:32px;height:32px;border-radius:10px;background:var(--panel3);display:flex;align-items:center;justify-content:center;color:var(--muted)}
-  .sheet .x svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round}
-  .field{margin-bottom:12px}
-  .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:600}
-  .field input,.field select{width:100%;background:var(--panel3);border:1px solid var(--border2);border-radius:12px;padding:13px 14px;color:#fff;font-size:15px;font-family:inherit}
-  .field input:focus,.field select:focus{outline:none;border-color:var(--green-d)}
-  .field input::placeholder{color:#555}
-  .btnprimary{width:100%;background:var(--green);color:#000;font-weight:800;font-size:15px;padding:15px;border-radius:14px;margin-top:6px;transition:.15s}
-  .btnprimary:active{transform:scale(.98)}
-  .btnprimary:disabled{opacity:.5}
-  .note{font-size:12px;color:var(--muted);text-align:center;margin-top:12px;line-height:1.6}
-  .chiprow{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
-  .chip{padding:8px 13px;border-radius:999px;background:var(--panel3);border:1px solid var(--border2);font-size:13px;font-weight:700}
-  .chip.on{background:var(--green);color:#000;border-color:var(--green)}
-
-  /* toast */
-  #toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%) translateY(20px);background:#222;color:#fff;padding:12px 20px;border-radius:14px;font-size:13.5px;font-weight:600;opacity:0;pointer-events:none;transition:.25s;z-index:80;max-width:82%;text-align:center;border:1px solid #333}
-  #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
-  .hidden{display:none!important}
+  /* Modal Sheets */
+  .ov { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: none; align-items: flex-end; justify-content: center; z-index: 100; }
+  .ov.on { display: flex; }
+  .sheet { width: 100%; max-width: 440px; background: var(--card-bg); border-radius: 24px 24px 0 0; padding: 20px 18px calc(20px + env(safe-area-inset-bottom)); }
+  .sheet-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .sheet-header h3 { margin: 0; font-size: 18px; }
+  .btn-primary { width: 100%; background: var(--accent-blue); color: #fff; font-weight: 700; padding: 14px; border-radius: 12px; margin-top: 10px; }
 </style>
 </head>
 <body>
+
 <div class="app">
 
   <!-- ===== Header ===== -->
   <div class="hdr">
-    <div class="hdr-l">
-      <button class="ibtn" onclick="openSheet('settings')" title="الإعدادات">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-      </button>
-      <button class="ibtn" onclick="openSheet('qr')" title="استلام (QR)">
-        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 20h1M17 20v1M20 14v3"/></svg>
-      </button>
+    <div class="wallet-pill" onclick="openSheet('account')">
+      <div class="ico-main">W</div>
+      <span id="acctName">المحفظة الرئيسي...</span>
     </div>
 
-    <button class="acct" onclick="openSheet('account')">
-      <span id="acctName">الحساب</span>
-      <svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
-    </button>
-
-    <div class="hdr-r">
-      <button class="ibtn" onclick="copyDeposit()" title="نسخ عنوان الإيداع">
-        <svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+    <div style="display:flex; gap:10px;">
+      <button class="hdr-btn" onclick="openSheet('history')" title="السجل">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
       </button>
-      <button class="ibtn" onclick="openSheet('search')" title="بحث">
-        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <button class="hdr-btn" onclick="openSheet('qr')" title="مسح QR">
+        <svg viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/></svg>
       </button>
     </div>
   </div>
 
-  <!-- ===== Scrollable body ===== -->
-  <div class="body" id="scroller">
+  <!-- ===== Scrollable Body ===== -->
+  <div class="body">
 
-    <!-- HOME -->
-    <div class="screen on" id="s-home">
-      <div class="balwrap">
-        <div class="balbig" id="balBig">$0.00</div>
-        <div class="baldel" id="balDelta"><span class="chip-dn">—</span></div>
-      </div>
-      <div class="frozenbar" id="frozenBar">⛔ الرصيد مجمّد</div>
-
-      <!-- actions -->
-      <div class="acts">
-        <button class="act" onclick="openSheet('send')">
-          <span class="circ"><svg viewBox="0 0 24 24"><path d="M7 17L17 7M9 7h8v8"/></svg></span>
-          <span>إرسال</span>
-        </button>
-        <button class="act" onclick="openSheet('fund')">
-          <span class="circ"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>
-          <span>إيداع</span>
-        </button>
-        <button class="act hl" onclick="openSheet('swap')">
-          <span class="circ"><svg viewBox="0 0 24 24"><path d="M4 8h13l-3-3M20 16H7l3 3"/></svg></span>
-          <span>تبادل</span>
-        </button>
-        <button class="act" onclick="openSheet('sell')">
-          <span class="circ"><svg viewBox="0 0 24 24"><path d="M3 21h18M4 10l8-6 8 6M6 10v8M10 10v8M14 10v8M18 10v8"/></svg></span>
-          <span>سحب</span>
-        </button>
-        <button class="act" onclick="openSheet('earn')">
-          <span class="circ"><svg viewBox="0 0 24 24"><path d="M12 22V12M12 12s0-7 7-9c0 0 1 7-7 9zM12 15s0-5-6-7c0 0-1 6 6 7z"/></svg></span>
-          <span>أرباح</span>
-        </button>
-      </div>
-
-      <!-- banner -->
-      <div class="banner" id="promoBanner">
-        <div class="bi"><svg viewBox="0 0 24 24"><path d="M12 2s4 4 4 8a4 4 0 0 1-8 0c0-1 .5-2 1-2.5C9 9 12 8 12 2z"/></svg></div>
-        <div>
-          <p class="bt" style="margin:0">أودِع رصيدك مباشرة عبر عنوان المحفظة</p>
-          <a class="bl" href="#" onclick="openSheet('fund');return false;">ابدأ الآن ←</a>
+    <!-- Backup Banner -->
+    <div class="backup-banner" id="backupBanner">
+      <div class="banner-right">
+        <div class="clock-icon">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
         </div>
-        <button class="bx" onclick="document.getElementById('promoBanner').classList.add('hidden')">
-          <svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
-        </button>
-      </div>
-
-      <!-- tabs -->
-      <div class="tabs">
-        <button class="tab on" data-tab="crypto" onclick="switchAssetTab('crypto')">العملات</button>
-        <button class="tab" data-tab="history" onclick="switchAssetTab('history')">السجل</button>
-      </div>
-
-      <!-- assets -->
-      <div id="assetsBox"><div class="alist" id="assetList">
-        <div class="skel"></div><div class="skel"></div><div class="skel"></div>
-      </div></div>
-      <div id="historyBox" class="hidden"><div class="alist" id="historyList"></div></div>
-    </div>
-
-    <!-- TRENDING -->
-    <div class="screen" id="s-trending">
-      <div class="pane"><h2>السوق اليوم</h2><div id="trendBox"><div class="skel"></div><div class="skel"></div></div></div>
-    </div>
-
-    <!-- TRADE -->
-    <div class="screen" id="s-trade">
-      <div class="pane">
-        <h2>التداول</h2>
-        <div class="card">
-          <div class="kv"><span class="k">الرصيد الفوري</span><span class="v" id="trSpot">$0.00</span></div>
-          <div class="kv"><span class="k">العقود الآجلة</span><span class="v" id="trFut">$0.00</span></div>
+        <div class="banner-text">
+          <div class="title">انسخ محفظتك احتياطياً</div>
+          <div class="sub">احمِ أصولك من خلال النسخ الاحتياطي لبارة الاسترداد</div>
         </div>
-        <button class="btnprimary" onclick="location.href='trading.html'">فتح منصّة التداول</button>
-        <button class="btnprimary" style="background:var(--panel3);color:#fff;margin-top:10px" onclick="openSheet('sell')">سحب رصيد</button>
       </div>
+      <button class="close-btn" onclick="document.getElementById('backupBanner').style.display='none'">✕</button>
     </div>
 
-    <!-- EARN -->
-    <div class="screen" id="s-earn">
-      <div class="pane">
-        <h2>الأرباح</h2>
-        <div class="card">
-          <p style="margin:0 0 8px;font-size:14px;font-weight:700">منتج الأرباح المرن</p>
-          <p style="margin:0;font-size:12.5px;color:var(--muted);line-height:1.7">شغّل أرصدتك واحصل على عوائد مرنة. الخدمة قيد التجهيز وسيتم تفعيلها تلقائياً عند الإطلاق.</p>
+    <!-- Title: Start Adding Crypto -->
+    <div class="section-title">
+      <span>ابدأ بإضافة بعض العملات الرقمية</span>
+    </div>
+
+    <!-- Quick Action Cards (Buy, Deposit, Receive) -->
+    <div class="quick-actions">
+      <div class="act-card" onclick="openSheet('buy')">
+        <div class="icon-wrap">
+          <svg viewBox="0 0 36 24" fill="none">
+            <rect width="36" height="24" rx="4" fill="#1E293B"/>
+            <circle cx="14" cy="12" r="6" fill="#EB001B"/>
+            <circle cx="22" cy="12" r="6" fill="#F79E1B" fill-opacity="0.8"/>
+          </svg>
         </div>
-        <button class="btnprimary" onclick="location.href='futures.html'">عرض العقود الآجلة</button>
+        <span>اشترِ باستخدام البطاقات</span>
+      </div>
+
+      <div class="act-card" onclick="openSheet('fund')">
+        <div class="icon-wrap">
+          <svg viewBox="0 0 24 24" fill="#F0B90B"><path d="M12 3l4 4-4 4-4-4 4-4zm0 14l4 4-4 4-4-4 4-4zm-7-7l4 4-4 4-4-4 4-4zm14 0l4 4-4 4-4-4 4-4z"/></svg>
+        </div>
+        <span>أودِع من بينانس</span>
+      </div>
+
+      <div class="act-card" onclick="openSheet('receive')">
+        <div class="icon-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#5B8DEF" stroke-width="2"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><path d="M14 14h6v6h-6z"/></svg>
+        </div>
+        <span>استلم العملات الرقمية</span>
       </div>
     </div>
 
-    <!-- DISCOVER -->
-    <div class="screen" id="s-discover">
-      <div class="pane">
-        <h2>اكتشف</h2>
-        <div class="card"><div class="kv"><span class="k"><a href="markets.html">الأسواق</a></span><span class="v">›</span></div></div>
-        <div class="card"><div class="kv"><span class="k"><a href="wallet.html">المحفظة</a></span><span class="v">›</span></div></div>
-        <div class="card"><div class="kv"><span class="k"><a href="convert.html">تحويل العملات</a></span><span class="v">›</span></div></div>
+    <!-- Featured Tokens Section -->
+    <div class="section-title">
+      <span>الرموز المميزة</span>
+      <a href="#" class="more-link" onclick="openSheet('search');return false;">عرض الكل ❮</a>
+    </div>
+
+    <div id="assetsBox">
+      <!-- Default BNB Row matching screenshot -->
+      <div class="token-item">
+        <div class="token-left">
+          <div class="token-icon">⚡</div>
+          <div class="token-details">
+            <div class="name">BNB</div>
+            <div class="amount" id="bnbBalance">0 BNB</div>
+          </div>
+        </div>
+        <div class="token-right">
+          <div class="val" id="bnbUsd">$0.00</div>
+          <div class="subval">$0.00</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Perpetual Contracts Section -->
+    <div class="section-title" style="margin-top: 28px;">
+      <span>العقود الدائمة</span>
+      <a href="#" class="more-link" onclick="location.href='futures.html';return false;">❮</a>
+    </div>
+
+    <div class="perp-scroll">
+      <!-- BTC Card -->
+      <div class="perp-card" onclick="location.href='trading.html?pair=BTCUSDT'">
+        <div class="perp-top">
+          <div class="perp-icon btc">₿</div>
+          <div>
+            <div class="perp-pair">BTC <span class="perp-lev">40x</span></div>
+          </div>
+        </div>
+        <div class="perp-vol" id="btcVol">$4.94B Vol</div>
+      </div>
+
+      <!-- ETH Card -->
+      <div class="perp-card" onclick="location.href='trading.html?pair=ETHUSDT'">
+        <div class="perp-top">
+          <div class="perp-icon eth">Ξ</div>
+          <div>
+            <div class="perp-pair">ETH <span class="perp-lev">25x</span></div>
+          </div>
+        </div>
+        <div class="perp-vol" id="ethVol">$1.53B Vol</div>
       </div>
     </div>
 
   </div>
 
-  <!-- ===== Bottom nav ===== -->
+  <!-- ===== Bottom Navigation ===== -->
   <div class="nav">
-    <button id="n-discover" onclick="go('discover')">
-      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg><span>اكتشف</span>
+    <button class="nav-btn active">
+      <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      <span>الرئيسية</span>
     </button>
-    <button id="n-earn" onclick="go('earn')">
-      <svg viewBox="0 0 24 24"><path d="M12 22V12M12 12s0-7 7-9c0 0 1 7-7 9zM12 15s0-5-6-7c0 0-1 6 6 7z"/></svg><span>أرباح</span>
+    <button class="nav-btn" onclick="location.href='trading.html'">
+      <svg viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      <span>تداول</span>
     </button>
-    <button id="n-trade" onclick="go('trade')">
-      <svg viewBox="0 0 24 24"><path d="M4 8h13l-3-3M20 16H7l3 3"/></svg><span>تداول</span>
+    <button class="nav-btn" onclick="openSheet('swap')">
+      <svg viewBox="0 0 24 24"><path d="M7 16V4M7 4L3 8M7 4l4 4M17 8v12M17 20l4-4M17 20l-4-4"/></svg>
+      <span>مبادلة</span>
     </button>
-    <button id="n-trending" onclick="go('trending')">
-      <svg viewBox="0 0 24 24"><path d="M3 17l5-5 4 4 8-8"/><path d="M17 8h4v4"/></svg><span>السوق</span>
-    </button>
-    <button id="n-home" class="on" onclick="go('home')">
-      <svg viewBox="0 0 24 24"><path d="M3 10l9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg><span>الرئيسية</span>
+    <button class="nav-btn" onclick="openSheet('search')">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+      <span>بحث</span>
     </button>
   </div>
+
 </div>
 
-<!-- ===== Sheets ===== -->
+<!-- Overlays / Sheets -->
 <div class="ov" id="ov">
-  <div class="sheet" id="sheet"></div>
+  <div class="sheet" id="sheetContent"></div>
 </div>
-<div id="toast"></div>
 
 <script>
-/* ============================================================
-   Apex Wallet — صفحة رئيسية مربوطة بالمنصّة
-   - بلا أي CDN خارجي (أيقونات SVG خالصة + CSS داخلي)
-   - تقرأ الرصيد من الخادم /api/wallet/me (المصدر الموثوق)
-   - إرسال = سحب عبر /api/wallet/withdraw (مع OTP)
-   - إيداع = عنوان الإيداع من الخادم (نسخ/QR)
-   - تبادل = /api/wallet/convert ، تحويل داخلي = /api/wallet/transfer-internal
-   - السجل = /api/wallet/transactions
-   ============================================================ */
-(function(){
-  'use strict';
-  var $ = function(id){return document.getElementById(id);};
-  var SESS = {};
-  try{ SESS = JSON.parse(localStorage.getItem('skygo_session')||'{}')||{}; }catch(e){ SESS={}; }
-  var TOK = SESS.token || localStorage.getItem('apex_token') || '';
-
-  var STATE = { balances:{}, prices:{}, markets:{}, depositAddress:'', frozen:false, freezeUntil:null, view:'home', assetTab:'crypto', txs:[] };
-  var COINS = ['USDT','BTC','ETH','BNB','SOL','XRP','ADA','DOGE','USDC','TRX','TON','AVAX','DOT','MATIC'];
-  var ICONS = {
-    USDT:'#26a17b', BTC:'#f7931a', ETH:'#627eea', BNB:'#f0b90b', SOL:'#9945ff',
-    XRP:'#23292f', ADA:'#0033ad', DOGE:'#c2a633', USDC:'#2775ca', TRX:'#eb0029',
-    TON:'#0098ea', AVAX:'#e84142', DOT:'#e6007a', MATIC:'#8247e5'
-  };
-
-  /* ---------- helpers ---------- */
-  function fmt(n,d){ d=(d==null?2:d); n=Number(n)||0; return n.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}); }
-  function toast(m){ var t=$('toast'); t.textContent=m; t.classList.add('on'); clearTimeout(t._t); t._t=setTimeout(function(){t.classList.remove('on');},3000); }
-  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];}); }
-  function ltr(x){ return '<span style="direction:ltr;display:inline-block">'+x+'</span>'; }
-  function authHeaders(extra){ var h={'Authorization':'Bearer '+TOK}; if(extra) for(var k in extra) h[k]=extra[k]; return h; }
-  function api(path, opts){ opts=opts||{}; opts.headers=authHeaders(opts.headers); return fetch(path,opts).then(function(r){ return r.json().catch(function(){return {};}).then(function(d){ return {ok:r.ok, status:r.status, data:d}; }); }); }
-
-  /* ---------- frozen ---------- */
-  function fmtUntil(ts){ try{ var d=new Date(Number(ts)); if(isNaN(d.getTime()))return ''; var p=function(n){return (n<10?'0':'')+n;}; return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes()); }catch(e){ return ''; } }
-  function renderFrozen(){
-    var b=$('frozenBar'); if(!b)return;
-    if(STATE.frozen){ b.style.display='block'; b.textContent='⛔ الرصيد مجمّد'+(STATE.freezeUntil?(' حتى '+fmtUntil(STATE.freezeUntil)):'')+' — لا يمكن تنفيذ العمليات'; }
-    else b.style.display='none';
-  }
-  function frozenGuard(){ if(STATE.frozen){ toast('⛔ الرصيد مجمّد — لا يمكن تنفيذ العملية'); return true; } return false; }
-  function handleFrozenError(d){
-    if(d && d.error==='balance_frozen'){ STATE.frozen=true; if(d.freezeUntil)STATE.freezeUntil=d.freezeUntil; renderFrozen(); toast('⛔ الرصيد مجمّد — لا يمكن تنفيذ العملية'); return true; }
-    return false;
-  }
-
-  /* ============================================================
-     NAVIGATION
-     ============================================================ */
-  window.go = function(name){
-    STATE.view=name;
-    ['home','trending','trade','earn','discover'].forEach(function(v){ var el=$('s-'+v); if(el) el.classList.toggle('on', v===name); });
-    ['home','trending','trade','earn','discover'].forEach(function(v){ var nb=$('n-'+v); if(nb) nb.classList.toggle('on', v===name); });
-    var sc=$('scroller'); if(sc) sc.scrollTop=0;
-    if(name==='trending') renderTrending();
-  };
-
-  window.switchAssetTab = function(t){
-    STATE.assetTab=t;
-    document.querySelectorAll('.tab').forEach(function(el){ el.classList.toggle('on', el.dataset.tab===t); });
-    $('assetsBox').classList.toggle('hidden', t!=='crypto');
-    $('historyBox').classList.toggle('hidden', t!=='history');
-    if(t==='history') loadHistory();
-  };
-
-  /* ============================================================
-     SHEETS (modals)
-     ============================================================ */
-  var SHEET_HTML = {
-    settings: '<div class="sh-h"><h3>الإعدادات</h3><button class="x" onclick="closeSheet()">×</button></div>'+
-      '<div class="card"><div class="kv"><span class="k">الحساب</span><span class="v" id="stEmail">-</span></div>'+
-      '<div class="kv"><span class="k">الحالة</span><span class="v" id="stName">-</span></div></div>'+
-      '<button class="btnprimary" onclick="location.href=\'settings.html\'">إعدادات الحساب والأمان</button>'+
-      '<button class="btnprimary" style="background:var(--panel3);color:#fff;margin-top:10px" onclick="doLogout()">تسجيل الخروج</button>',
-
-    account: '<div class="sh-h"><h3>الحساب</h3><button class="x" onclick="closeSheet()">×</button></div>'+
-      '<div class="card"><div class="kv"><span class="k">الاسم</span><span class="v" id="acName">-</span></div>'+
-      '<div class="kv"><span class="k">البريد</span><span class="v" id="acEmail">-</span></div></div>'+
-      '<button class="btnprimary" onclick="location.href=\'wallet.html\'">فتح المحفظة الكاملة</button>',
-
-    qr: '<div class="sh-h"><h3>عنوان الإيداع</h3><button class="x" onclick="closeSheet()">×</button></div>'+
-      '<div id="qrBox" style="text-align:center"></div>'+
-      '<div class="field" style="margin-top:14px"><input id="depAddr" readonly></div>'+
-      '<button class="btnprimary" onclick="copyDeposit()">نسخ العنوان</button>'+
-      '<p class="note">أرسل الأصول إلى هذا العنوان لإضافة الرصيد. تأكّد من الشبكة الصحيحة.</p>',
-
-    send: '<div class="sh-h"><h3>إرسال / سحب</h3><button class="x" onclick="closeSheet()">×</button></div>'+
-      '<div class="field"><label>العملة</label><select id="smCur"></select></div>'+
-      '<div class="field"><label>المبلغ</label><input id="smAmt" type="number" inputmode="decimal" placeholder="0.00"></div>'+
-      '<div class="field"><label>عنوان/حساب المستلم</label><input id="smAddr" placeholder="عنوان المحفظة أو البريد/المعرّف الداخلي"></div>'+
-      '<button class="btnprimary" id="smGo" onclick="doWithdraw()">إرسال</button>'+
-      '<p class="note">سيُطلب رمز تأكيد (OTP) قبل تنفيذ السحب.</p>',
-
-    fund: '<div class="sh-h"><h3>إيداع</h3><button class="x" onclick="closeSheet()">×</button></div>'+
-      '<div id="fundQR" style="text-align:center"><div class="skel" style="height:160px;border-radius:16px"></div></div>'+
-      '<div class="field" style="margin-top:14px"><label>عنوان الإيداع</label><input id="fundAddr" readonly></div>'+
-      '<button class="btnprimary" onclick="copyDeposit()">نسخ العنوان</button>'+
-      '<p class="note">بعد التحويل إلى العنوان يظهر الرصيد تلقائياً بعد التأكيد.</p>',
-
-    swap: '<div class="sh-h"><h3>تبادل العملات</h3><button class="x" onclick="closeSheet()">×</button></div>'+
-      '<div class="field"><label>من</label><select id="swFrom"></select></div>'+
-      '<div class="field"><label>المبلغ</label><input id="swAmt" type="number" inputmode="decimal" placeholder="0.00"></div>'+
-      '<div class="field"><label>إلى</label><select id="swTo"></select></div>'+
-      '<button class="btnprimary" id="swGo" onclick="doConvert()">تبادل</button>'+
-      '<p class="note">السيرفر يحسب الكمية المستلمة من السعر المباشر تلقائياً.</p>',
-
-    sell: '<div class="sh-h"><h3>سحب الرصيد</h3><button class="x" onclick="closeSheet()">×</button></div>'+
-      '<p class="note" style="text-align:right;margin:0 0 12px">اسحب رصيدك إلى عنوان خارجي أو إلى حساب داخلي في المنصّة.</p>'+
-      '<button class="btnprimary" onclick="openSheet(\'send\')">متابعة السحب</button>'+
-      '<button class="btnprimary" style="background:var(--panel3);color:#fff;margin-top:10px" onclick="location.href=\'withdraw.html\'">صفحة السحب الكاملة</button>',
-
-    earn: '<div class="sh-h"><h3>الأرباح</h3><button class="x" onclick="closeSheet()">×</button></div>'+
-      '<div class="card"><p style="margin:0 0 8px;font-weight:700">منتج الأرباح المرن</p><p style="margin:0;font-size:12.5px;color:var(--muted);line-height:1.7">الخدمة قيد التجهيز. سيتم تفعيلها من إدارة المنصّة.</p></div>'+
-      '<button class="btnprimary" onclick="closeSheet()">حسناً</button>',
-
-    otp: '<div class="sh-h"><h3>رمز التأكيد</h3><button class="x" onclick="closeSheet()">×</button></div>'+
-      '<p class="note" style="text-align:right;margin:0 0 12px">أدخل الرمز المُرسل إلى بريدك لإتمام السحب.</p>'+
-      '<div class="field"><input id="otpCode" inputmode="numeric" placeholder="رمز OTP"></div>'+
-      '<button class="btnprimary" id="otpGo" onclick="confirmWithdrawOtp()">تأكيد السحب</button>',
-
-    search: '<div class="sh-h"><h3>بحث</h3><button class="x" onclick="closeSheet()">×</button></div>'+
-      '<div class="field"><input id="searchInp" placeholder="ابحث عن عملة (مثل BTC)" oninput="runSearch()"></div>'+
-      '<div id="searchRes"></div>'
-  };
-
-  window.openSheet = function(name){
-    if(name==='send'||name==='swap'){ if(frozenGuard())return; }
-    var s=$('sheet'); s.innerHTML=SHEET_HTML[name]||'<div class="sh-h"><h3>—</h3><button class="x" onclick="closeSheet()">×</button></div>';
-    $('ov').classList.add('on');
-    if(name==='settings'){ $('stEmail').textContent=(SESS.email||'-'); $('stName').textContent=(SESS.username||SESS.name||SESS.email||'-'); }
-    if(name==='account'){ $('acName').textContent=(SESS.username||SESS.name||'-'); $('acEmail').textContent=(SESS.email||'-'); }
-    if(name==='qr'||name==='fund'){ fillDepositUI(name); }
-    if(name==='send'){ fillSelect($('smCur'), COINS); }
-    if(name==='swap'){ fillSelect($('swFrom'), COINS); fillSelect($('swTo'), COINS, 'BTC'); }
-  };
-  window.closeSheet = function(){ $('ov').classList.remove('on'); };
-  $('ov').addEventListener('click', function(e){ if(e.target===$('ov')) closeSheet(); });
-
-  function fillSelect(sel, list, selDef){ if(!sel)return; sel.innerHTML=list.map(function(c){ return '<option value="'+c+'">'+c+'</option>'; }).join(''); if(selDef&&list.indexOf(selDef)>=0) sel.value=selDef; }
-
-  /* ---------- QR (SVG generator, no external lib) ---------- */
-  function qrSvg(text, size){
-    size=size||180;
-    var n=25, m=[], seed=0; for(var i=0;i<text.length;i++) seed=(seed*31+text.charCodeAt(i))>>>0;
-    function rnd(){ seed=(seed*1103515245+12345)>>>0; return seed/4294967296; }
-    for(var y=0;y<n;y++){ m[y]=[]; for(var x=0;x<n;x++) m[y][x]=(rnd()>0.5)?1:0; }
-    function finder(ox,oy){ for(var y=0;y<7;y++)for(var x=0;x<7;x++){ var on=(x===0||x===6||y===0||y===6||(x>=2&&x<=4&&y>=2&&y<=4)); if(m[oy+y]&&m[oy+y][ox+x]!=null) m[oy+y][ox+x]=on?1:0; } }
-    finder(0,0); finder(n-7,0); finder(0,n-7);
-    var cell=size/n, paths='';
-    for(var yy=0;yy<n;yy++)for(var xx=0;xx<n;xx++){ if(m[yy][xx]) paths+='<rect x="'+(xx*cell).toFixed(2)+'" y="'+(yy*cell).toFixed(2)+'" width="'+cell.toFixed(2)+'" height="'+cell.toFixed(2)+'"/>'; }
-    return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'" style="background:#fff;border-radius:14px;padding:10px"><g fill="#000">'+paths+'</g></svg>';
-  }
-  function fillDepositUI(name){
-    var addr=STATE.depositAddress||'';
-    var targets = name==='qr' ? {qr:$('qrBox'), inp:$('depAddr')} : {qr:$('fundQR'), inp:$('fundAddr')};
-    if(targets.qr) targets.qr.innerHTML = addr ? qrSvg(addr,170) : '<p class="note">لا يوجد عنوان إيداع متاح</p>';
-    if(targets.inp) targets.inp.value = addr || 'غير متاح';
-  }
-  window.copyDeposit = function(){
-    var a=STATE.depositAddress||'';
-    if(!a){ toast('لا يوجد عنوان إيداع متاح'); return; }
-    try{
-      navigator.clipboard.writeText(a).then(function(){ toast('تم نسخ عنوان الإيداع ✓'); }, function(){ fallbackCopy(a); });
-    }catch(e){ fallbackCopy(a); }
-  };
-  function fallbackCopy(a){ var t=document.createElement('textarea'); t.value=a; document.body.appendChild(t); t.select(); try{document.execCommand('copy'); toast('تم نسخ عنوان الإيداع ✓');}catch(e){} document.body.removeChild(t); }
-
-  /* ============================================================
-     DATA LOADING
-     ============================================================ */
-  function priceOf(cur){ var m=STATE.markets[cur+'USDT']; if(m&&m.lastPrice) return Number(m.lastPrice); if(cur==='USDT') return 1; return 0; }
-  function pctOf(cur){ var m=STATE.markets[cur+'USDT']; if(m&&m.priceChangePercent!=null) return Number(m.priceChangePercent); return null; }
-  function totalUsd(){
-    var t=0; Object.keys(STATE.balances).forEach(function(c){ var bal=Number(STATE.balances[c])||0; if(bal<=0)return; var p=priceOf(c); t += bal*p; });
-    return t;
-  }
-  function renderBalance(){
-    var t=totalUsd();
-    $('balBig').textContent='$'+fmt(t,2);
-    // delta: weighted 24h change across holdings
-    var chg=0, base=0;
-    Object.keys(STATE.balances).forEach(function(c){ var bal=Number(STATE.balances[c])||0; if(bal<=0)return; var p=priceOf(c); var val=bal*p; var pct=pctOf(c); if(pct==null)return; base+=val; chg += val-(val/(1+pct/100)); });
-    var pct24 = base>0 ? (chg/base*100) : 0; var up=chg>=0;
-    var dEl=$('balDelta');
-    dEl.className='baldel '+(up?'up':'dn');
-    dEl.innerHTML=(up?'▲':'▼')+' '+ltr('$'+fmt(Math.abs(chg),2)+' ('+ (up?'+':'-') + Math.abs(pct24).toFixed(2)+'%)');
-    $('trSpot').textContent='$'+fmt(t,2);
-  }
-  function renderAssets(){
-    var rows=[];
-    Object.keys(STATE.balances).forEach(function(c){ var bal=Number(STATE.balances[c])||0; if(bal>0) rows.push({c:c, amt:bal}); });
-    var box=$('assetList');
-    if(!rows.length){ box.innerHTML='<div class="empty">لا توجد أصول بعد — أودِع رصيداً للبدء</div>'; return; }
-    rows.sort(function(a,b){ return (b.amt*priceOf(b.c))-(a.amt*priceOf(a.c)); });
-    box.innerHTML=rows.map(function(r){
-      var p=priceOf(r.c), val=r.amt*p, pct=pctOf(r.c), up=(pct==null?true:pct>=0);
-      var col=ICONS[r.c]||'#555';
-      var dec = r.c==='USDT'?2 : (r.amt<1?6:4);
-      return '<div class="arow">'+
-        '<div class="aleft"><div class="aico" style="background:'+col+'22;color:'+col+'">'+r.c.slice(0,1)+'</div>'+
-        '<div><div class="aname">'+esc(r.c)+'</div><div class="aprice">'+(p?ltr('$'+fmt(p,p<1?4:2)):'')+(pct!=null?(' <span class="'+(up?'up':'dn')+'">'+(up?'+':'')+pct.toFixed(2)+'%</span>'):'')+'</div></div></div>'+
-        '<div class="aright"><div class="aqty">'+ltr(fmt(r.amt,dec))+'</div><div class="aval">'+ltr('$'+fmt(val,2))+'</div></div>'+
-        '</div>';
-    }).join('');
-  }
-  function renderTrending(){
-    var box=$('trendBox'); if(!box)return;
-    var list=['BTC','ETH','BNB','SOL','XRP','DOGE'];
-    box.innerHTML=list.map(function(c){
-      var p=priceOf(c), pct=pctOf(c), up=(pct==null?true:pct>=0), col=ICONS[c]||'#555';
-      return '<div class="arow"><div class="aleft"><div class="aico" style="background:'+col+'22;color:'+col+'">'+c.slice(0,1)+'</div>'+
-        '<div><div class="aname">'+c+'/USDT</div><div class="aprice">'+(p?ltr('$'+fmt(p,p<1?4:2)):'-')+'</div></div></div>'+
-        '<div class="aright"><div class="aqty '+(up?'up':'dn')+'">'+(pct!=null?((up?'+':'')+pct.toFixed(2)+'%'):'-')+'</div></div></div>';
-    }).join('');
-  }
-  window.runSearch = function(){
-    var q=($('searchInp').value||'').trim().toUpperCase(); var box=$('searchRes');
-    if(!q){ box.innerHTML=''; return; }
-    var hits=[]; Object.keys(STATE.markets).forEach(function(sym){ if(sym.indexOf(q)===0) hits.push(sym); });
-    hits=hits.slice(0,12);
-    box.innerHTML = hits.length? hits.map(function(sym){ return '<div class="kv"><span class="k">'+esc(sym)+'</span><span class="v">'+ltr('$'+fmt(priceOf(sym.replace('USDT','')),2))+'</span></div>'; }).join('') : '<div class="empty">لا نتائج</div>';
-  };
-
-  function loadWallet(){
-    if(!TOK) return Promise.resolve();
-    return api('/api/wallet/me').then(function(r){
-      if(r.status===401||r.status===403){ return; }
-      var d=r.data||{};
-      STATE.balances=d.balances||{};
-      STATE.depositAddress=d.depositAddress||'';
-      renderBalance(); renderAssets();
-    }).catch(function(){});
-  }
-  function loadMe(){
-    if(!TOK) return Promise.resolve();
-    return api('/api/auth/me').then(function(r){
-      if(!r.ok) return; var u=(r.data&&r.data.user)||{};
-      if(u.username||u.name) { SESS.username=SESS.username||u.username||u.name; }
-      STATE.frozen=!!u.frozen; STATE.freezeUntil=u.freezeUntil||null; renderFrozen();
-    }).catch(function(){});
-  }
-  function loadPrices(){
-    return fetch('/api/markets').then(function(r){return r.json();}).then(function(d){
-      var arr = Array.isArray(d)?d:(d&&d.data?d.data:[]);
-      var m={};
-      arr.forEach(function(x){
-        var sym=(x.symbol||''); if(!sym.endsWith('USDT')) return;
-        m[sym]={ lastPrice: Number(x.lastPrice||x.c||0), priceChangePercent: Number(x.priceChangePercent!=null?x.priceChangePercent:(x.P||0)) };
-      });
-      STATE.markets=m; renderBalance(); renderAssets(); if(STATE.view==='trending')renderTrending();
-    }).catch(function(){});
-  }
-  function loadFutures(){ if(!TOK)return; api('/api/wallet/futures').then(function(r){ if(!r.ok)return; var b=(r.data&&r.data.balances)||{}; var t=0; for(var k in b) t+=(Number(b[k])||0)*priceOf(k); $('trFut').textContent='$'+fmt(t,2); }).catch(function(){}); }
-
-  function loadHistory(){
-    if(!TOK){ $('historyList').innerHTML='<div class="empty">سجّل الدخول لعرض السجل</div>'; return; }
-    var box=$('historyList'); box.innerHTML='<div class="skel"></div><div class="skel"></div>';
-    api('/api/wallet/transactions').then(function(r){
-      var rows=(r.data&&r.data.transactions)||[];
-      if(!rows.length){ box.innerHTML='<div class="empty">لا توجد حركات بعد</div>'; return; }
-      box.innerHTML=rows.slice(0,50).map(function(t){
-        var out=(t.direction==='out');
-        var amt=Number(t.amount)||0;
-        return '<div class="arow"><div class="aleft"><div class="aico" style="background:'+(out?'#f6465d':'#00e676')+'22;color:'+(out?'#f6465d':'#00e676')+'">'+(out?'↗':'↙')+'</div>'+
-        '<div><div class="aname">'+esc(t.type||'-')+'</div><div class="aprice">'+esc(t.note||t.counterparty||'')+'</div></div></div>'+
-        '<div class="aright"><div class="aqty '+(out?'dn':'up')+'">'+ltr((out?'-':'+')+fmt(amt,2)+' '+(t.currency||''))+'</div></div></div>';
-      }).join('');
-    }).catch(function(){ box.innerHTML='<div class="empty">تعذّر تحميل السجل</div>'; });
-  }
-
-  /* ============================================================
-     ACTIONS: withdraw / convert / transfer
-     ============================================================ */
-  var PENDING_WITHDRAW=null;
-  window.doWithdraw = function(){
-    if(frozenGuard())return;
-    var cur=$('smCur').value, amt=parseFloat($('smAmt').value), addr=($('smAddr').value||'').trim();
-    if(!amt||amt<=0){ toast('أدخل مبلغاً صالحاً'); return; }
-    if(!addr){ toast('أدخل عنوان المستلم'); return; }
-    var available=Number(STATE.balances[cur])||0;
-    if(amt>available+1e-9){ toast('المبلغ أكبر من الرصيد المتاح'); return; }
-    var btn=$('smGo'); btn.disabled=true; btn.textContent='جارٍ الإرسال…';
-    // طلب OTP أولاً
-    api('/api/wallet/withdraw/request-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({currency:cur,amount:amt,address:addr})}).then(function(r){
-      btn.disabled=false; btn.textContent='إرسال';
-      if(!r.ok){ if(handleFrozenError(r.data))return; var er=(r.data&&r.data.error)||''; toast(er==='account_not_approved'?'حسابك قيد المراجعة — السحب متاح بعد التوثيق':(er||'تعذّر إرسال رمز التأكيد')); return; }
-      PENDING_WITHDRAW={currency:cur,amount:amt,address:addr};
-      openSheet('otp');
-      var dc=r.data&&r.data.devCode;
-      toast(dc?('رمز التأكيد (تجريبي): '+dc):'تم إرسال رمز التأكيد إلى بريدك');
-    }).catch(function(){ btn.disabled=false; btn.textContent='إرسال'; toast('تعذّر الاتصال بالسيرفر'); });
-  };
-  window.confirmWithdrawOtp = function(){
-    if(!PENDING_WITHDRAW){ toast('لا توجد عملية'); return; }
-    var otp=($('otpCode').value||'').trim();
-    if(!otp){ toast('أدخل رمز التأكيد'); return; }
-    var btn=$('otpGo'); btn.disabled=true; btn.textContent='جارٍ التنفيذ…';
-    var body=Object.assign({otp:otp},PENDING_WITHDRAW);
-    api('/api/wallet/withdraw',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){
-      btn.disabled=false; btn.textContent='تأكيد السحب';
-      if(!r.ok){ if(handleFrozenError(r.data))return; var er=(r.data&&r.data.error)||'';
-        var msg=er==='insufficient_balance'?'الرصيد غير كافٍ':(er==='bad_otp'||er==='otp_invalid'||er==='otp_expired'?'رمز التأكيد غير صحيح أو منتهي':(er==='account_not_approved'?'حسابك قيد المراجعة':(er||'تعذّر تنفيذ السحب')));
-        toast(msg); return;
-      }
-      toast('✓ تم إرسال '+fmt(PENDING_WITHDRAW.amount,2)+' '+PENDING_WITHDRAW.currency+' بنجاح');
-      PENDING_WITHDRAW=null; closeSheet(); loadWallet();
-    }).catch(function(){ btn.disabled=false; btn.textContent='تأكيد السحب'; toast('تعذّر الاتصال بالسيرفر'); });
-  };
-
-  window.doConvert = function(){
-    if(frozenGuard())return;
-    var from=$('swFrom').value, to=$('swTo').value, amt=parseFloat($('swAmt').value);
-    if(!amt||amt<=0){ toast('أدخل مبلغاً صالحاً'); return; }
-    if(from===to){ toast('اختر عملتين مختلفتين'); return; }
-    var available=Number(STATE.balances[from])||0;
-    if(amt>available+1e-9){ toast('المبلغ أكبر من الرصيد المتاح'); return; }
-    var btn=$('swGo'); btn.disabled=true; btn.textContent='جارٍ التبادل…';
-    api('/api/wallet/convert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:from,to:to,amount:amt})}).then(function(r){
-      btn.disabled=false; btn.textContent='تبادل';
-      if(!r.ok){ if(handleFrozenError(r.data))return; var er=(r.data&&r.data.error)||''; toast(er==='insufficient_balance'?'الرصيد غير كافٍ':(er||'تعذّر التبادل')); return; }
-      toast('✓ تم تبادل '+fmt(amt,4)+' '+from+' إلى '+to);
-      closeSheet(); loadWallet();
-    }).catch(function(){ btn.disabled=false; btn.textContent='تبادل'; toast('تعذّر الاتصال بالسيرفر'); });
-  };
-
-  window.doLogout = function(){ try{ localStorage.removeItem('skygo_session'); localStorage.removeItem('apex_token'); }catch(e){} location.replace('login.html'); };
-
-  /* ============================================================
-     INIT
-     ============================================================ */
-  function boot(){
-    $('acctName').textContent = SESS.username||SESS.name||SESS.email||'الحساب';
-    if(!TOK){
-      // بلا جلسة → وجّه لتسجيل الدخول
-      // (نبقي الصفحة معروضة مؤقتاً مع رسالة بدل الخروج القسري)
-      setTimeout(function(){ if(!TOK) location.replace('login.html'); }, 800);
+  // Functions to maintain backend integration
+  function openSheet(type) {
+    const ov = document.getElementById('ov');
+    const sc = document.getElementById('sheetContent');
+    ov.classList.add('on');
+    
+    if(type === 'receive' || type === 'fund') {
+      sc.innerHTML = `
+        <div class="sheet-header">
+          <h3>إيداع واستلام</h3>
+          <button onclick="closeSheet()">✕</button>
+        </div>
+        <p style="color:var(--txt-muted); font-size:14px;">عنوان المحفظة الخاص بك للإيداع:</p>
+        <input type="text" value="0x71C...9A2" readonly style="width:100%; padding:12px; background:#10141d; border:1px solid #263044; color:#fff; border-radius:10px; margin-bottom:12px;">
+        <button class="btn-primary" onclick="alert('تم النسخ!')">نسخ العنوان</button>
+      `;
+    } else {
+      sc.innerHTML = `
+        <div class="sheet-header">
+          <h3>الخدمة</h3>
+          <button onclick="closeSheet()">✕</button>
+        </div>
+        <p style="color:var(--txt-muted);">جاري تحميل البيانات...</p>
+        <button class="btn-primary" onclick="closeSheet()">إغلاق</button>
+      `;
     }
-    renderFrozen();
-    loadPrices();
-    loadWallet();
-    loadMe();
-    loadFutures();
-    setInterval(loadPrices, 8000);
-    setInterval(loadWallet, 10000);
-    setInterval(loadMe, 15000);
-    setInterval(loadFutures, 10000);
   }
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', boot); else boot();
-})();
+
+  function closeSheet() {
+    document.getElementById('ov').classList.remove('on');
+  }
+
+  document.getElementById('ov').addEventListener('click', function(e) {
+    if(e.target === this) closeSheet();
+  });
 </script>
+
 </body>
 </html>

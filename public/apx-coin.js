@@ -111,7 +111,7 @@
     if(ent.pending)return;
     if(ent.bars&&(now-ent.t)<900)return;
     ent.pending=true;
-    fetch(API+'/api/apx/klines?interval='+interval+'&limit=1000',{headers:{'Accept':'application/json'}})
+    fetch(API+'/api/apx/klines?interval='+interval+'&limit=2000',{headers:{'Accept':'application/json'}})
       .then(function(r){return r.ok?r.json():null;})
       .then(function(a){if(Array.isArray(a)&&a.length){ent.bars=a;ent.t=Date.now();}})
       .catch(function(){})

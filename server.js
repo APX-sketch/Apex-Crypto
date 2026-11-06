@@ -83,7 +83,6 @@ const PERSIST_FILES = [
   'apex-ops.json', 'apex-commission.json', 'apex-apx.json',
   'apex-admin-2fa.json', 'apex-orderalerts.json',
   'apex-sessions.json', 'apex-balance-audit.json', 'apex-adminalerts.json',
-  'apex-freeze-log.json',
 ];
 function _persistHash(s) {
   let h = 2166136261 >>> 0; s = String(s);
@@ -481,13 +480,13 @@ function verifyDeviceToken(token, userId, deviceId) {
 // Read a single user row (identity + status) by id / email.
 async function dbGetUserById(id) {
   const [rows] = await pool.query(
-    'SELECT id, username, name, email, password, status, country, reject_reason, created_at, last_seen, ban_until, frozen, freeze_until FROM users WHERE id = ? LIMIT 1',
+    'SELECT id, username, name, email, password, status, country, reject_reason, created_at, last_seen, ban_until, frozen FROM users WHERE id = ? LIMIT 1',
     [id]);
   return rows[0] || null;
 }
 async function dbGetUserByEmail(email) {
   const [rows] = await pool.query(
-    'SELECT id, username, name, email, password, status, country, reject_reason, created_at, last_seen, ban_until, frozen, freeze_until FROM users WHERE email = ? LIMIT 1',
+    'SELECT id, username, name, email, password, status, country, reject_reason, created_at, last_seen, ban_until, frozen FROM users WHERE email = ? LIMIT 1',
     [String(email).trim().toLowerCase()]);
   return rows[0] || null;
 }
@@ -497,16 +496,6 @@ async function maybeExpireTempBan(dbu) {
     if (dbu && dbu.status === 'banned' && Number(dbu.ban_until) > 0 && Date.now() >= Number(dbu.ban_until)) {
       await pool.query('UPDATE users SET status = ?, ban_until = 0, reject_reason = NULL WHERE id = ?', ['approved', dbu.id]);
       dbu.status = 'approved'; dbu.ban_until = 0;
-    }
-  } catch (e) {}
-  return dbu;
-}
-// إن كان التجميد مؤقّتاً وانتهت مدته → ارفع التجميد تلقائياً.
-async function maybeExpireFreeze(dbu) {
-  try {
-    if (dbu && Number(dbu.frozen) && Number(dbu.freeze_until) > 0 && Date.now() >= Number(dbu.freeze_until)) {
-      await pool.query('UPDATE users SET frozen = 0, freeze_until = 0 WHERE id = ?', [dbu.id]);
-      dbu.frozen = 0; dbu.freeze_until = 0;
     }
   } catch (e) {}
   return dbu;
@@ -524,7 +513,6 @@ function dbPublicUser(u) {
     rejectReason: u.reject_reason || '',
     banUntil: Number(u.ban_until) || 0,
     frozen: !!Number(u.frozen),
-    freezeUntil: Number(u.freeze_until) || 0,
     createdAt: u.created_at ? new Date(u.created_at).toISOString() : null,
   };
 }
@@ -582,8 +570,6 @@ async function ensureSchema() {
   await ensureColumn('users', 'ban_until', '`ban_until` BIGINT NOT NULL DEFAULT 0');
   // تجميد الرصيد: 1 = مجمّد (يُمنع إخراج الأموال)
   await ensureColumn('users', 'frozen', '`frozen` TINYINT NOT NULL DEFAULT 0');
-  // تجميد مؤقّت: وقت انتهاء التجميد (0 = تجميد دائم/بلا مهلة)
-  await ensureColumn('users', 'freeze_until', '`freeze_until` BIGINT NOT NULL DEFAULT 0');
   // identity documents (KYC): one row per user, holds the base64 image.
   await pool.query(
     'CREATE TABLE IF NOT EXISTS id_documents (' +
@@ -752,6 +738,8 @@ async function ensureSchema() {
     ' created_at BIGINT NOT NULL DEFAULT 0,' +
     ' INDEX idx_post (post_id)' +
     ')');
+  // عمود رمز العملة لمنشورات Square — لربط النقاش بكل عملة على حدة (NULL = منشور عام)
+  await ensureColumn('square_posts', 'symbol', '`symbol` VARCHAR(20) NULL');
   // ===== تقييمات ومراجعات المتداولين (نظام الثقة) — صف واحد لكل (متداول، مُقيِّم) =====
   await pool.query(
     'CREATE TABLE IF NOT EXISTS copy_reviews (' +
@@ -871,57 +859,6 @@ function logBalanceDiff(userId, before, after, source, su) {
 }
 // حفظ دوري (كل 5ث) لتجنّب كثرة الكتابة عند تداول كثيف.
 setInterval(() => { if (_balAuditDirty) saveBalanceAudit(); }, 5000).unref?.();
-
-// ============================================================
-// سجل عمليات التجميد/فك التجميد (Freeze Log) — خاص بمراقبة تجميد الرصيد
-// يُحفظ في ملفّ مستقلّ (ضمن PERSIST_FILES) فيبقى بعد إعادة النشر.
-// كل عملية تجميد/فك تجميد (يدوية من الأدمن أو تلقائية بانتهاء المدة) تُسجَّل هنا.
-// ============================================================
-const FREEZE_LOG_FILE = join(__dirname, 'data', 'apex-freeze-log.json');
-function loadFreezeLog() {
-  try {
-    if (existsSync(FREEZE_LOG_FILE)) {
-      const d = JSON.parse(readFileSync(FREEZE_LOG_FILE, 'utf8'));
-      return { count: Number(d.count) || 0, entries: Array.isArray(d.entries) ? d.entries : [] };
-    }
-  } catch (e) { /* ignore corrupt / missing */ }
-  return { count: 0, entries: [] };
-}
-const freezeLog = loadFreezeLog();
-let _freezeLogDirty = false;
-function saveFreezeLog() {
-  try {
-    mkdirSync(dirname(FREEZE_LOG_FILE), { recursive: true });
-    writeFileSync(FREEZE_LOG_FILE, JSON.stringify(freezeLog));
-    _freezeLogDirty = false;
-  } catch (e) { console.warn('[freeze-log] save failed:', e.message); }
-}
-const FREEZE_ACTION_LABEL = {
-  freeze: 'تجميد الرصيد', unfreeze: 'فكّ تجميد الرصيد', auto_unfreeze: 'رفع تلقائي (انتهت المدة)',
-};
-// سجّل عملية تجميد/فك تجميد في السجل المخصّص (يُحفظ دورياً).
-function logFreezeEvent({ userId, email, name, action, permanent = false, freezeUntil = 0, by = 'admin', note = '' }) {
-  try {
-    freezeLog.entries.unshift({
-      id: 'FZ' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
-      at: Date.now(),
-      userId: String(userId),
-      email: email || '',
-      name: name || '',
-      action: String(action || ''),
-      actionLabel: FREEZE_ACTION_LABEL[action] || String(action || ''),
-      permanent: !!permanent,
-      freezeUntil: Number(freezeUntil) || 0,
-      by: String(by || 'admin'),
-      note: String(note || '').slice(0, 300),
-    });
-    freezeLog.count += 1;
-    if (freezeLog.entries.length > 3000) freezeLog.entries.length = 3000;
-    _freezeLogDirty = true;
-    saveFreezeLog();
-  } catch (e) { /* non-fatal */ }
-}
-setInterval(() => { if (_freezeLogDirty) saveFreezeLog(); }, 5000).unref?.();
 
 // ---- Futures wallet (SEPARATE from the Spot balance) ----
 // Money safety: the futures wallet is a server-authoritative store, kept in its
@@ -1411,6 +1348,36 @@ app.get('/api/markets', (req, res) => {
 const bproxy = new BinanceProxy();
 
 // ---- محرّك APX المركزي: السيرفر وحده يحرّك السعر/الشموع → كل الحسابات تشوف نفس الحركة ----
+// ---- شموع عميقة: نتصفّح Binance إلى الخلف كي يعرض الشارت تاريخاً ممتداً
+// رجوعاً نحو بداية إدراج العملة ("من أول ما انخلقت"). محدودة بـ MAX_DEEP شمعة
+// ومخزّنة لمدّة قصيرة حتى لا نرهق المصدر. تنطبق على كل العملات بنفس الطريقة. ----
+const MAX_DEEP = 5000;
+const _deepCache = new Map(); // key -> { at, data }
+async function deepKlines(symbol, interval, want) {
+  want = Math.min(MAX_DEEP, Math.max(1, want | 0));
+  const key = symbol + '|' + interval + '|' + want;
+  const hit = _deepCache.get(key);
+  if (hit && (Date.now() - hit.at) < 60000) return hit.data;
+  const out = [];
+  const seen = new Set();
+  let endTime = null;
+  for (let guard = 0; guard < 12 && out.length < want; guard++) {
+    const params = { symbol, interval, limit: 1000 };
+    if (endTime != null) params.endTime = endTime;
+    let page;
+    try { page = await bproxy.get('/api/v3/klines', params, 60000); }
+    catch (e) { if (out.length) break; throw e; }
+    if (!Array.isArray(page) || !page.length) break;
+    for (const b of page) { const ot = b[0]; if (seen.has(ot)) continue; seen.add(ot); out.push(b); }
+    if (page.length < 1000) break;      // وصلنا لأول شمعة مُدرجة
+    endTime = page[0][0] - 1;            // الصفحة التالية تنتهي قبل أقدم ما لدينا
+  }
+  out.sort((a, b) => a[0] - b[0]);
+  const data = out.slice(-want);
+  _deepCache.set(key, { at: Date.now(), data });
+  return data;
+}
+
 let _apxBtcLast = null, _apxBtcStep = 0;
 async function _apxSampleBtc() {
   try {
@@ -1440,7 +1407,7 @@ const _APX_IVS = ['1m', '5m', '15m', '30m', '1h', '2h', '4h', '1d'];
 async function _apxWarmBtcKl() {
   for (const iv of _APX_IVS) {
     try {
-      const a = await bproxy.get('/api/v3/klines', { symbol: 'BTCUSDT', interval: iv, limit: 1000 }, 60000);
+      const a = await deepKlines('BTCUSDT', iv, 2000);
       if (Array.isArray(a) && a.length) _apxBtcKl[iv] = a;
     } catch (e) { /* تجاهل — يُستخدم بديل تركيبي */ }
   }
@@ -1488,9 +1455,10 @@ app.get('/api/klines', async (req, res) => {
   const interval = String(req.query.interval || '1m');
   if (!VALID_INTERVAL.has(interval)) return res.status(400).json({ error: 'bad_interval' });
   let limit = Number(req.query.limit) || 300;
-  limit = Math.min(500, Math.max(1, limit));
-  const ttl = limit <= 2 ? 1500 : 4000;
+  limit = Math.min(MAX_DEEP, Math.max(1, limit));
   try {
+    if (limit > 1000) { return res.json(await deepKlines(symbol, interval, limit)); }
+    const ttl = limit <= 2 ? 1500 : 4000;
     res.json(await bproxy.get('/api/v3/klines', { symbol, interval, limit }, ttl));
   } catch (e) {
     res.status(502).json({ error: 'upstream_unavailable' });
@@ -1553,7 +1521,6 @@ app.get('/api/wallet/:userId', requireUser, (req, res, next) => {
 
 // Demo helper to simulate a real buy (holding with a real cost basis).
 app.post('/api/wallet/:userId/buy', strictLimiter, requireUser, (req, res) => {
-  if (rejectIfFrozen(req, res, 'شراء/تداول')) return;
   // SESSION ISOLATION: force the authenticated user's own id; ignore the param.
   const userId = String(req.user.id);
   const { symbol, amount, unitCost } = req.body || {};
@@ -1597,7 +1564,6 @@ async function requireUser(req, res, next) {
     const dbu = await dbGetUserById(uid);
     if (!dbu) return res.status(401).json({ error: 'unauthorized' });
     await maybeExpireTempBan(dbu);
-    await maybeExpireFreeze(dbu);
     if (dbu.status === 'banned') return res.status(403).json({ error: 'banned' });
     // وحّد دفتر الأرصدة: اضمن وجود سجل store مُفتاح بمعرّف MySQL (مصدر واحد للرصيد)
     let su = null;
@@ -1615,7 +1581,6 @@ async function requireUser(req, res, next) {
       status: dbu.status || 'pending',
       country: dbu.country || '',
       frozen: !!Number(dbu.frozen),
-      freezeUntil: Number(dbu.freeze_until) || 0,
       banUntil: Number(dbu.ban_until) || 0,
       balances: (su && su.balances) ? su.balances : {},
       depositAddress: (su && su.depositAddress) ? su.depositAddress : '',
@@ -1646,30 +1611,6 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-// ---------------------------------------------------------------------------
-// بوابة تجميد الرصيد (خادميّة 100% — لا يمكن تجاوزها من المتصفح)
-// ---------------------------------------------------------------------------
-// حالة التجميد تُقرأ حصراً من قاعدة البيانات (عمودا frozen / freeze_until)،
-// ولا يستطيع تغييرها إلا مسارات الأدمن المحميّة بـ requireAdmin. أي محاولة
-// لتعديل الرصيد (إيداع/سحب/تحويل/تداول) من حساب مجمّد تُرفض من السيرفر نفسه.
-// تُعيد true إن كان الحساب مجمّداً (وتكون قد أرسلت الردّ) وإلا false للمتابعة.
-function rejectIfFrozen(req, res, actionLabel) {
-  if (!req.user) { res.status(401).json({ error: 'unauthorized' }); return true; }
-  if (!req.user.frozen) return false;
-  const fu = Number(req.user.freezeUntil) || 0;
-  if (fu > 0 && Date.now() >= fu) {
-    // انتهت مدة التجميد المؤقّت → ارفعه تلقائياً (خادميّاً) وامضِ في العملية.
-    try { pool.query('UPDATE users SET frozen = 0, freeze_until = 0 WHERE id = ?', [req.user.uid]); } catch (e) {}
-    req.user.frozen = false; req.user.freezeUntil = 0;
-    try { logFreezeEvent({ userId: req.user.uid, email: req.user.email, name: req.user.name, action: 'auto_unfreeze', permanent: false, freezeUntil: 0, note: 'انتهت مدة التجميد المؤقّت — رُفع تلقائياً' }); } catch (e) {}
-    return false;
-  }
-  try { logSecurity(req, { kind: 'blocked_frozen', severity: 'warning',
-    detail: 'محاولة ' + (actionLabel || 'عملية على الرصيد') + ' من حساب مجمّد الرصيد (رُفضت خادميّاً)' }); } catch (e) {}
-  res.status(403).json({ error: 'balance_frozen', freezeUntil: fu || 0 });
-  return true;
-}
-
 // Approval gate: money-OUT operations (withdraw / transfer to another account)
 // require an account that the ADMIN has verified (status === 'approved').
 // Verification is admin-only; a pending/rejected account can browse and trade
@@ -1677,8 +1618,12 @@ function rejectIfFrozen(req, res, actionLabel) {
 function requireApproved(req, res, next) {
   if (!req.user) return res.status(401).json({ error: 'unauthorized' });
   if (req.user.status === 'banned') return res.status(403).json({ error: 'banned' });
-  // تجميد الرصيد: يمنع أي إخراج أموال (سحب/تحويل) حتى يرفعه الأدمن أو تنتهي المدة.
-  if (rejectIfFrozen(req, res, 'إخراج أموال')) return;
+  // تجميد الرصيد: يمنع أي إخراج أموال (سحب/تحويل) حتى يرفعه الأدمن.
+  if (req.user.frozen) {
+    logSecurity(req, { kind: 'blocked_frozen', severity: 'warning',
+      detail: 'محاولة إخراج أموال من حساب مجمّد الرصيد (رُفضت)' });
+    return res.status(403).json({ error: 'balance_frozen' });
+  }
   if (req.user.status !== 'approved') {
     logSecurity(req, { kind: 'blocked_unapproved', severity: 'warning',
       detail: 'عملية إخراج أموال من حساب غير موثّق (رُفضت — التوثيق بيد الإدارة فقط)',
@@ -2020,7 +1965,6 @@ app.post('/api/wallet/sync', requireUser, (req, res) => {
 // 400 if any balance would go negative. This keeps balances consistent with
 // admin credits that may have arrived concurrently (they are preserved).
 app.post('/api/wallet/apply', requireUser, (req, res) => {
-  if (rejectIfFrozen(req, res, 'تعديل رصيد/تداول')) return;
   const deltas = (req.body || {}).deltas || {};
   const chk = inspectDeltas(deltas);
   if (chk.bad.length) {
@@ -2219,7 +2163,6 @@ function availableBalance(userId, ccy, locked) {
 // created from nothing. type='tpsl' is a conditional SELL watched by the
 // matching loop and triggered by tp (take-profit) / sl (stop-loss).
 app.post('/api/orders', requireUser, (req, res) => {
-  if (rejectIfFrozen(req, res, 'وضع أمر تداول')) return;
   const b = req.body || {};
   const sym = String(b.sym || '').toUpperCase();
   const base = String(b.base || '').toUpperCase();
@@ -2473,7 +2416,6 @@ app.get('/api/wallet/futures', requireUser, (req, res) => {
 // result below zero (money can never be created); rejected over-draws are
 // logged to the security log just like the spot path.
 app.post('/api/wallet/futures/apply', requireUser, (req, res) => {
-  if (rejectIfFrozen(req, res, 'تعديل رصيد العقود')) return;
   const deltas = (req.body || {}).deltas || {};
   const chk = inspectDeltas(deltas);
   if (chk.bad.length) {
@@ -2504,7 +2446,6 @@ app.get('/api/wallet/transactions', requireUser, (req, res) => {
 // stays inside ONE user's own wallet, so no money crosses between accounts.
 const CONVERT_CUR = /^[A-Z0-9]{2,12}$/;
 app.post('/api/wallet/convert', strictLimiter, requireUser, (req, res) => {
-  if (rejectIfFrozen(req, res, 'تحويل عملة (Convert)')) return;
   const body = req.body || {};
   const from = String(body.from || '').toUpperCase();
   const to = String(body.to || '').toUpperCase();
@@ -2563,7 +2504,6 @@ app.post('/api/wallet/convert', strictLimiter, requireUser, (req, res) => {
 // fails for any reason we roll the debit back, so no balance is ever created
 // and nothing is lost. Every rejected over-draw is logged to the security log.
 app.post('/api/wallet/transfer-internal', strictLimiter, requireUser, (req, res) => {
-  if (rejectIfFrozen(req, res, 'تحويل داخلي')) return;
   const body = req.body || {};
   const from = String(body.from || '').toLowerCase();
   const to = String(body.to || '').toLowerCase();
@@ -2797,7 +2737,7 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
     if (status) { where = ' WHERE u.status = ?'; params.push(status); }
 
     const [rows] = await pool.query(
-      'SELECT u.id, u.username, u.name, u.email, u.status, u.country, u.reject_reason, u.created_at, u.last_seen, u.ban_until, u.frozen, u.freeze_until, ' +
+      'SELECT u.id, u.username, u.name, u.email, u.status, u.country, u.reject_reason, u.created_at, u.last_seen, ' +
       ' d.doc_type AS doc_type, (d.image IS NOT NULL) AS has_doc ' +
       'FROM users u LEFT JOIN id_documents d ON d.user_id = u.id' + where +
       ' ORDER BY u.created_at DESC',
@@ -2822,9 +2762,6 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
       kycType: u.doc_type || (u.has_doc ? 'وثيقة هوية' : 'لا توجد وثيقة'),
       lastSeen: Number(u.last_seen) || 0,
       online: !!u.last_seen && (now - Number(u.last_seen)) < ONLINE_MS,
-      banUntil: Number(u.ban_until) || 0,
-      frozen: !!Number(u.frozen),
-      freezeUntil: Number(u.freeze_until) || 0,
     }));
 
     res.json({ ok: true, users });
@@ -2922,92 +2859,25 @@ app.post('/api/admin/users/:id/ban-temp', requireAdmin, async (req, res) => {
 
 // ---- Admin: تجميد / فك تجميد رصيد المستخدم ----
 // التجميد يمنع كل إخراج أموال (سحب/تحويل) دون حذف أي رصيد.
-// freezeUntil = 0 يعني تجميداً دائماً (يُرفع يدوياً)، وقيمة > 0 تعني تجميداً مؤقّتاً.
 async function adminSetFrozen(id, frozen, res, req) {
   try {
-    let until = 0;
-    if (frozen) {
-      const b = req.body || {};
-      // مدة اختيارية: freezeUntil (بالملي ثانية) أو minutes/hours/days
-      if (b.freezeUntil && Number(b.freezeUntil) > Date.now()) {
-        until = Number(b.freezeUntil);
-      } else {
-        let mins = Number(b.minutes) || 0;
-        if (!mins && Number(b.hours) > 0) mins = Number(b.hours) * 60;
-        if (!mins && Number(b.days) > 0) mins = Number(b.days) * 1440;
-        if (mins > 0) until = Date.now() + Math.round(Math.min(mins, 525600) * 60000); // سقف سنة
-      }
-    }
-    const [r] = await pool.query('UPDATE users SET frozen = ?, freeze_until = ? WHERE id = ?', [frozen ? 1 : 0, until, id]);
+    const [r] = await pool.query('UPDATE users SET frozen = ? WHERE id = ?', [frozen ? 1 : 0, id]);
     if (!r.affectedRows) return res.status(404).json({ error: 'not_found' });
     const u = await dbGetUserById(id);
-    const durTxt = !frozen ? '' : (until ? (' لمدة ' + fmtDuration(until - Date.now())) : ' بشكل دائم');
-    try { store.logAdmin && store.logAdmin({ admin: 'admin', action: frozen ? 'freeze' : 'unfreeze', targetId: String(id), targetEmail: u && u.email, targetName: u && (u.name || u.username), note: (frozen ? 'تجميد الرصيد' : 'فك تجميد الرصيد') + durTxt }); } catch (e) {}
+    try { store.logAdmin && store.logAdmin({ admin: 'admin', action: frozen ? 'freeze' : 'unfreeze', targetId: String(id), targetEmail: u && u.email, targetName: u && (u.name || u.username), note: frozen ? 'تجميد الرصيد' : 'فك تجميد الرصيد' }); } catch (e) {}
     try {
       store.addNotification && u && store.addNotification(String(id), {
         title: frozen ? 'تجميد الرصيد' : 'رفع تجميد الرصيد', kind: 'admin',
-        body: frozen
-          ? ('تم تجميد رصيدك' + (until ? (' مؤقتاً حتى ' + new Date(until).toLocaleString('ar') + '؛ ') : ' ') + 'لا يمكن السحب أو التحويل حتى رفعه.')
-          : 'تم رفع التجميد عن رصيدك؛ يمكنك السحب والتحويل الآن.',
+        body: frozen ? 'تم تجميد رصيدك مؤقتاً؛ لا يمكن السحب أو التحويل حتى رفعه.' : 'تم رفع التجميد عن رصيدك؛ يمكنك السحب والتحويل الآن.',
       });
     } catch (e) {}
-    // ---- سجل مخصّص لعمليات التجميد/فك التجميد (مراقبة الأدمن) ----
-    try {
-      logFreezeEvent({
-        userId: id,
-        email: u && u.email,
-        name: u && (u.name || u.username),
-        action: frozen ? 'freeze' : 'unfreeze',
-        permanent: frozen && !until,
-        freezeUntil: until,
-        by: 'admin',
-        note: (frozen ? 'تجميد الرصيد' : 'فكّ تجميد الرصيد') + durTxt,
-      });
-    } catch (e) {}
-    // ---- إشعار بريد إلكتروني للمستخدم عند تجميد حسابه/رفع التجميد ----
-    try {
-      if (u && u.email) {
-        const untilTxt = until ? new Date(until).toLocaleString('ar') : '';
-        const subject = frozen ? '❄ إشعار: تم تجميد رصيد حسابك — Apex'
-                              : '✅ إشعار: تم رفع التجميد عن رصيد حسابك — Apex';
-        const html = frozen
-          ? ('<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;line-height:1.9">'
-            + '<h2 style="color:#e0a615">تم تجميد رصيد حسابك</h2>'
-            + '<p>مرحباً ' + ((u.name || u.username || '') + '') + '</p>'
-            + '<p>تم تجميد الرصيد في حسابك' + (until ? (' <b>مؤقتاً حتى ' + untilTxt + '</b>') : ' <b>دائماً</b>') + '.</p>'
-            + '<p>خلال فترة التجميد <b>لا يمكن تنفيذ أي عملية على الرصيد</b> (إيداع أو سحب أو تحويل أو تداول).</p>'
-            + (until ? '<p>سيُرفع التجميد تلقائياً عند انتهاء المدة.</p>' : '<p>يمكن رفع التجميد من إدارة المنصة فقط.</p>')
-            + '<p>إن لم تكن تعلم بسبب التجميد، تواصل مع الدعم.</p>'
-            + '<p style="color:#8a94a3;font-size:12px">فريق Apex</p></div>')
-          : ('<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;line-height:1.9">'
-            + '<h2 style="color:#0ecb81">تم رفع التجميد عن رصيد حسابك</h2>'
-            + '<p>مرحباً ' + ((u.name || u.username || '') + '') + '</p>'
-            + '<p>يمكنك الآن تنفيذ كل العمليات على رصيدك (إيداع، سحب، تحويل، تداول).</p>'
-            + '<p style="color:#8a94a3;font-size:12px">فريق Apex</p></div>');
-        const text = frozen
-          ? ('تم تجميد رصيد حسابك' + (until ? (' مؤقتاً حتى ' + untilTxt) : ' دائماً') + '. لا يمكن تنفيذ أي عملية على الرصيد خلال هذه الفترة.')
-          : 'تم رفع التجميد عن رصيد حسابك؛ يمكنك الآن تنفيذ كل العمليات.';
-        sendMail({ to: u.email, subject, text, html }).catch(() => {});
-      }
-    } catch (e) {}
-    res.json({ ok: true, frozen: !!frozen, freezeUntil: until, user: dbPublicUser(u) });
+    res.json({ ok: true, frozen: !!frozen, user: dbPublicUser(u) });
   } catch (err) {
     console.error('freeze error:', err);
     res.status(500).json({ error: 'freeze_failed' });
   }
 }
-// ينسّق مدة (بالملي ثانية) إلى نص عربي مقروء.
-function fmtDuration(ms) {
-  if (!(ms > 0)) return '0';
-  const m = Math.round(ms / 60000);
-  if (m < 60) return m + ' دقيقة';
-  const h = Math.floor(m / 60), mm = m % 60;
-  if (h < 24) return h + ' ساعة' + (mm ? (' و' + mm + ' دقيقة') : '');
-  const d = Math.floor(h / 24), hh = h % 24;
-  return d + ' يوم' + (hh ? (' و' + hh + ' ساعة') : '');
-}
 app.post('/api/admin/users/:id/freeze', requireAdmin, (req, res) => adminSetFrozen(req.params.id, true, res, req));
-app.post('/api/admin/users/:id/freeze-temp', requireAdmin, (req, res) => adminSetFrozen(req.params.id, true, res, req));
 app.post('/api/admin/users/:id/unfreeze', requireAdmin, (req, res) => adminSetFrozen(req.params.id, false, res, req));
 
 app.delete('/api/admin/users/:id', requireAdmin, async (req, res) => {
@@ -3198,12 +3068,6 @@ app.get('/api/admin/money-flow', requireAdmin, (req, res) => {
 // ---- Admin: activity log (credits / balance edits / bans / notifications) ----
 app.get('/api/admin/logs', requireAdmin, (req, res) => {
   res.json({ ok: true, logs: store.getAdminLogs() });
-});
-// ---- Admin: سجل عمليات التجميد/فك التجميد المخصّص ----
-// يرجّع آخر عمليات التجميد ورفع التجميد (تنازلياً). ?limit=N (افتراضي 200)
-app.get('/api/admin/freeze-log', requireAdmin, (req, res) => {
-  const limit = Math.max(1, Math.min(2000, Number(req.query.limit) || 200));
-  res.json({ ok: true, count: freezeLog.count, entries: (freezeLog.entries || []).slice(0, limit) });
 });
 // ---- Admin: SECURITY log (balance-tampering / money-safety attempts) ----
 // Returns the money-safety audit trail plus a quick summary (counts by
@@ -4363,10 +4227,12 @@ app.get('/api/square/posts', requireUser, async (req, res) => {
     const params = [me];
     if (filter === 'mine') { where = 'p.user_id = ?'; params.push(me); }
     if (q) { where += ' AND (p.content LIKE ? OR p.author LIKE ?)'; params.push('%' + q + '%', '%' + q + '%'); }
+    const symbol = String(req.query.symbol || '').trim().toUpperCase().slice(0, 20);
+    if (symbol) { where += ' AND p.symbol = ?'; params.push(symbol); }
     let order = 'p.created_at DESC';
     if (filter === 'hot') order = 'likes DESC, p.created_at DESC';
     const [rows] = await pool.query(
-      'SELECT p.id, p.user_id, p.author, p.content, p.image, p.tag, p.created_at, ' +
+      'SELECT p.id, p.user_id, p.author, p.content, p.image, p.tag, p.symbol, p.created_at, ' +
       ' (SELECT COUNT(*) FROM square_likes l WHERE l.post_id = p.id) AS likes, ' +
       ' (SELECT COUNT(*) FROM square_comments c WHERE c.post_id = p.id) AS comments, ' +
       ' (SELECT COUNT(*) FROM square_likes l WHERE l.post_id = p.id AND l.user_id = ?) AS liked ' +
@@ -4384,13 +4250,14 @@ app.post('/api/square/posts', requireUser, async (req, res) => {
     if (image && !/^data:image\/(jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(image)) image = '';
     if (image && image.length > 2800000) image = '';
     const tag = String(b.tag || '').trim().slice(0, 20) || null;
+    const symbol = String(b.symbol || '').trim().toUpperCase().slice(0, 20) || null;
     if (!content && !image) return res.status(400).json({ error: 'empty' });
     const author = req.user.name || req.user.username || req.user.email;
     const [r] = await pool.query(
-      'INSERT INTO square_posts (user_id, author, content, image, tag, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-      [req.user.uid, author, content, image || null, tag, Date.now()]);
-    // ---- تنبيه لحظي للمتابعين (الناسخين) عند نشر صاحبهم خبراً جديداً ----
-    try {
+      'INSERT INTO square_posts (user_id, author, content, image, tag, symbol, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [req.user.uid, author, content, image || null, tag, symbol, Date.now()]);
+    // ---- تنبيه لحظي للمتابعين (الناسخين) عند نشر صاحبهم خبراً جديداً (للمنشورات العامة فقط) ----
+    if (!symbol) try {
       const [followers] = await pool.query('SELECT copier_id FROM copy_relations WHERE trader_id = ?', [req.user.uid]);
       const snippet = content ? (content.slice(0, 80) + (content.length > 80 ? '\u2026' : '')) : '\ud83d\udcf7 صورة';
       for (const f of followers) {
