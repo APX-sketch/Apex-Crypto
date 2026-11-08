@@ -788,6 +788,15 @@ async function ensureSchema() {
   await ensureColumn('square_posts', 'symbol', '`symbol` VARCHAR(20) NULL');
   // عمود فيديو المنشور (base64 data URI) — يُجلب عند الطلب فقط لئلّا تثقل التغذية
   await ensureColumn('square_posts', 'video', '`video` LONGTEXT NULL');
+  // متابعة اجتماعية بين المستخدمين (منفصلة عن نسخ التداول) — لتنبيه المتابعين عند بثّ جديد
+  await pool.query(
+    'CREATE TABLE IF NOT EXISTS square_follows (' +
+    ' follower_id INT NOT NULL,' +
+    ' target_id INT NOT NULL,' +
+    ' created_at BIGINT NOT NULL DEFAULT 0,' +
+    ' PRIMARY KEY (follower_id, target_id),' +
+    ' INDEX idx_sf_target (target_id)' +
+    ')');
   // إعادة النشر (ريبوست) — صف لكل (منشور، مستخدم) ليُحسب العدد ويُعرف إن أعاد المستخدم نشره
   await pool.query(
     'CREATE TABLE IF NOT EXISTS square_reposts (' +
@@ -4567,7 +4576,7 @@ app.get('/api/square/posts', requireUser, async (req, res) => {
     const filter = String(req.query.filter || 'new');
     const q = String(req.query.q || '').trim();
     let where = '1=1';
-    const params = [me, me];
+    const params = [me, me, me];
     if (filter === 'mine') { where = 'p.user_id = ?'; params.push(me); }
     if (q) { where += ' AND (p.content LIKE ? OR p.author LIKE ?)'; params.push('%' + q + '%', '%' + q + '%'); }
     const symbol = String(req.query.symbol || '').trim().toUpperCase().slice(0, 20);
@@ -4583,6 +4592,7 @@ app.get('/api/square/posts', requireUser, async (req, res) => {
       ' (SELECT COUNT(*) FROM square_comments c WHERE c.post_id = p.id) AS comments, ' +
       ' (SELECT COUNT(*) FROM square_likes l WHERE l.post_id = p.id AND l.user_id = ?) AS liked, ' +
       ' (SELECT COUNT(*) FROM square_reposts r WHERE r.post_id = p.id AND r.user_id = ?) AS reposted, ' +
+      ' (SELECT COUNT(*) FROM square_follows f WHERE f.follower_id = ? AND f.target_id = p.user_id) AS following, ' +
       ' (SELECT COUNT(*) FROM square_reposts r WHERE r.post_id = p.id) AS reposts, ' +
       ' (SELECT COUNT(*) FROM square_views v WHERE v.post_id = p.id) AS views ' +
       'FROM square_posts p WHERE ' + where + ' ORDER BY ' + order + ' LIMIT 200',
@@ -4663,7 +4673,27 @@ app.post('/api/square/live/start', requireUser, (req, res) => {
   for (const [id, s] of LIVE) { if (s.uid === req.user.uid) LIVE.delete(id); }
   const id = 'lv_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   const host = req.user.name || req.user.username || req.user.email;
-  LIVE.set(id, { id, uid: req.user.uid, host, title, startedAt: Date.now(), frame: '', frameAt: Date.now(), seq: 0, viewers: new Map() });
+  // حقول اجتماعية بالذاكرة: إعجابات (Set uid)، تعليقات (مع تسلسل cseq)،
+  // قفل تعليقات من المذيع، ودعم بالأرصدة (قائمة + إجمالي لكل عملة).
+  LIVE.set(id, { id, uid: req.user.uid, host, title, startedAt: Date.now(),
+    frame: '', frameAt: Date.now(), seq: 0, viewers: new Map(),
+    likes: new Set(), comments: [], cseq: 0, commentsClosed: false,
+    supports: [], supportTotal: {} });
+  // تنبيه المتابعين فقط (نظام المتابعة الاجتماعية square_follows) أنّ صاحبهم بدأ بثاً — بشكل غير حاجز.
+  (async () => {
+    try {
+      const [followers] = await pool.query('SELECT follower_id FROM square_follows WHERE target_id = ?', [req.user.uid]);
+      for (const f of followers) {
+        try {
+          store.addNotification(String(f.follower_id), {
+            title: '\ud83d\udd34 ' + host + ' بدأ بثاً مباشراً الآن',
+            kind: 'social',
+            body: title,
+          });
+        } catch (e) {}
+      }
+    } catch (e) { console.warn('[square/live-notify]', e.message); }
+  })();
   res.json({ ok: true, id, title, host });
 });
 
@@ -4678,13 +4708,26 @@ app.post('/api/square/live/:id/frame', requireUser, (req, res) => {
   res.json({ ok: true, seq: s.seq, viewers: liveViewerCount(s) });
 });
 
-// جلب آخر إطار (مشاهد أو المذيع نفسه)
-app.get('/api/square/live/:id/frame', requireUser, (req, res) => {
+// جلب آخر إطار (مشاهد أو المذيع نفسه) + الحالة الاجتماعية
+app.get('/api/square/live/:id/frame', requireUser, async (req, res) => {
   const s = LIVE.get(req.params.id);
   if (!s) return res.status(404).json({ error: 'ended' });
   const me = s.uid === req.user.uid;
   if (!me) s.viewers.set(req.user.uid, Date.now());
-  res.json({ ok: true, id: s.id, title: s.title, host: s.host, seq: s.seq, frame: s.frame, viewers: liveViewerCount(s), startedAt: s.startedAt, me });
+  let following = false;
+  if (!me) {
+    try {
+      const [[f]] = await pool.query(
+        'SELECT 1 AS n FROM square_follows WHERE follower_id = ? AND target_id = ?', [req.user.uid, s.uid]);
+      following = !!f;
+    } catch (e) {}
+  }
+  res.json({ ok: true, id: s.id, title: s.title, host: s.host, hostUid: s.uid, seq: s.seq,
+    frame: s.frame, viewers: liveViewerCount(s), startedAt: s.startedAt, me, following,
+    likes: s.likes.size, liked: s.likes.has(req.user.uid),
+    commentsClosed: !!s.commentsClosed, cseq: s.cseq,
+    comments: s.comments.slice(-40),
+    supports: s.supports.slice(-20), supportTotal: s.supportTotal });
 });
 
 // إنهاء البثّ (المذيع فقط)
@@ -4698,9 +4741,108 @@ app.post('/api/square/live/:id/stop', requireUser, (req, res) => {
 app.get('/api/square/live', requireUser, (req, res) => {
   pruneLive();
   const list = [];
-  for (const [, s] of LIVE) list.push({ id: s.id, title: s.title, host: s.host, viewers: liveViewerCount(s), startedAt: s.startedAt, live: !!s.frame });
+  for (const [, s] of LIVE) list.push({ id: s.id, uid: s.uid, title: s.title, host: s.host, viewers: liveViewerCount(s), startedAt: s.startedAt, live: !!s.frame });
   list.sort((a, b) => b.viewers - a.viewers || b.startedAt - a.startedAt);
   res.json({ ok: true, live: list });
+});
+
+// ===== تفاعلات البث المباشر (إعجاب/تعليق/قفل التعليقات/دعم بالأرصدة) =====
+// كلّها بالذاكرة على كائن البثّ (LIVE) — بلا تخزين دائم، تختفي بانتهاء البثّ.
+
+// إعجاب/إلغاء إعجاب على البثّ (كل مشاهد مرّة واحدة؛ تبديل)
+app.post('/api/square/live/:id/like', requireUser, (req, res) => {
+  const s = LIVE.get(req.params.id);
+  if (!s) return res.status(404).json({ error: 'ended' });
+  if (s.likes.has(req.user.uid)) s.likes.delete(req.user.uid);
+  else s.likes.add(req.user.uid);
+  res.json({ ok: true, likes: s.likes.size, liked: s.likes.has(req.user.uid) });
+});
+
+// تعليق على البثّ (كل المستخدمين يعلّقون ما لم يُغلق المذيع التعليقات)
+app.post('/api/square/live/:id/comment', requireUser, (req, res) => {
+  const s = LIVE.get(req.params.id);
+  if (!s) return res.status(404).json({ error: 'ended' });
+  if (s.commentsClosed) return res.status(403).json({ error: 'comments_closed' });
+  const text = String((req.body || {}).text || '').trim().slice(0, 240);
+  if (!text) return res.status(400).json({ error: 'empty' });
+  const name = req.user.name || req.user.username || req.user.email;
+  s.cseq++;
+  const c = { n: s.cseq, uid: req.user.uid, name, text, at: Date.now() };
+  s.comments.push(c);
+  if (s.comments.length > 400) s.comments.splice(0, s.comments.length - 400);
+  res.json({ ok: true, comment: c, cseq: s.cseq });
+});
+
+// قفل/فتح التعليقات — المذيع فقط
+app.post('/api/square/live/:id/comments-toggle', requireUser, (req, res) => {
+  const s = LIVE.get(req.params.id);
+  if (!s) return res.status(404).json({ error: 'ended' });
+  if (s.uid !== req.user.uid) return res.status(403).json({ error: 'not_host' });
+  s.commentsClosed = !s.commentsClosed;
+  res.json({ ok: true, commentsClosed: s.commentsClosed });
+});
+
+// دعم المذيع بالأرصدة أثناء البثّ (خصم من الداعم + إيداع للمذيع + حركة للطرفين)
+app.post('/api/square/live/:id/support', requireUser, (req, res) => {
+  const s = LIVE.get(req.params.id);
+  if (!s) return res.status(404).json({ error: 'ended' });
+  if (s.uid === req.user.uid) return res.status(400).json({ error: 'self_support' });
+  const amount = Number((req.body || {}).amount);
+  const currency = String((req.body || {}).currency || 'USDT').toUpperCase().slice(0, 12);
+  if (!/^[A-Z0-9]{2,12}$/.test(currency)) return res.status(400).json({ error: 'bad_currency' });
+  if (!amount || !isFinite(amount) || amount <= 0) return res.status(400).json({ error: 'invalid_amount' });
+  // اخصم من الداعم ذرّياً (يرفض أي رصيد سالب)
+  const u = store.debitBalance(req.user.id, currency, amount);
+  if (!u) return res.status(400).json({ error: 'insufficient_balance' });
+  // أودِع للمذيع
+  const donorName = req.user.name || req.user.username || req.user.email;
+  try {
+    store.addDeposit(String(s.uid), { amount, currency, kind: 'live_support',
+      fromName: donorName, note: 'دعم أثناء البث المباشر' });
+  } catch (e) {}
+  // حركات للطرفين
+  try {
+    store.addTransaction(req.user.id, { type: 'live_support_out', amount, currency,
+      counterparty: s.host, note: 'دعم بثّ مباشر', direction: 'out', delivered: true });
+  } catch (e) {}
+  try {
+    store.addTransaction(String(s.uid), { type: 'live_support_in', amount, currency,
+      counterparty: donorName, note: 'دعم وارد في بثّ مباشر', direction: 'in', delivered: true });
+  } catch (e) {}
+  // إشعار للمذيع
+  try {
+    store.addNotification(String(s.uid), { title: '\ud83c\udf81 دعم جديد في بثّك',
+      kind: 'money', body: donorName + ' دعمك بـ ' + amount + ' ' + currency + ' — شكراً له!' });
+  } catch (e) {}
+  // سجّل الدعم على كائن البثّ (قائمة + إجمالي لكل عملة) ليظهر للجميع
+  s.supportTotal[currency] = (Number(s.supportTotal[currency]) || 0) + amount;
+  s.supports.push({ uid: req.user.uid, name: donorName, amount, currency, at: Date.now() });
+  if (s.supports.length > 200) s.supports.splice(0, s.supports.length - 200);
+  res.json({ ok: true, amount, currency, balance: Number((u.balances || {})[currency]) || 0,
+    supportTotal: s.supportTotal });
+});
+
+// ===== متابعة اجتماعية (square_follows) — مستقلّة عن نسخ التداول =====
+// متابعة/إلغاء متابعة مستخدم (تبديل)؛ تُستخدم لتنبيه المتابعين عند بدء بثّ.
+app.post('/api/square/follow/:uid', requireUser, async (req, res) => {
+  try {
+    const target = Number(req.params.uid);
+    if (!target || target === Number(req.user.uid)) return res.status(400).json({ error: 'bad_target' });
+    const [[ex]] = await pool.query(
+      'SELECT 1 AS n FROM square_follows WHERE follower_id = ? AND target_id = ?', [req.user.uid, target]);
+    let following;
+    if (ex) {
+      await pool.query('DELETE FROM square_follows WHERE follower_id = ? AND target_id = ?', [req.user.uid, target]);
+      following = false;
+    } else {
+      await pool.query(
+        'INSERT IGNORE INTO square_follows (follower_id, target_id, created_at) VALUES (?, ?, ?)',
+        [req.user.uid, target, Date.now()]);
+      following = true;
+    }
+    const [[c]] = await pool.query('SELECT COUNT(*) AS n FROM square_follows WHERE target_id = ?', [target]);
+    res.json({ ok: true, following, followers: c ? c.n : 0 });
+  } catch (e) { console.error('[square/follow]', e.message); res.status(500).json({ error: 'server_error' }); }
 });
 
 app.post('/api/square/posts/:id/like', requireUser, async (req, res) => {
