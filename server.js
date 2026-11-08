@@ -83,6 +83,7 @@ const PERSIST_FILES = [
   'apex-ops.json', 'apex-commission.json', 'apex-apx.json',
   'apex-admin-2fa.json', 'apex-orderalerts.json',
   'apex-sessions.json', 'apex-balance-audit.json', 'apex-adminalerts.json',
+  'apex-recovery-audit.json',
 ];
 function _persistHash(s) {
   let h = 2166136261 >>> 0; s = String(s);
@@ -480,13 +481,13 @@ function verifyDeviceToken(token, userId, deviceId) {
 // Read a single user row (identity + status) by id / email.
 async function dbGetUserById(id) {
   const [rows] = await pool.query(
-    'SELECT id, username, name, email, password, status, country, reject_reason, created_at, last_seen, ban_until, frozen FROM users WHERE id = ? LIMIT 1',
+    'SELECT id, username, name, email, password, status, country, reject_reason, created_at, last_seen, ban_until, frozen, frozen_until, force_2fa FROM users WHERE id = ? LIMIT 1',
     [id]);
   return rows[0] || null;
 }
 async function dbGetUserByEmail(email) {
   const [rows] = await pool.query(
-    'SELECT id, username, name, email, password, status, country, reject_reason, created_at, last_seen, ban_until, frozen FROM users WHERE email = ? LIMIT 1',
+    'SELECT id, username, name, email, password, status, country, reject_reason, created_at, last_seen, ban_until, frozen, frozen_until, force_2fa FROM users WHERE email = ? LIMIT 1',
     [String(email).trim().toLowerCase()]);
   return rows[0] || null;
 }
@@ -496,6 +497,16 @@ async function maybeExpireTempBan(dbu) {
     if (dbu && dbu.status === 'banned' && Number(dbu.ban_until) > 0 && Date.now() >= Number(dbu.ban_until)) {
       await pool.query('UPDATE users SET status = ?, ban_until = 0, reject_reason = NULL WHERE id = ?', ['approved', dbu.id]);
       dbu.status = 'approved'; dbu.ban_until = 0;
+    }
+  } catch (e) {}
+  return dbu;
+}
+// إن انتهت مدة التجميد المؤقّت → أزل التجميد تلقائياً.
+async function maybeExpireFrozen(dbu) {
+  try {
+    if (dbu && Number(dbu.frozen) === 1 && Number(dbu.frozen_until) > 0 && Date.now() >= Number(dbu.frozen_until)) {
+      await pool.query('UPDATE users SET frozen = 0, frozen_until = 0 WHERE id = ?', [dbu.id]);
+      dbu.frozen = 0; dbu.frozen_until = 0;
     }
   } catch (e) {}
   return dbu;
@@ -513,6 +524,8 @@ function dbPublicUser(u) {
     rejectReason: u.reject_reason || '',
     banUntil: Number(u.ban_until) || 0,
     frozen: !!Number(u.frozen),
+    frozenUntil: Number(u.frozen_until) || 0,
+    force2fa: !!Number(u.force_2fa),
     createdAt: u.created_at ? new Date(u.created_at).toISOString() : null,
   };
 }
@@ -570,6 +583,10 @@ async function ensureSchema() {
   await ensureColumn('users', 'ban_until', '`ban_until` BIGINT NOT NULL DEFAULT 0');
   // تجميد الرصيد: 1 = مجمّد (يُمنع إخراج الأموال)
   await ensureColumn('users', 'frozen', '`frozen` TINYINT NOT NULL DEFAULT 0');
+  // تجميد مؤقّت: وقت انتهاء التجميد (0 = تجميد دائم أو لا تجميد)
+  await ensureColumn('users', 'frozen_until', '`frozen_until` BIGINT NOT NULL DEFAULT 0');
+  // فرض التحقّق بخطوتين عند الدخول (يُفعَّل تلقائياً للحسابات المستعادة)
+  await ensureColumn('users', 'force_2fa', '`force_2fa` TINYINT NOT NULL DEFAULT 0');
   // identity documents (KYC): one row per user, holds the base64 image.
   await pool.query(
     'CREATE TABLE IF NOT EXISTS id_documents (' +
@@ -886,6 +903,91 @@ function logBalanceDiff(userId, before, after, source, su) {
 }
 // حفظ دوري (كل 5ث) لتجنّب كثرة الكتابة عند تداول كثيف.
 setInterval(() => { if (_balAuditDirty) saveBalanceAudit(); }, 5000).unref?.();
+
+// ============================================================
+// سجل تدقيق استعادة الحسابات (Recovery Audit Log)
+// يسجّل كل عملية استعادة حساب يقوم بها الأدمن (تغيير البريد/كلمة المرور/2FA).
+// ============================================================
+const RECOVERY_AUDIT_FILE = join(__dirname, 'data', 'apex-recovery-audit.json');
+function loadRecoveryAudit() {
+  try {
+    if (existsSync(RECOVERY_AUDIT_FILE)) {
+      const d = JSON.parse(readFileSync(RECOVERY_AUDIT_FILE, 'utf8'));
+      return { count: Number(d.count) || 0, entries: Array.isArray(d.entries) ? d.entries : [] };
+    }
+  } catch (e) { /* ignore corrupt / missing */ }
+  return { count: 0, entries: [] };
+}
+const recoveryAudit = loadRecoveryAudit();
+let _recoveryAuditDirty = false;
+function saveRecoveryAudit() {
+  try {
+    mkdirSync(dirname(RECOVERY_AUDIT_FILE), { recursive: true });
+    writeFileSync(RECOVERY_AUDIT_FILE, JSON.stringify(recoveryAudit));
+    _recoveryAuditDirty = false;
+  } catch (e) { console.warn('[recovery-audit] save failed:', e.message); }
+}
+// سجّل عملية استعادة حساب كسطر في السجل.
+function logRecovery(entry) {
+  try {
+    recoveryAudit.entries.unshift({
+      at: Date.now(),
+      admin: String((entry && entry.admin) || 'admin'),
+      userId: String((entry && entry.userId) || ''),
+      userName: String((entry && entry.userName) || ''),
+      oldEmail: String((entry && entry.oldEmail) || ''),
+      newEmail: String((entry && entry.newEmail) || ''),
+      emailChanged: !!(entry && entry.emailChanged),
+      passwordReset: !!(entry && entry.passwordReset),
+      force2fa: !!(entry && entry.force2fa),
+      ip: String((entry && entry.ip) || ''),
+    });
+    recoveryAudit.count += 1;
+    if (recoveryAudit.entries.length > 5000) recoveryAudit.entries.length = 5000;
+    _recoveryAuditDirty = true;
+  } catch (e) { /* non-fatal */ }
+}
+setInterval(() => { if (_recoveryAuditDirty) saveRecoveryAudit(); }, 5000).unref?.();
+
+// ============================================================
+// قالب بريد احترافي موحّد (RTL عربي، بلا CDN/صور خارجية)
+// renderEmailTemplate({ title, intro, code, note, ctaText, ctaUrl, lines })
+// ============================================================
+function renderEmailTemplate(opts) {
+  const o = opts || {};
+  const esc = (s) => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const title = esc(o.title || 'Apex');
+  const intro = o.intro ? ('<p style="margin:0 0 14px;font-size:15px;line-height:1.9;color:#cdd3e0">' + esc(o.intro) + '</p>') : '';
+  const codeBlock = o.code
+    ? ('<div style="margin:18px 0;padding:18px 12px;background:#0f1522;border:1px solid #273247;border-radius:12px;text-align:center">'
+      + '<div style="font-size:12px;color:#8b93a7;margin-bottom:8px">رمز التحقق</div>'
+      + '<div style="font-size:32px;font-weight:bold;letter-spacing:10px;color:#e0a615;font-family:Consolas,monospace">' + esc(o.code) + '</div>'
+      + '</div>')
+    : '';
+  const extraLines = Array.isArray(o.lines)
+    ? o.lines.map((l) => '<p style="margin:0 0 10px;font-size:14px;line-height:1.9;color:#cdd3e0">' + esc(l) + '</p>').join('')
+    : '';
+  const note = o.note ? ('<p style="margin:16px 0 0;font-size:12px;line-height:1.8;color:#8b93a7">' + esc(o.note) + '</p>') : '';
+  return [
+    '<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8">',
+    '<meta name="viewport" content="width=device-width,initial-scale=1"></head>',
+    '<body style="margin:0;padding:0;background:#070b12">',
+    '<div style="max-width:560px;margin:0 auto;padding:28px 16px;font-family:Tahoma,Arial,sans-serif;direction:rtl;text-align:right">',
+    '<div style="background:linear-gradient(135deg,#131a28,#0c1119);border:1px solid #273247;border-radius:18px;overflow:hidden">',
+    '<div style="padding:20px 24px;background:linear-gradient(135deg,#e0a615,#b8860b);text-align:center">',
+    '<div style="font-size:26px;font-weight:bold;color:#0b0f17;letter-spacing:2px">APEX</div>',
+    '</div>',
+    '<div style="padding:26px 24px">',
+    '<h2 style="margin:0 0 14px;font-size:19px;color:#f3f5f9">' + title + '</h2>',
+    intro, codeBlock, extraLines, note,
+    '</div>',
+    '<div style="padding:16px 24px;border-top:1px solid #1d2634;text-align:center;font-size:11px;color:#6b7280">',
+    '© Apex — جميع الحقوق محفوظة. هذه رسالة آلية، يُرجى عدم الردّ عليها.',
+    '</div>',
+    '</div></div></body></html>',
+  ].join('');
+}
 
 // ---- Futures wallet (SEPARATE from the Spot balance) ----
 // Money safety: the futures wallet is a server-authoritative store, kept in its
@@ -1591,6 +1693,7 @@ async function requireUser(req, res, next) {
     const dbu = await dbGetUserById(uid);
     if (!dbu) return res.status(401).json({ error: 'unauthorized' });
     await maybeExpireTempBan(dbu);
+    await maybeExpireFrozen(dbu);
     if (dbu.status === 'banned') return res.status(403).json({ error: 'banned' });
     // وحّد دفتر الأرصدة: اضمن وجود سجل store مُفتاح بمعرّف MySQL (مصدر واحد للرصيد)
     let su = null;
@@ -1608,6 +1711,7 @@ async function requireUser(req, res, next) {
       status: dbu.status || 'pending',
       country: dbu.country || '',
       frozen: !!Number(dbu.frozen),
+      frozenUntil: Number(dbu.frozen_until) || 0,
       banUntil: Number(dbu.ban_until) || 0,
       balances: (su && su.balances) ? su.balances : {},
       depositAddress: (su && su.depositAddress) ? su.depositAddress : '',
@@ -1702,6 +1806,7 @@ app.post('/api/auth/login', strictLimiter, async (req, res) => {
 
     // 3. الحسابات المحظورة ممنوعة من الدخول
     await maybeExpireTempBan(user);
+    await maybeExpireFrozen(user);
     if (user.status === 'banned') {
       return res.status(403).json({ error: 'banned' });
     }
@@ -1715,7 +1820,9 @@ app.post('/api/auth/login', strictLimiter, async (req, res) => {
       //      لهذا المستخدم → نتجاوز OTP ونُصدِر التوكن مباشرة.
       const deviceId = String((req.body || {}).deviceId || '').slice(0, 64);
       const trustToken = String((req.body || {}).trustToken || '');
-      if (deviceId && trustToken && DEVICE_ID_RE.test(deviceId) && verifyDeviceToken(trustToken, user.id, deviceId)) {
+      // إن كان الحساب مطلوباً له فرض 2FA (حساب مستعاد) → لا نتجاوز OTP حتى مع جهاز موثوق.
+      const force2fa = !!Number(user.force_2fa);
+      if (!force2fa && deviceId && trustToken && DEVICE_ID_RE.test(deviceId) && verifyDeviceToken(trustToken, user.id, deviceId)) {
         try { await pool.query('UPDATE users SET last_seen = ? WHERE id = ?', [Date.now(), user.id]); } catch (e) {}
         const token = signUserToken(user.id);
         return res.json({ ok: true, token, status: user.status || 'pending', user: dbPublicUser(user), trusted: true });
@@ -2886,26 +2993,37 @@ app.post('/api/admin/users/:id/ban-temp', requireAdmin, async (req, res) => {
 
 // ---- Admin: تجميد / فك تجميد رصيد المستخدم ----
 // التجميد يمنع كل إخراج أموال (سحب/تحويل) دون حذف أي رصيد.
-async function adminSetFrozen(id, frozen, res, req) {
+async function adminSetFrozen(id, frozen, res, req, until) {
   try {
-    const [r] = await pool.query('UPDATE users SET frozen = ? WHERE id = ?', [frozen ? 1 : 0, id]);
+    const frozenUntil = frozen ? (Number(until) > 0 ? Number(until) : 0) : 0;
+    const [r] = await pool.query('UPDATE users SET frozen = ?, frozen_until = ? WHERE id = ?', [frozen ? 1 : 0, frozenUntil, id]);
     if (!r.affectedRows) return res.status(404).json({ error: 'not_found' });
     const u = await dbGetUserById(id);
-    try { store.logAdmin && store.logAdmin({ admin: 'admin', action: frozen ? 'freeze' : 'unfreeze', targetId: String(id), targetEmail: u && u.email, targetName: u && (u.name || u.username), note: frozen ? 'تجميد الرصيد' : 'فك تجميد الرصيد' }); } catch (e) {}
+    const temp = frozen && frozenUntil > 0;
+    const noteTxt = frozen ? (temp ? ('تجميد مؤقّت للرصيد حتى ' + new Date(frozenUntil).toISOString()) : 'تجميد دائم للرصيد') : 'فك تجميد الرصيد';
+    try { store.logAdmin && store.logAdmin({ admin: 'admin', action: frozen ? 'freeze' : 'unfreeze', targetId: String(id), targetEmail: u && u.email, targetName: u && (u.name || u.username), note: noteTxt }); } catch (e) {}
     try {
       store.addNotification && u && store.addNotification(String(id), {
         title: frozen ? 'تجميد الرصيد' : 'رفع تجميد الرصيد', kind: 'admin',
-        body: frozen ? 'تم تجميد رصيدك مؤقتاً؛ لا يمكن السحب أو التحويل حتى رفعه.' : 'تم رفع التجميد عن رصيدك؛ يمكنك السحب والتحويل الآن.',
+        body: frozen ? (temp ? 'تم تجميد رصيدك مؤقتاً؛ لا يمكن السحب أو التحويل حتى انتهاء المدة.' : 'تم تجميد رصيدك؛ لا يمكن السحب أو التحويل حتى رفعه.') : 'تم رفع التجميد عن رصيدك؛ يمكنك السحب والتحويل الآن.',
       });
     } catch (e) {}
-    res.json({ ok: true, frozen: !!frozen, user: dbPublicUser(u) });
+    res.json({ ok: true, frozen: !!frozen, frozenUntil, user: dbPublicUser(u) });
   } catch (err) {
     console.error('freeze error:', err);
     res.status(500).json({ error: 'freeze_failed' });
   }
 }
-app.post('/api/admin/users/:id/freeze', requireAdmin, (req, res) => adminSetFrozen(req.params.id, true, res, req));
-app.post('/api/admin/users/:id/unfreeze', requireAdmin, (req, res) => adminSetFrozen(req.params.id, false, res, req));
+app.post('/api/admin/users/:id/freeze', requireAdmin, (req, res) => {
+  const b = req.body || {};
+  let until = 0;
+  if (!(b.permanent === true || b.permanent === 'true' || b.permanent === 1 || b.permanent === '1')) {
+    const mins = Number(b.minutes);
+    if (mins > 0) until = Date.now() + Math.round(mins) * 60000;
+  }
+  return adminSetFrozen(req.params.id, true, res, req, until);
+});
+app.post('/api/admin/users/:id/unfreeze', requireAdmin, (req, res) => adminSetFrozen(req.params.id, false, res, req, 0));
 
 // ---- Admin: استعام حساب مستخدم (البحث بالبريد) ----
 app.get('/api/admin/account-lookup', requireAdmin, async (req, res) => {
@@ -2930,6 +3048,7 @@ app.post('/api/admin/recover-account', requireAdmin, async (req, res) => {
     const oldEmail = String(b.oldEmail || '').trim().toLowerCase();
     const newEmailRaw = String(b.newEmail || '').trim().toLowerCase();
     const newPassword = String(b.newPassword || '');
+    const force2fa = !!(b.force2fa === true || b.force2fa === 'true' || b.force2fa === 1 || b.force2fa === '1');
     if (!EMAIL_RE.test(oldEmail)) return res.status(400).json({ error: 'bad_old_email' });
     const user = await dbGetUserByEmail(oldEmail);
     if (!user) return res.status(404).json({ error: 'not_found' });
@@ -2944,11 +3063,15 @@ app.post('/api/admin/recover-account', requireAdmin, async (req, res) => {
       newEmail = oldEmail;
     }
     if (newPassword && (newPassword.length < 6 || newPassword.length > 200)) return res.status(400).json({ error: 'weak_password' });
-    if (!newPassword && newEmail === oldEmail) return res.status(400).json({ error: 'nothing_to_change' });
+    if (!newPassword && newEmail === oldEmail && !force2fa) return res.status(400).json({ error: 'nothing_to_change' });
     if (newPassword) {
       await pool.query('UPDATE users SET email = ?, password = ? WHERE id = ?', [newEmail, hashPassword(newPassword), user.id]);
     } else {
       await pool.query('UPDATE users SET email = ? WHERE id = ?', [newEmail, user.id]);
+    }
+    // تفعيل التحقّق بخطوتين لتعزيز أمان الحساب المستعاد (اختياري)
+    if (force2fa) {
+      try { await pool.query('UPDATE users SET force_2fa = 1 WHERE id = ?', [user.id]); } catch (e) {}
     }
     try { store.updateUser && store.updateUser(String(user.id), { email: newEmail }); } catch (e) {}
     const u = await dbGetUserById(user.id);
@@ -2956,23 +3079,44 @@ app.post('/api/admin/recover-account', requireAdmin, async (req, res) => {
     try {
       store.addNotification && store.addNotification(String(user.id), {
         title: 'استعادة الحساب', kind: 'security',
-        body: 'قامت الإدارة باستعادة حسابك' + (emailChanged ? (' وتحويله إلى البريد ' + newEmail) : '') + (newPassword ? ' وتعيين كلمة مرور جديدة.' : '.'),
+        body: 'قامت الإدارة باستعادة حسابك' + (emailChanged ? (' وتحويله إلى البريد ' + newEmail) : '') + (newPassword ? ' وتعيين كلمة مرور جديدة.' : '.') + (force2fa ? ' وتم تفعيل التحقّق بخطوتين لحماية حسابك.' : ''),
       });
     } catch (e) {}
     try {
       await sendMail({
         to: newEmail,
         subject: 'استعادة الحساب - Apex',
-        text: 'تمّت استعادة حسابك من قبل إدارة Apex.' + (emailChanged ? (' بريدك الجديد: ' + newEmail + '.') : '') + (newPassword ? ' تم تعيين كلمة مرور جديدة؛ سجّل الدخول ثم غيّرها.' : ''),
-        html: '<div style="font-family:Tahoma,Arial,sans-serif;direction:rtl;text-align:right"><h2 style="margin:0 0 8px">استعادة الحساب</h2><p>تمّت استعادة حسابك من قبل إدارة Apex.</p>' + (emailChanged ? ('<p>بريدك الجديد: <b>' + newEmail + '</b></p>') : '') + (newPassword ? '<p>تم تعيين كلمة مرور جديدة لحسابك؛ يُرجى تسجيل الدخول ثم تغييرها من الإعدادات.</p>' : '') + '<p>إن لم تطلب ذلك تواصل مع الدعم فوراً.</p></div>',
+        text: 'تمّت استعادة حسابك من قبل إدارة Apex.' + (emailChanged ? (' بريدك الجديد: ' + newEmail + '.') : '') + (newPassword ? ' تم تعيين كلمة مرور جديدة؛ سجّل الدخول ثم غيّرها.' : '') + (force2fa ? ' تم تفعيل التحقّق بخطوتين.' : ''),
+        html: renderEmailTemplate({
+          title: 'استعادة الحساب',
+          intro: 'تمّت استعادة حسابك من قبل إدارة Apex. فيما يلي تفاصيل التغييرات:',
+          lines: [
+            emailChanged ? ('بريدك الجديد: ' + newEmail) : '',
+            newPassword ? 'تم تعيين كلمة مرور جديدة لحسابك؛ يُرجى تسجيل الدخول ثم تغييرها من الإعدادات.' : '',
+            force2fa ? 'تم تفعيل التحقّق بخطوتين (2FA) لتعزيز أمان حسابك عند الدخول التالي.' : '',
+          ].filter(Boolean),
+          note: 'إن لم تطلب هذه الاستعادة فتواصل مع الدعم فوراً.',
+        }),
       });
     } catch (e) {}
     try { store.logAdmin && store.logAdmin({ admin: 'admin', action: 'account_recover', targetId: String(user.id), targetEmail: newEmail, targetName: u && (u.name || u.username), note: 'استعادة حساب من ' + oldEmail + ' إلى ' + newEmail + (newPassword ? ' + كلمة مرور جديدة' : '') }); } catch (e) {}
     try { logOps(req, { user: { id: String(user.id), uid: user.id, name: u && (u.name || u.username || u.email), email: newEmail }, category: 'account', kind: 'account_recovered', status: 'ok', detail: 'استعادة حساب بواسطة الأدمن', meta: { oldEmail, newEmail, passwordReset: !!newPassword } }); } catch (e) {}
-    res.json({ ok: true, user: dbPublicUser(u), oldEmail, newEmail, emailChanged, passwordReset: !!newPassword });
+    try { logRecovery({ admin: (req.admin && req.admin.name) || 'admin', userId: String(user.id), userName: (u && (u.name || u.username || u.email)) || '', oldEmail, newEmail, emailChanged, passwordReset: !!newPassword, force2fa, ip: (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim() }); } catch (e) {}
+    res.json({ ok: true, user: dbPublicUser(u), oldEmail, newEmail, emailChanged, passwordReset: !!newPassword, force2fa });
   } catch (err) {
     console.error('recover-account error:', err.message);
     res.status(500).json({ error: 'recover_failed' });
+  }
+});
+
+// ---- Admin: سجل تدقيق استعادة الحسابات ----
+app.get('/api/admin/recovery-audit', requireAdmin, async (req, res) => {
+  try {
+    const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 100));
+    res.json({ ok: true, count: recoveryAudit.count, entries: recoveryAudit.entries.slice(0, limit) });
+  } catch (err) {
+    console.error('recovery-audit error:', err.message);
+    res.status(500).json({ error: 'audit_failed' });
   }
 });
 
@@ -4641,15 +4785,16 @@ const emailChangeOtps = new OtpStore({ ttlMs: 5 * 60 * 1000, maxTries: 5 });
 // رمز إعادة تعيين كلمة المرور (نسيت كلمة المرور) — مُفتاح بالبريد الإلكتروني
 const passwordResetOtps = new OtpStore({ ttlMs: 15 * 60 * 1000, maxTries: 5 });
 
-// ---- نسيت كلمة المرور: الخطوة 1 — إرسال رمز للبريد ----
-// لا نكشف هل البريد مسجّل أم لا (حماية من تعداد الحسابات): نردّ ok دائماً.
+// ---- نسيت كلمة المرور: الخطوة 1 — البحث عن البريد ثم إرسال رمز ----
+// بطلب المستخدم: نكشف صراحةً إن كان البريد غير مسجّل (404 not_found)،
+// وإن وُجد أُرسل الرمز تلقائياً.
 app.post('/api/auth/forgot-password', strictLimiter, async (req, res) => {
   try {
     const email = String((req.body || {}).email || '').trim().toLowerCase();
     if (!EMAIL_RE.test(email) || email.length > 160) return res.status(400).json({ error: 'bad_email' });
     const devMode = !isMailerConfigured() || process.env.OTP_DEBUG === 'true';
     const user = await dbGetUserByEmail(email);
-    if (!user) return res.json({ ok: true, sent: true });
+    if (!user) return res.status(404).json({ error: 'not_found' });
     const { code, expiresInSec } = passwordResetOtps.issue(email, { uid: user.id });
     const mins = Math.max(1, Math.round(expiresInSec / 60));
     try {
@@ -4657,7 +4802,13 @@ app.post('/api/auth/forgot-password', strictLimiter, async (req, res) => {
         to: user.email,
         subject: 'إعادة تعيين كلمة المرور - Apex',
         text: 'رمز إعادة تعيين كلمة المرور الخاص بك هو: ' + code + '\nالرمز صالح لمدة ' + mins + ' دقيقة. إن لم تطلب ذلك فتجاهل هذه الرسالة.',
-        html: '<div style="font-family:Tahoma,Arial,sans-serif;direction:rtl;text-align:right"><h2 style="margin:0 0 8px">إعادة تعيين كلمة المرور</h2><p>رمز التحقق الخاص بك:</p><p style="font-size:28px;font-weight:bold;letter-spacing:6px;color:#e0a615">' + code + '</p><p>الرمز صالح لمدة ' + mins + ' دقيقة. إن لم تطلب إعادة التعيين فتجاهل هذه الرسالة.</p></div>'
+        html: renderEmailTemplate({
+          title: 'إعادة تعيين كلمة المرور',
+          intro: 'طلبت إعادة تعيين كلمة مرور حسابك في Apex. استخدم رمز التحقق التالي لمتابعة العملية:',
+          code: code,
+          lines: ['الرمز صالح لمدة ' + mins + ' دقيقة فقط.'],
+          note: 'إن لم تطلب إعادة التعيين فتجاهل هذه الرسالة، ولا تشارك هذا الرمز مع أحد.',
+        }),
       });
     } catch (e) {}
     try { logSecurity(req, { user: { id: String(user.id), uid: user.id, name: user.name || user.username || user.email, email: user.email }, kind: 'password_reset_requested', severity: 'warning', detail: 'طلب إعادة تعيين كلمة المرور (نسيت كلمة المرور)' }); } catch (e) {}

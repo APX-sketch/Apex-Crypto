@@ -483,10 +483,17 @@ tr:last-child td{border-bottom:0}
             <div id="rcFound" style="display:none;background:var(--panel2,#1c232c);border:1px solid var(--border,#252d38);border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:13px;line-height:1.9"></div>
             <div class="fld"><label>البريد الجديد (اختياري — اتركه فارغاً لإبقاء نفس البريد)</label><input id="rcNew" type="email" placeholder="new@mail.com" style="direction:ltr"></div>
             <div class="fld"><label>كلمة المرور الجديدة (6 أحرف على الأقل)</label><input id="rcPass" type="text" placeholder="كلمة مرور جديدة" style="direction:ltr"></div>
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;background:var(--panel2,#1c232c);border:1px solid var(--border,#252d38);border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:13px">
+              <input id="rcForce2fa" type="checkbox" style="width:18px;height:18px;accent-color:var(--gold1,#e0a615);cursor:pointer">
+              <span>🔐 تفعيل التحقّق بخطوتين (2FA) لتعزيز أمان الحساب المستعاد — سيُطلب رمز بريدي في كل دخول حتى على الأجهزة الموثوقة.</span>
+            </label>
             <button class="btn full" onclick="rcRecover()">تطبيق الاستعادة</button>
-            <div class="psub" style="margin-top:14px;line-height:1.8">ملاحظة: يُرسل للمستخدم إشعار + بريد إلى العنوان الجديد يُعلمه بالاستعادة. تُسجّل العملية في سجل الأدمن.</div>
+            <div class="psub" style="margin-top:14px;line-height:1.8">ملاحظة: يُرسل للمستخدم إشعار + بريد إلى العنوان الجديد يُعلمه بالاستعادة. تُسجّل العملية في سجل الأدمن وسجل تدقيق الاستعادة.</div>
           </div>
         </div>
+        <div class="card" style="max-width:620px;margin-top:18px">
+          <div class="card-h" style="display:flex;justify-content:space-between;align-items:center"><b>📑 سجل تدقيق الاستعادة</b><button class="btn ghost sm" onclick="loadRecoveryAudit()">⭳ تحديث</button></div>
+          <div style="padding:4px 0 8px;overflow-x:auto" id="rcAuditWrap"><div class="psub" style="padding:14px">اضغط «تحديث» لعرض آخر عمليات الاستعادة.</div></div>
       </div>
     </div>
   </div>
@@ -538,6 +545,31 @@ tr:last-child td{border-bottom:0}
     <h3>وثيقة الهوية</h3>
     <div class="mt" id="idModalType"></div>
     <img id="idModalImg" alt="وثيقة الهوية">
+  </div>
+</div>
+<!-- ===== FREEZE BALANCE MODAL (تجميد الرصيد: مؤقّت / دائم) ===== -->
+<div class="modal" id="freezeModal" onclick="if(event.target===this)closeFreeze()">
+  <div class="modal-box" style="max-width:440px">
+    <button class="x" onclick="closeFreeze()">إغلاق ✕</button>
+    <h3>❄ تجميد رصيد المستخدم</h3>
+    <div class="mt" id="freezeUser"></div>
+    <div class="mt" style="line-height:1.8">أثناء التجميد لن يستطيع المستخدم السحب أو التحويل. اختر نوع التجميد:</div>
+    <div class="fld">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:8px"><input type="radio" name="frzType" value="temp" checked onchange="frzToggle()" style="width:17px;height:17px;accent-color:var(--gold1,#e0a615)"><span>⏱ تجميد مؤقّت (يُرفع تلقائياً بعد انتهاء المدة)</span></label>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer"><input type="radio" name="frzType" value="perm" onchange="frzToggle()" style="width:17px;height:17px;accent-color:var(--gold1,#e0a615)"><span>∞ تجميد دائم (حتى الرفع اليدوي)</span></label>
+    </div>
+    <div class="fld" id="frzDurWrap">
+      <label>مدة التجميد</label>
+      <div style="display:flex;gap:8px">
+        <input id="frzDurVal" type="number" min="1" step="1" value="24" style="direction:ltr;flex:1">
+        <select id="frzDurUnit" style="flex:1;background:var(--panel2,#1c232c);color:var(--txt);border:1px solid var(--border,#252d38);border-radius:10px;padding:0 10px">
+          <option value="60">ساعات</option>
+          <option value="1">دقائق</option>
+          <option value="1440">أيام</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn full" onclick="applyFreeze()">تأكيد التجميد</button>
   </div>
 </div>
 <!--JS-->
@@ -644,7 +676,7 @@ async function api(path,opts){
 }
 /* ---- استعادة حساب ---- */
 var RC_EMAIL_RE=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-function rcReset(){var f=$('rcFound');if(f){f.style.display='none';f.innerHTML='';}['rcOld','rcNew','rcPass'].forEach(function(id){if($(id))$(id).value='';});}
+function rcReset(){var f=$('rcFound');if(f){f.style.display='none';f.innerHTML='';}['rcOld','rcNew','rcPass'].forEach(function(id){if($(id))$(id).value='';});if($('rcForce2fa'))$('rcForce2fa').checked=false;}
 function rcErr(e){
   if(e==='bad_email'||e==='bad_old_email')return 'البريد القديم غير صالح.';
   if(e==='bad_new_email')return 'البريد الجديد غير صالح.';
@@ -673,20 +705,41 @@ async function rcRecover(){
   var oldEmail=($('rcOld').value||'').trim().toLowerCase();
   var newEmail=($('rcNew').value||'').trim().toLowerCase();
   var newPassword=$('rcPass').value||'';
+  var force2fa=!!($('rcForce2fa')&&$('rcForce2fa').checked);
   if(!RC_EMAIL_RE.test(oldEmail)){toast('أدخل البريد القديم الصحيح');return;}
   if(newEmail&&!RC_EMAIL_RE.test(newEmail)){toast('البريد الجديد غير صالح');return;}
   if(newPassword&&newPassword.length<6){toast('كلمة المرور 6 أحرف على الأقل');return;}
-  if(!newPassword&&(!newEmail||newEmail===oldEmail)){toast('أدخل بريداً جديداً أو كلمة مرور جديدة');return;}
-  if(!confirm('تأكيد استعادة الحساب '+oldEmail+(newEmail&&newEmail!==oldEmail?(' ← '+newEmail):'')+(newPassword?' + كلمة مرور جديدة':'')+'؟'))return;
+  if(!newPassword&&(!newEmail||newEmail===oldEmail)&&!force2fa){toast('أدخل بريداً جديداً أو كلمة مرور جديدة أو فعّل 2FA');return;}
+  if(!confirm('تأكيد استعادة الحساب '+oldEmail+(newEmail&&newEmail!==oldEmail?(' ← '+newEmail):'')+(newPassword?' + كلمة مرور جديدة':'')+(force2fa?' + تفعيل 2FA':'')+'؟'))return;
   try{
-    var d=await api('/api/admin/recover-account',{method:'POST',body:JSON.stringify({oldEmail:oldEmail,newEmail:newEmail,newPassword:newPassword})});
+    var d=await api('/api/admin/recover-account',{method:'POST',body:JSON.stringify({oldEmail:oldEmail,newEmail:newEmail,newPassword:newPassword,force2fa:force2fa})});
     toast('✓ تمت استعادة الحساب → '+(d.newEmail||oldEmail));
     var f=$('rcFound');
-    f.innerHTML='<b style="color:var(--green,#0ecb81)">✓ تمت الاستعادة بنجاح</b><br>البريد الجديد: <span style="direction:ltr;display:inline-block">'+esc(d.newEmail||oldEmail)+'</span>'+(d.passwordReset?'<br>تم تعيين كلمة مرور جديدة.':'');
+    f.innerHTML='<b style="color:var(--green,#0ecb81)">✓ تمت الاستعادة بنجاح</b><br>البريد الجديد: <span style="direction:ltr;display:inline-block">'+esc(d.newEmail||oldEmail)+'</span>'+(d.passwordReset?'<br>تم تعيين كلمة مرور جديدة.':'')+(d.force2fa?'<br>🔐 تم تفعيل التحقّق بخطوتين.':'');
     f.style.display='block';
     $('rcNew').value='';$('rcPass').value='';$('rcOld').value=(d.newEmail||oldEmail);
+    if($('rcForce2fa'))$('rcForce2fa').checked=false;
+    loadRecoveryAudit();
     if($('pg-logs').classList.contains('on'))loadLogs();
   }catch(e){toast(rcErr(e.message));}
+}
+function rcAuditAction(e){
+  var parts=[];
+  if(e.emailChanged)parts.push('تغيير البريد');
+  if(e.passwordReset)parts.push('كلمة مرور');
+  if(e.force2fa)parts.push('🔐 2FA');
+  return parts.length?parts.join(' · '):'—';
+}
+async function loadRecoveryAudit(){
+  var wrap=$('rcAuditWrap');if(!wrap)return;
+  try{
+    var d=await api('/api/admin/recovery-audit?limit=100');
+    var list=(d&&d.entries)||[];
+    if(!list.length){wrap.innerHTML='<div class="psub" style="padding:14px">لا توجد عمليات استعادة بعد.</div>';return;}
+    wrap.innerHTML='<table style="font-size:12px"><thead><tr><th>الوقت</th><th>المستخدم</th><th>من</th><th>إلى</th><th>الإجراء</th></tr></thead><tbody>'+
+      list.map(function(e){return '<tr><td style="white-space:nowrap">'+esc(fmtTime(e.at))+'</td><td>'+esc(e.userName||e.userId||'—')+'</td><td style="direction:ltr">'+esc(e.oldEmail||'—')+'</td><td style="direction:ltr">'+esc(e.newEmail||'—')+'</td><td>'+rcAuditAction(e)+'</td></tr>';}).join('')+
+      '</tbody></table>';
+  }catch(e){wrap.innerHTML='<div class="psub" style="padding:14px;color:var(--red,#f6465d)">تعذّر تحميل السجل.</div>';}
 }
 
 /* ===== QRMini: مولّد رمز QR محلي (مستند إلى Nayuki qrcodegen — public domain) ===== */
@@ -1007,7 +1060,7 @@ function nav(pg){
   if(pg==='backup')loadBackups();
   if(pg==='security')loadSecurity();
   if(pg==='support')loadChats();
-  if(pg==='recover')rcReset();
+  if(pg==='recover'){rcReset();loadRecoveryAudit();}
 }
 async function refreshAll(){await refreshStats();refreshHealth();loadRecent();loadAdminAlerts();}
 
@@ -1289,7 +1342,7 @@ async function loadUsers(){
         a+='<button class="btn ghost sm" onclick="delUser(\''+u.id+'\')">حذف</button>';
         var badges='<span class="pill '+u.status+'">'+st[u.status]+'</span>';
         if(u.status==='banned'&&u.banUntil&&u.banUntil>Date.now())badges+=' <span class="pill pending" title="حظر مؤقّت">⏱ '+banLeft(u.banUntil)+'</span>';
-        if(u.frozen)badges+=' <span class="pill banned" title="الرصيد مجمّد">❄ مجمّد</span>';
+        if(u.frozen)badges+=' <span class="pill banned" title="الرصيد مجمّد">❄ '+((u.frozenUntil&&u.frozenUntil>Date.now())?('مجمّد · '+banLeft(u.frozenUntil)):'مجمّد')+'</span>';
         return '<tr><td class="u-name">'+esc(u.name)+'</td><td class="u-mail">'+esc(u.email)+'</td><td style="direction:ltr">'+u.uid+'</td>'+idCell(u)+'<td>'+badges+'</td><td class="acts">'+a+'</td></tr>';}).join('')+'</tbody></table>';
   }catch(e){}
 }
@@ -1299,7 +1352,43 @@ async function banTemp(id){
   if(v===null)return;var hours=Number(v);if(!(hours>0)){toast('مدة غير صالحة');return;}
   try{await api('/api/admin/users/'+id+'/ban-temp',{method:'POST',body:JSON.stringify({hours:hours})});toast('تم الحظر المؤقّت '+hours+' ساعة');loadUsers();refreshStats();}catch(e){toast('تعذّر التنفيذ');}
 }
-async function freeze(id){if(!confirm('تجميد رصيد هذا المستخدم؟ لن يستطيع السحب أو التحويل.'))return;try{await api('/api/admin/users/'+id+'/freeze',{method:'POST'});toast('تم تجميد الرصيد');loadUsers();}catch(e){toast('تعذّر التنفيذ');}}
+var FRZ_ID='';
+function freeze(id){
+  FRZ_ID=String(id);
+  var u=(USERS||[]).find(function(x){return String(x.id)===String(id);});
+  var fu=$('freezeUser');if(fu)fu.textContent=u?((u.name||'')+' · '+(u.email||'')):('المستخدم '+id);
+  var r=document.querySelector('input[name="frzType"][value="temp"]');if(r)r.checked=true;
+  if($('frzDurVal'))$('frzDurVal').value='24';
+  if($('frzDurUnit'))$('frzDurUnit').value='60';
+  frzToggle();
+  $('freezeModal').classList.add('on');
+}
+function closeFreeze(){$('freezeModal').classList.remove('on');FRZ_ID='';}
+function frzToggle(){
+  var t=document.querySelector('input[name="frzType"]:checked');
+  var perm=t&&t.value==='perm';
+  if($('frzDurWrap'))$('frzDurWrap').style.display=perm?'none':'block';
+}
+async function applyFreeze(){
+  if(!FRZ_ID)return;
+  var t=document.querySelector('input[name="frzType"]:checked');
+  var perm=t&&t.value==='perm';
+  var body;
+  if(perm){
+    if(!confirm('تجميد دائم لرصيد هذا المستخدم؟ لن يُرفع إلا يدوياً.'))return;
+    body={permanent:true};
+  }else{
+    var val=Number(($('frzDurVal')||{}).value);
+    var unit=Number(($('frzDurUnit')||{}).value)||60;
+    if(!(val>0)){toast('أدخل مدة صالحة');return;}
+    body={minutes:Math.round(val*unit)};
+  }
+  try{
+    await api('/api/admin/users/'+FRZ_ID+'/freeze',{method:'POST',body:JSON.stringify(body)});
+    toast(perm?'تم تجميد الرصيد (دائم)':'تم التجميد المؤقّت');
+    closeFreeze();loadUsers();
+  }catch(e){toast('تعذّر التنفيذ');}
+}
 async function unfreeze(id){try{await api('/api/admin/users/'+id+'/unfreeze',{method:'POST'});toast('تم رفع التجميد');loadUsers();}catch(e){toast('تعذّر التنفيذ');}}
 async function ban(id){if(!confirm('حظر هذا المستخدم؟'))return;try{await api('/api/admin/users/'+id+'/ban',{method:'POST'});toast('تم الحظر');loadUsers();refreshStats();}catch(e){}}
 async function unban(id){try{await api('/api/admin/users/'+id+'/unban',{method:'POST'});toast('تم رفع الحظر');loadUsers();refreshStats();}catch(e){}}
