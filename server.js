@@ -786,6 +786,8 @@ async function ensureSchema() {
     ')');
   // عمود رمز العملة لمنشورات Square — لربط النقاش بكل عملة على حدة (NULL = منشور عام)
   await ensureColumn('square_posts', 'symbol', '`symbol` VARCHAR(20) NULL');
+  // عمود فيديو المنشور (base64 data URI) — يُجلب عند الطلب فقط لئلّا تثقل التغذية
+  await ensureColumn('square_posts', 'video', '`video` LONGTEXT NULL');
   // إعادة النشر (ريبوست) — صف لكل (منشور، مستخدم) ليُحسب العدد ويُعرف إن أعاد المستخدم نشره
   await pool.query(
     'CREATE TABLE IF NOT EXISTS square_reposts (' +
@@ -1450,7 +1452,7 @@ app.use(helmet({ contentSecurityPolicy: false }));
 const bigJson = express.json({ limit: '3mb' });
 const smallJson = express.json({ limit: '10kb' });
 app.use((req, res, next) => {
-  if (req.path === '/api/auth/register' || req.path === '/api/auth/reverify') return bigJson(req, res, next);
+  if (req.path === '/api/auth/register' || req.path === '/api/auth/reverify' || req.path.startsWith('/api/square/')) return bigJson(req, res, next);
   return smallJson(req, res, next);
 });
 app.use(cors({
@@ -4576,6 +4578,7 @@ app.get('/api/square/posts', requireUser, async (req, res) => {
     if (filter === 'hot') order = 'likes DESC, p.created_at DESC';
     const [rows] = await pool.query(
       'SELECT p.id, p.user_id, p.author, p.content, p.image, p.tag, p.symbol, p.created_at, ' +
+      ' (p.video IS NOT NULL AND p.video <> \'\') AS has_video, ' +
       ' (SELECT COUNT(*) FROM square_likes l WHERE l.post_id = p.id) AS likes, ' +
       ' (SELECT COUNT(*) FROM square_comments c WHERE c.post_id = p.id) AS comments, ' +
       ' (SELECT COUNT(*) FROM square_likes l WHERE l.post_id = p.id AND l.user_id = ?) AS liked, ' +
@@ -4595,13 +4598,16 @@ app.post('/api/square/posts', requireUser, async (req, res) => {
     let image = String(b.image || '');
     if (image && !/^data:image\/(jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(image)) image = '';
     if (image && image.length > 2800000) image = '';
+    let video = String(b.video || '');
+    if (video && !/^data:video\/(mp4|webm|quicktime);base64,[A-Za-z0-9+/=]+$/.test(video)) video = '';
+    if (video && video.length > 2800000) video = '';
     const tag = String(b.tag || '').trim().slice(0, 20) || null;
     const symbol = String(b.symbol || '').trim().toUpperCase().slice(0, 20) || null;
-    if (!content && !image) return res.status(400).json({ error: 'empty' });
+    if (!content && !image && !video) return res.status(400).json({ error: 'empty' });
     const author = req.user.name || req.user.username || req.user.email;
     const [r] = await pool.query(
-      'INSERT INTO square_posts (user_id, author, content, image, tag, symbol, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [req.user.uid, author, content, image || null, tag, symbol, Date.now()]);
+      'INSERT INTO square_posts (user_id, author, content, image, video, tag, symbol, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [req.user.uid, author, content, image || null, video || null, tag, symbol, Date.now()]);
     // ---- تخزين الوسوم (#hashtags) لتصنيف المنشور وفلترته ----
     try {
       const hts = extractHashtags(content);
@@ -4628,6 +4634,73 @@ app.post('/api/square/posts', requireUser, async (req, res) => {
     } catch (e) { console.warn('[square/notify]', e.message); }
     res.json({ ok: true, id: r.insertId });
   } catch (e) { console.error('[square/create]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+// ===== فيديو المنشور — يُجلب عند الطلب فقط (حفاظاً على خفّة التغذية) =====
+app.get('/api/square/posts/:id/video', requireUser, async (req, res) => {
+  try {
+    const pid = Number(req.params.id);
+    if (!pid) return res.status(400).json({ error: 'bad_id' });
+    const [[p]] = await pool.query('SELECT video FROM square_posts WHERE id = ?', [pid]);
+    if (!p || !p.video) return res.status(404).json({ error: 'no_video' });
+    res.json({ ok: true, video: p.video });
+  } catch (e) { console.error('[square/video]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+// ===== البث المباشر الحيّ (Live) =====
+// بلا CDN/وسيط وسائط: المذيع يرسل إطارات JPEG (canvas) والخادم يُرحّلها من ذاكرته
+// (Map) للمشاهدين عبر polling منخفض الإطارات. لا WebRTC ولا تخزين دائم.
+const LIVE = new Map();
+const LIVE_TTL = 15000;        // يُزال البث إن توقّف إرسال الإطارات لأكثر من هذه المدّة
+const LIVE_VIEWER_TTL = 15000; // يُعدّ المشاهد نشطاً خلال هذه المدّة من آخر استعلام
+function liveViewerCount(s) { const now = Date.now(); let n = 0; for (const [, t] of s.viewers) { if (now - t <= LIVE_VIEWER_TTL) n++; } return n; }
+function pruneLive() { const now = Date.now(); for (const [id, s] of LIVE) { if (now - s.frameAt > LIVE_TTL) LIVE.delete(id); } }
+setInterval(pruneLive, 8000);
+
+// بدء بثّ جديد (مذيع) — بثّ واحد فعّال لكل مستخدم
+app.post('/api/square/live/start', requireUser, (req, res) => {
+  const title = String((req.body || {}).title || '').trim().slice(0, 120) || 'بث مباشر';
+  for (const [id, s] of LIVE) { if (s.uid === req.user.uid) LIVE.delete(id); }
+  const id = 'lv_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  const host = req.user.name || req.user.username || req.user.email;
+  LIVE.set(id, { id, uid: req.user.uid, host, title, startedAt: Date.now(), frame: '', frameAt: Date.now(), seq: 0, viewers: new Map() });
+  res.json({ ok: true, id, title, host });
+});
+
+// رفع إطار من المذيع
+app.post('/api/square/live/:id/frame', requireUser, (req, res) => {
+  const s = LIVE.get(req.params.id);
+  if (!s) return res.status(404).json({ error: 'not_live' });
+  if (s.uid !== req.user.uid) return res.status(403).json({ error: 'not_host' });
+  const f = String((req.body || {}).frame || '');
+  if (!/^data:image\/(jpeg|jpg|webp);base64,[A-Za-z0-9+/=]+$/.test(f) || f.length > 1500000) return res.status(400).json({ error: 'bad_frame' });
+  s.frame = f; s.frameAt = Date.now(); s.seq++;
+  res.json({ ok: true, seq: s.seq, viewers: liveViewerCount(s) });
+});
+
+// جلب آخر إطار (مشاهد أو المذيع نفسه)
+app.get('/api/square/live/:id/frame', requireUser, (req, res) => {
+  const s = LIVE.get(req.params.id);
+  if (!s) return res.status(404).json({ error: 'ended' });
+  const me = s.uid === req.user.uid;
+  if (!me) s.viewers.set(req.user.uid, Date.now());
+  res.json({ ok: true, id: s.id, title: s.title, host: s.host, seq: s.seq, frame: s.frame, viewers: liveViewerCount(s), startedAt: s.startedAt, me });
+});
+
+// إنهاء البثّ (المذيع فقط)
+app.post('/api/square/live/:id/stop', requireUser, (req, res) => {
+  const s = LIVE.get(req.params.id);
+  if (s && s.uid === req.user.uid) LIVE.delete(req.params.id);
+  res.json({ ok: true });
+});
+
+// قائمة البثوث الحيّة الجارية
+app.get('/api/square/live', requireUser, (req, res) => {
+  pruneLive();
+  const list = [];
+  for (const [, s] of LIVE) list.push({ id: s.id, title: s.title, host: s.host, viewers: liveViewerCount(s), startedAt: s.startedAt, live: !!s.frame });
+  list.sort((a, b) => b.viewers - a.viewers || b.startedAt - a.startedAt);
+  res.json({ ok: true, live: list });
 });
 
 app.post('/api/square/posts/:id/like', requireUser, async (req, res) => {
