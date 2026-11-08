@@ -2937,6 +2937,7 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
 
     const [rows] = await pool.query(
       'SELECT u.id, u.username, u.name, u.email, u.status, u.country, u.reject_reason, u.created_at, u.last_seen, ' +
+      ' u.ban_until, u.frozen, u.frozen_until, ' +
       ' d.doc_type AS doc_type, (d.image IS NOT NULL) AS has_doc ' +
       'FROM users u LEFT JOIN id_documents d ON d.user_id = u.id' + where +
       ' ORDER BY u.created_at DESC',
@@ -2961,6 +2962,9 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
       kycType: u.doc_type || (u.has_doc ? 'وثيقة هوية' : 'لا توجد وثيقة'),
       lastSeen: Number(u.last_seen) || 0,
       online: !!u.last_seen && (now - Number(u.last_seen)) < ONLINE_MS,
+      banUntil: Number(u.ban_until) || 0,
+      frozen: !!Number(u.frozen),
+      frozenUntil: Number(u.frozen_until) || 0,
     }));
 
     res.json({ ok: true, users });

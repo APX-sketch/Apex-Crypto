@@ -140,6 +140,25 @@ tr:last-child td{border-bottom:0}
   .side{width:46px}.navi svg{width:19px;height:19px}
   .stats{grid-template-columns:1fr 1fr}
 }
+/* ===== زر القائمة (هامبرغر) + قائمة وسطية على الجوال ===== */
+.navbtn{display:none;background:var(--panel2);color:var(--gold1);border:1px solid var(--border);border-radius:10px;width:40px;height:40px;align-items:center;justify-content:center;cursor:pointer}
+.navscrim{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:55}
+.side-head{display:none}
+.side-x{background:var(--panel2);color:var(--txt);border:1px solid var(--border);border-radius:9px;width:34px;height:34px;font-size:16px;cursor:pointer}
+@media(max-width:980px){
+  .navbtn{display:inline-flex}
+  /* أخفِ الشريط الجانبي واستبدله بقائمة تظهر في وسط الشاشة */
+  .side{position:fixed;inset:0;width:auto;z-index:60;display:none;flex-direction:column;justify-content:center;align-items:center;
+        background:rgba(10,13,18,.98);border:0;padding:20px;gap:6px;overflow-y:auto}
+  .side.open{display:flex}
+  .side.open~.navscrim,.navscrim.on{display:block}
+  .side-head{display:flex;align-items:center;justify-content:space-between;width:100%;max-width:360px;margin-bottom:10px}
+  .side-head b{font-size:17px;color:var(--gold1)}
+  .side .navi{width:100%;max-width:360px;justify-content:flex-start!important;padding:14px 18px!important;font-size:16px;margin-bottom:4px}
+  .side .navi span{display:inline!important}
+  .side .navi svg{width:22px;height:22px}
+  .side .navi .badge{left:14px}
+}
 </style>
 <script src="apx-coin.js"></script>
 <script src="i18n.js"></script>
@@ -185,6 +204,7 @@ tr:last-child td{border-bottom:0}
 <!-- ===== APP ===== -->
 <div class="app" id="app">
   <div class="topbar">
+    <button class="navbtn" id="navBtn" onclick="toggleNav()" aria-label="القائمة"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
     <div class="lg">Apex</div>
     <div class="tag">لوحة الإدارة</div>
     <div class="sp"></div>
@@ -192,13 +212,16 @@ tr:last-child td{border-bottom:0}
     <button class="out" onclick="adminLogout()">تسجيل الخروج ‹</button>
   </div>
   <div class="layout">
-    <div class="side">
+    <div class="navscrim" id="navScrim" onclick="closeNav()"></div>
+    <div class="side" id="sideNav">
+      <div class="side-head"><b>القائمة</b><button class="side-x" onclick="closeNav()" aria-label="إغلاق">✕</button></div>
       <div class="navi on" data-pg="overview" onclick="nav('overview')"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>نظرة عامة</span></div>
       <div class="navi" data-pg="requests" onclick="nav('requests')"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg><span>طلبات التسجيل</span><span class="badge" id="badgeReq"></span></div>
       <div class="navi" data-pg="users" onclick="nav('users')"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5"/><path d="M16 5a3 3 0 010 6M21 20c0-2.5-1.5-4-3.5-4.5"/></svg><span>المستخدمون</span></div>
       <div class="navi" data-pg="liquidity" onclick="nav('liquidity')"><svg viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg><span>الأرصدة والسيولة</span></div>
       <div class="navi" data-pg="orders" onclick="nav('orders')"><svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h12"/></svg><span>دفتر الأوامر</span><span class="badge" id="badgeOrders"></span><span class="badge" id="badgeAlerts" style="left:34px;background:var(--green)"></span></div>
       <div class="navi" data-pg="finance" onclick="nav('finance')"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l3-3 3 3 4-5"/></svg><span>العمليات المالية</span></div>
+      <div class="navi" data-pg="moneyflow" onclick="nav('moneyflow')"><svg viewBox="0 0 24 24"><path d="M4 7h13l-3-3M20 17H7l3 3"/><circle cx="12" cy="12" r="2"/></svg><span>الإيداعات والسحوبات</span><span class="badge" id="badgeFlow"></span></div>
       <div class="navi" data-pg="commission" onclick="nav('commission')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15 9.5a2.5 2.5 0 00-2.5-1.5h-1a2 2 0 000 4h1a2 2 0 010 4h-1A2.5 2.5 0 019 15M12 6v12"/></svg><span>عمولات المنصة</span></div>
       <div class="navi" data-pg="apx" onclick="nav('apx')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 15l3-7 3 7M10 13h4"/></svg><span>عملة APX</span><span class="badge" id="badgeApx"></span></div>
       <div class="navi" data-pg="logs" onclick="nav('logs')"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><span>سجل الأدمن</span></div>
@@ -415,6 +438,30 @@ tr:last-child td{border-bottom:0}
             <button class="btn ghost sm" onclick="loadFinance()">تحديث ↻</button>
           </div>
           <div id="finTable"></div>
+        </div>
+      </div>
+      <!-- MONEY FLOW: الإيداعات والسحوبات اللحظية -->
+      <div class="page" id="pg-moneyflow">
+        <h2 class="tt">الإيداعات والسحوبات</h2>
+        <div class="psub">سجل لحظي لكل عمليات السحب والإيداع التي تحدث على المنصّة — يتحدّث تلقائياً</div>
+        <div class="stats">
+          <div class="stat g"><div class="k">إيداعات</div><div class="v" id="mfDeposits">0</div></div>
+          <div class="stat r"><div class="k">سحوبات</div><div class="v" id="mfWithdrawals">0</div></div>
+          <div class="stat b"><div class="k">وصلت</div><div class="v" id="mfDelivered">0</div></div>
+          <div class="stat y"><div class="k">قيد المعالجة</div><div class="v" id="mfUndelivered">0</div></div>
+        </div>
+        <div class="card">
+          <div class="card-h"><b>الحركة المالية اللحظية</b>
+            <div class="sp"></div>
+            <div class="tabs" id="mfTabs">
+              <div class="tab on" data-f="" onclick="mfFilter('')">الكل</div>
+              <div class="tab" data-f="deposit" onclick="mfFilter('deposit')">إيداعات</div>
+              <div class="tab" data-f="withdraw" onclick="mfFilter('withdraw')">سحوبات</div>
+            </div>
+            <input id="mfSearch" placeholder="بحث بالاسم / البريد / العنوان" style="background:var(--panel2);border:1px solid var(--border);color:var(--fg);border-radius:8px;padding:6px 10px;font-size:12.5px;margin-inline:8px" oninput="renderMoneyFlow()">
+            <button class="btn ghost sm" onclick="loadMoneyFlow()">تحديث ↻</button>
+          </div>
+          <div id="mfTable"></div>
         </div>
       </div>
       <!-- BACKUP (auto-backup + point-in-time restore) -->
@@ -1042,12 +1089,13 @@ $('verifyCode')&&$('verifyCode').addEventListener('keydown',e=>{if(e.key==='Ente
 function startApp(){
   $('loginWrap').style.display='none';$('app').style.display='block';
   refreshAll();
-  POLL=setInterval(()=>{refreshStats();if($('pg-overview').classList.contains('on')){refreshHealth();loadAdminAlerts();}if($('pg-requests').classList.contains('on'))loadRequests();if($('pg-liquidity').classList.contains('on')){loadLiquidity();loadAudit();loadDaily();}if($('pg-orders').classList.contains('on')){loadOrders();loadAlerts();}if($('pg-commission').classList.contains('on'))loadCommission();if($('pg-security').classList.contains('on'))loadSecurity();if($('pg-support').classList.contains('on'))loadChats();},6000);
+  POLL=setInterval(()=>{refreshStats();if($('pg-overview').classList.contains('on')){refreshHealth();loadAdminAlerts();}if($('pg-requests').classList.contains('on'))loadRequests();if($('pg-liquidity').classList.contains('on')){loadLiquidity();loadAudit();loadDaily();}if($('pg-orders').classList.contains('on')){loadOrders();loadAlerts();}if($('pg-commission').classList.contains('on'))loadCommission();if($('pg-security').classList.contains('on'))loadSecurity();if($('pg-support').classList.contains('on'))loadChats();if($('pg-finance').classList.contains('on'))loadFinance();if($('pg-moneyflow').classList.contains('on'))loadMoneyFlow();},6000);
 }
 function nav(pg){
   document.querySelectorAll('.navi').forEach(n=>n.classList.toggle('on',n.dataset.pg===pg));
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
   $('pg-'+pg).classList.add('on');
+  closeNav();
   if(pg==='overview')refreshAll();
   if(pg==='requests')loadRequests();
   if(pg==='users')loadUsers();
@@ -1056,6 +1104,7 @@ function nav(pg){
   if(pg==='apx')axLoad();
   if(pg==='commission')loadCommission();
   if(pg==='finance')loadFinance();
+  if(pg==='moneyflow')loadMoneyFlow();
   if(pg==='logs')loadLogs();
   if(pg==='backup')loadBackups();
   if(pg==='security')loadSecurity();
@@ -1063,6 +1112,8 @@ function nav(pg){
   if(pg==='recover'){rcReset();loadRecoveryAudit();}
 }
 async function refreshAll(){await refreshStats();refreshHealth();loadRecent();loadAdminAlerts();}
+function toggleNav(){var s=$('sideNav'),sc=$('navScrim');if(!s)return;var open=!s.classList.contains('open');s.classList.toggle('open',open);if(sc)sc.classList.toggle('on',open);}
+function closeNav(){var s=$('sideNav'),sc=$('navScrim');if(s)s.classList.remove('open');if(sc)sc.classList.remove('on');}
 
 /* ---- لوحة حالة المصادر والاتصال (تقرأ /api/health) ---- */
 function fmtAge(ms){if(ms==null)return'—';if(ms<1000)return'الآن';var s=Math.round(ms/1000);if(s<60)return s+' ث';var m=Math.floor(s/60);return m+' د '+(s%60)+' ث';}
@@ -1603,6 +1654,50 @@ function renderFinance(){
   if(!rows.length){$('finTable').innerHTML='<div class="empty">لا توجد عمليات</div>';return;}
   $('finTable').innerHTML='<table><thead><tr><th>المستخدم</th><th>البريد</th><th>النوع</th><th>المبلغ</th><th>الطرف الآخر</th><th>التاريخ</th></tr></thead><tbody>'+
     rows.map(r=>'<tr><td class="u-name">'+esc(r.userName||'-')+'</td><td class="u-mail">'+esc(r.userEmail||'-')+'</td><td>'+esc(txLabel(r.type))+'</td><td style="font-weight:800;direction:ltr;text-align:right;color:'+txColor(r.type)+'">'+txSign(r.type)+fmtAmt(r.amount)+' '+esc(r.currency||'USDT')+'</td><td style="color:var(--muted)">'+esc(r.counterparty||'-')+'</td><td style="color:var(--muted)">'+fmtTime(r.at)+'</td></tr>').join('')+'</tbody></table>';
+}
+
+/* ---- الإيداعات والسحوبات اللحظية (money flow) ---- */
+var MF_ROWS=[],MF_FILTER='';
+function mfFilter(f){MF_FILTER=f;document.querySelectorAll('#mfTabs .tab').forEach(function(t){t.classList.toggle('on',t.dataset.f===f);});renderMoneyFlow();}
+async function loadMoneyFlow(){
+  try{const d=await api('/api/admin/money-flow');MF_ROWS=d.rows||[];var s=d.summary||{};
+    $('mfDeposits').textContent=s.deposits||0;
+    $('mfWithdrawals').textContent=s.withdrawals||0;
+    $('mfDelivered').textContent=s.delivered||0;
+    $('mfUndelivered').textContent=s.undelivered||0;
+    renderMoneyFlow();
+  }catch(e){}
+}
+function mfTypeBadge(t){
+  if(t==='withdraw')return '<span class="pill rejected">↑ سحب</span>';
+  if(t==='admin_credit')return '<span class="pill pending">↓ شحن إدارة</span>';
+  return '<span class="pill approved">↓ إيداع</span>';
+}
+function mfStatus(r){
+  if(r.type==='withdraw')return r.delivered?'<span class="pill approved">✓ وصلت</span>':'<span class="pill pending">⦿ قيد المعالجة</span>';
+  return '<span class="pill approved">✓ تمّت</span>';
+}
+function renderMoneyFlow(){
+  var q=($('mfSearch').value||'').trim().toLowerCase();
+  var rows=MF_ROWS;
+  if(MF_FILTER==='withdraw')rows=rows.filter(function(r){return r.type==='withdraw';});
+  else if(MF_FILTER==='deposit')rows=rows.filter(function(r){return r.type!=='withdraw';});
+  if(q)rows=rows.filter(function(r){return ((r.fromName||'')+' '+(r.fromEmail||'')+' '+(r.toName||'')+' '+(r.toEmail||'')+' '+(r.address||'')).toLowerCase().indexOf(q)>=0;});
+  if(!rows.length){$('mfTable').innerHTML='<div class="empty">لا توجد عمليات</div>';return;}
+  $('mfTable').innerHTML='<table><thead><tr><th>النوع</th><th>المبلغ</th><th>من</th><th>إلى</th><th>الحالة</th><th>التاريخ</th></tr></thead><tbody>'+
+    rows.map(function(r){
+      var isW=r.type==='withdraw';
+      var amtColor=isW?'var(--red)':'var(--green)';
+      var sign=isW?'-':'+';
+      var from=esc(r.fromName||r.fromEmail||(isW?'—':(r.detail||'—')));
+      var to=esc(r.toName||r.toEmail||r.address||'—');
+      return '<tr><td>'+mfTypeBadge(r.type)+'</td>'+
+        '<td style="font-weight:800;direction:ltr;text-align:right;color:'+amtColor+'">'+sign+fmtAmt(r.amount)+' '+esc(r.currency||'USDT')+'</td>'+
+        '<td class="u-name">'+from+(r.fromEmail&&r.fromName?('<div class="u-mail">'+esc(r.fromEmail)+'</div>'):'')+'</td>'+
+        '<td class="u-name">'+to+(r.toEmail&&r.toName?('<div class="u-mail">'+esc(r.toEmail)+'</div>'):(r.address?('<div class="u-mail">'+esc(r.address)+'</div>'):''))+'</td>'+
+        '<td>'+mfStatus(r)+'</td>'+
+        '<td style="color:var(--muted)">'+fmtTime(r.at)+'</td></tr>';
+    }).join('')+'</tbody></table>';
 }
 /* ---- admin activity log ---- */
 function logLabel(a){return ({credit:'شحن رصيد',balance_adjust:'تعديل رصيد',notify:'إرسال إشعار',ban:'حظر حساب',unban:'رفع الحظر',ban_temp:'حظر مؤقّت',freeze:'تجميد رصيد',unfreeze:'فك تجميد'})[a]||a;}
