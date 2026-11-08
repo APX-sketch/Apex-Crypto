@@ -778,15 +778,8 @@ function injectStyle(){
 }
 
 function buildCtrl(){
-  if(document.getElementById('apxCtrl'))return;
-  var wrap=document.createElement('div');wrap.id='apxCtrl';wrap.className='apx-ctrl apx-i18n-skip';
-  var bt=document.createElement('button');bt.className='apx-cbtn';bt.id='apxThemeBtn';bt.type='button';
-  bt.setAttribute('aria-label','Theme');bt.onclick=function(){toggleTheme();};
-  var bl=document.createElement('button');bl.className='apx-cbtn';bl.id='apxLangBtn';bl.type='button';
-  bl.setAttribute('aria-label','Language');bl.innerHTML=GLOBE;bl.onclick=function(){openPicker();};
-  wrap.appendChild(bt);wrap.appendChild(bl);
-  document.body.appendChild(wrap);
-
+  if(document.getElementById('apxLov'))return;
+  /* أُزيلت أيقونتا المظهر واللغة العائمتان من الواجهة؛ عناصر التحكم متوفّرة داخل الإعدادات (المظهر/اللغة). */
   var ov=document.createElement('div');ov.className='apx-lov apx-i18n-skip';ov.id='apxLov';
   ov.innerHTML='<div class="apx-lsheet"><div class="apx-lshd"><span id="apxLovTtl">Language · اللغة</span><button type="button" id="apxLovX">×</button></div><div class="apx-lsrch"><input id="apxLovSearch" type="text" placeholder="Search · بحث"></div><div class="apx-llist" id="apxLovList"></div></div>';
   document.body.appendChild(ov);
