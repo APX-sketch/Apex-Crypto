@@ -830,7 +830,6 @@ async function watchDeposits(){
 /* كتم صوت التنبيه حتى تتفاعل الصفحة (متطلب المتصفحات لتحويل الصوت) */
 document.addEventListener('click',function _aw(){try{if(APX_AUDIO&&APX_AUDIO.state==='suspended')APX_AUDIO.resume();}catch(e){}try{if('Notification' in window&&Notification.permission==='default')Notification.requestPermission();}catch(e){}document.removeEventListener('click',_aw);},false);
 document.addEventListener('visibilitychange',function(){if(!document.hidden){try{watchDeposits();}catch(e){}}});
-if(SUP_TOKEN){setTimeout(watchDeposits,1200);setInterval(watchDeposits,6000);}
 
 /* ===== الجلسة والمستخدم ===== */
 const sess=JSON.parse(localStorage.getItem('skygo_session')||'{}');
@@ -1019,7 +1018,7 @@ async function refreshNotifBadge(){
     else{b.style.display='none';}
   }catch(e){}
 }
-if(SUP_TOKEN){setTimeout(refreshWallet,0);setTimeout(refreshFutures,0);setTimeout(refreshNotifBadge,0);setInterval(refreshWallet,8000);setInterval(refreshFutures,8000);setInterval(refreshNotifBadge,15000);}
+if(SUP_TOKEN){setTimeout(refreshWallet,0);setTimeout(refreshFutures,0);setTimeout(refreshNotifBadge,0);setInterval(refreshWallet,8000);setInterval(refreshFutures,8000);setInterval(refreshNotifBadge,15000);setTimeout(watchDeposits,1200);setInterval(watchDeposits,6000);}
 
 /* ===== الرصيد والمحفظة ===== */
 function loadWallet(){const k=walletKey();const w=localStorage.getItem(k);if(w){try{return JSON.parse(w);}catch(e){}}
