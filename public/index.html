@@ -113,12 +113,13 @@ table.cmp-tbl td .px.eq{color:var(--txt)}
 .scrim.show{opacity:1;pointer-events:auto}
 /* قفل تمرير الخلفية عند فتح أي طبقة (drawer/sheet) — يمنع تداخل العناصر وظهور الخلفية خلف النوافذ */
 body.ov-open{overflow:hidden!important;touch-action:none}
-.drawer{position:fixed;top:0;right:0;height:100%;height:100dvh;width:82%;max-width:360px;background:var(--panel);
-  z-index:50;transform:translateX(100%);transition:.3s cubic-bezier(.2,.7,.2,1);display:flex;flex-direction:column;
+.drawer{position:fixed;top:50%;left:50%;width:88%;max-width:360px;max-height:86dvh;background:var(--panel);
+  z-index:50;transform:translate(-50%,-50%) scale(.92);opacity:0;pointer-events:none;
+  transition:.28s cubic-bezier(.2,.7,.2,1);display:flex;flex-direction:column;
   overscroll-behavior:contain;
-  border-left:1px solid var(--border);box-shadow:-12px 0 40px rgba(0,0,0,.5)}
-.drawer.show{transform:translateX(0)}
-.dhead{padding:calc(22px + env(safe-area-inset-top)) 20px 20px;background:linear-gradient(135deg,#1b1f24,#12151a);
+  border:1px solid var(--border);border-radius:20px;box-shadow:0 24px 60px rgba(0,0,0,.6);overflow:hidden}
+.drawer.show{transform:translate(-50%,-50%) scale(1);opacity:1;pointer-events:auto}
+.dhead{padding:20px;background:linear-gradient(135deg,#1b1f24,#12151a);
   border-bottom:1px solid var(--border);display:flex;align-items:center;gap:13px}
 .dhead .av{width:52px;height:52px;flex:0 0 auto;border-radius:50%;display:flex;align-items:center;justify-content:center;
   font-weight:900;font-size:22px;color:#231a02;background:linear-gradient(135deg,var(--gold1),var(--gold2));box-shadow:0 4px 12px rgba(224,166,21,.4)}
@@ -140,7 +141,7 @@ body.ov-open{overflow:hidden!important;touch-action:none}
 .ditem.logout .ic{background:rgba(246,70,93,.12)}
 .ditem.logout .ic svg{stroke:var(--red)}
 .ditem.logout b{color:var(--red)}
-.dfoot{padding:14px 20px calc(18px + env(safe-area-inset-bottom));font-size:11px;color:var(--muted);text-align:center;border-top:1px solid var(--border)}
+.dfoot{padding:14px 20px;font-size:11px;color:var(--muted);text-align:center;border-top:1px solid var(--border)}
 
 /* ===== price comparison table ===== */
 .cmp{margin:8px 14px 4px;background:var(--panel);border:1px solid var(--border);border-radius:16px;overflow:hidden}
@@ -458,6 +459,7 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
     <a class="ditem" onclick="openSheet('shKyc')"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg></span><b data-i18n="kyc">توثيق الهوية (KYC)</b><span class="ar">‹</span></a>
     <a class="ditem" onclick="(window.APEX_I18N&&APEX_I18N.openSettings)?APEX_I18N.openSettings():openSheet('shLang')"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 010 18M12 3a15 15 0 000 18"/></svg></span><b data-i18n="settings">الإعدادات واللغة</b><span class="ar">‹</span></a>
     <a class="ditem" href="settings.html"><span class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg></span><b data-i18n="accountSettings">البريد والتنبيهات</b><span class="ar">‹</span></a>
+    <a class="ditem" onclick="openStats()"><span class="ic"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span><b>إحصائيات السيولة اليومية</b><span class="ar">‹</span></a>
     <a class="ditem" onclick="openSheet('shHelp')"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 015 0c0 2-2.5 2-2.5 4M12 17h.01"/></svg></span><b data-i18n="help">المساعدة والدعم</b><span class="ar">‹</span></a>
     <a class="ditem logout" onclick="doLogout()"><span class="ic"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg></span><b data-i18n="logout">تسجيل الخروج</b></a>
   </div>
@@ -615,6 +617,44 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
   </div>
 </div>
 
+<style>
+.rangebtn{background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:7px 12px;font-size:12px;font-weight:800;color:var(--gold2);cursor:pointer}
+.st-cards{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.st-card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:13px 14px}
+.st-card span{display:block;font-size:11px;color:var(--muted);font-weight:700;margin-bottom:6px}
+.st-card b{font-size:17px;font-weight:800;direction:ltr;display:block}
+.st-card.g b{color:var(--green)} .st-card.r b{color:var(--red)} .st-card.y b{color:var(--gold2)} .st-card.b b{color:var(--txt)}
+.st-card.g{border-color:rgba(63,182,139,.3)} .st-card.r{border-color:rgba(226,87,74,.3)}
+#chChart{width:100%;overflow-x:auto} #chChart svg{display:block;margin:auto}
+.ch-row{display:flex;align-items:center;gap:10px;padding:12px 14px;border-top:1px solid var(--border);font-size:13px}
+.ch-row:first-child{border-top:0}
+.ch-row .d{flex:0 0 auto;color:var(--muted);direction:ltr;font-size:12px;min-width:58px}
+.ch-row .vin{color:var(--green);direction:ltr;font-weight:700}
+.ch-row .vout{color:var(--red);direction:ltr;font-weight:700}
+.ch-row .sp{flex:1}
+</style>
+<!-- ===== DAILY LIQUIDITY STATS SHEET ===== -->
+<div class="sheet" id="shStats">
+  <div class="sh-top"><div class="bk" onclick="closeSheet('shStats')">›</div><b>إحصائيات السيولة اليومية</b><span style="flex:1"></span><div class="rangebtn" id="rangeBtn" onclick="toggleRange()">7 أيام</div></div>
+  <div class="sh-body">
+    <div class="st-cards">
+      <div class="st-card g"><span>إيداع اليوم</span><b id="chIn">$0.00</b></div>
+      <div class="st-card r"><span>سحب اليوم</span><b id="chOut">$0.00</b></div>
+      <div class="st-card y"><span>صافي اليوم</span><b id="chNet">$0.00</b></div>
+      <div class="st-card b"><span>إجمالي السيولة</span><b id="chLiq">$0.00</b></div>
+    </div>
+    <div class="grp" style="padding:14px">
+      <div style="font-size:13px;font-weight:800;margin-bottom:10px;color:var(--muted)">حجم السيولة اليومي (إيداع / سحب) — بالدولار</div>
+      <div id="chChart" style=""></div>
+      <div style="display:flex;gap:16px;font-size:11px;color:var(--muted);margin-top:10px">
+        <span><i style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--green);margin-inline-end:5px"></i>إيداع</span>
+        <span><i style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--red);margin-inline-end:5px"></i>سحب</span>
+      </div>
+    </div>
+    <div class="grp" id="chList"></div>
+  </div>
+</div>
+
 <!-- ===== HELP SHEET ===== -->
 <div class="sheet" id="shHelp">
   <div class="sh-top"><div class="bk" onclick="closeSheet('shHelp')">›</div><b data-i18n="help">المساعدة والدعم</b></div>
@@ -669,10 +709,128 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
 </div>
 
 <div class="toast" id="toast"></div>
+<div id="mxBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:98;background:linear-gradient(90deg,#1b3a2b,#12251b);color:var(--txt);border-bottom:1px solid var(--green);padding:calc(10px + env(safe-area-inset-top)) 14px 10px;font-size:13px;font-weight:700;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,.5)"></div>
 <script>
 const $=id=>document.getElementById(id);
 const fmt=(n,d=2)=>Number(n).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
 function toast(m){const t=$('toast');t.textContent=m;t.className='toast show';setTimeout(()=>t.className='toast',2200);}
+
+/* ================= إحصائيات السيولة اليومية ================= */
+var CH_DAYS=7;
+function toggleRange(){CH_DAYS=(CH_DAYS===7)?14:7;$('rangeBtn').textContent=CH_DAYS+' أيام';loadCharts();}
+function moneyFmt(v){v=Number(v)||0;return '$'+v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function openStats(){openSheet('shStats');loadCharts();}
+function _chUsd(cur,amt){
+  var c=String(cur||'').toUpperCase();amt=Number(amt)||0;
+  if(c==='USDT'||c==='USDC'||c==='BUSD'||c==='DAI'||c==='FDUSD'||c==='TUSD')return amt;
+  var px=priceMap[c+'USDT'];return (px&&isFinite(px))?amt*px:0;
+}
+function _chKey(ts){var dt=new Date(ts);var m=('0'+(dt.getMonth()+1)).slice(-2),d=('0'+dt.getDate()).slice(-2);return dt.getFullYear()+'-'+m+'-'+d;}
+async function loadCharts(){
+  var box=$('chChart');if(!box)return;
+  box.innerHTML='<div style="text-align:center;color:var(--muted);font-size:12px;padding:24px">جارٍ التحميل…</div>';
+  var rows=[];
+  try{
+    var r=await fetch('/api/wallet/transactions',{headers:{'Authorization':'Bearer '+(SUP_TOKEN||'')}});
+    if(r.ok){var d=await r.json();rows=d.transactions||[];}
+  }catch(e){}
+  var DAY=86400000,days=CH_DAYS;
+  var now=new Date();var startOfToday=new Date(now.getFullYear(),now.getMonth(),now.getDate()).getTime();
+  var startMs=startOfToday-(days-1)*DAY;
+  var order=[],map={};
+  for(var i=0;i<days;i++){var k=_chKey(startMs+i*DAY);map[k]={date:k,inUsd:0,outUsd:0,deposits:0,withdrawals:0};order.push(k);}
+  var totIn=0,totOut=0;
+  rows.forEach(function(tx){
+    var at=Number(tx.at)||0;if(at<startMs)return;
+    var b=map[_chKey(at)];if(!b)return;
+    var usd=_chUsd(tx.currency,tx.amount);
+    if(tx.type==='transfer_out'){b.outUsd+=usd;b.withdrawals++;totOut+=usd;}
+    else{b.inUsd+=usd;b.deposits++;totIn+=usd;}
+  });
+  var s=order.map(function(k){return map[k];});
+  var today=s[s.length-1]||{inUsd:0,outUsd:0};
+  $('chIn').textContent=moneyFmt(today.inUsd);
+  $('chOut').textContent=moneyFmt(today.outUsd);
+  var tnet=today.inUsd-today.outUsd;
+  $('chNet').textContent=(tnet<0?'-':'')+moneyFmt(Math.abs(tnet));
+  $('chNet').style.color=(tnet<0)?'var(--red)':'var(--green)';
+  var pnet=totIn-totOut;
+  $('chLiq').textContent=(pnet<0?'-':'')+moneyFmt(Math.abs(pnet));
+  $('chLiq').style.color=(pnet<0)?'var(--red)':'var(--txt)';
+  box.innerHTML=chBars(s);
+  $('chList').innerHTML=s.slice().reverse().map(function(b){
+    var dd=b.date.slice(5);
+    return '<div class="ch-row"><span class="d">'+dd+'</span><span class="vin">↑ '+moneyFmt(b.inUsd)+'</span><span class="vout">↓ '+moneyFmt(b.outUsd)+'</span><span class="sp"></span><span style="font-size:11px;color:var(--muted)">'+b.deposits+' / '+b.withdrawals+'</span></div>';
+  }).join('');
+}
+function chBars(series){
+  if(!series||!series.length)return '';
+  var n=series.length,gap=n>10?6:10;
+  var barW=n>10?22:30,pair=barW*2+6;
+  var W=Math.max(n*(pair+gap)+20,300),H=170,pad=12,base=H-42;
+  var max=1;series.forEach(function(b){max=Math.max(max,b.inUsd,b.outUsd);});
+  var grid='';
+  for(var g=0;g<=3;g++){var y=base-(base-pad)*(g/3);grid+='<line x1="8" y1="'+y.toFixed(1)+'" x2="'+(W-8)+'" y2="'+y.toFixed(1)+'" stroke="rgba(255,255,255,.06)"/>';}
+  var bars='';
+  series.forEach(function(b,i){
+    var x=10+i*(pair+gap);
+    var hi=(base-pad)*(b.inUsd/max), ho=(base-pad)*(b.outUsd/max);
+    bars+='<rect x="'+x+'" y="'+(base-hi).toFixed(1)+'" width="'+barW+'" height="'+Math.max(hi,0).toFixed(1)+'" rx="3" fill="var(--green)"><title>إيداع '+b.date+' — '+moneyFmt(b.inUsd)+'</title></rect>';
+    bars+='<rect x="'+(x+barW+6)+'" y="'+(base-ho).toFixed(1)+'" width="'+barW+'" height="'+Math.max(ho,0).toFixed(1)+'" rx="3" fill="var(--red)"><title>سحب '+b.date+' — '+moneyFmt(b.outUsd)+'</title></rect>';
+    bars+='<text x="'+(x+barW+3)+'" y="'+(H-16)+'" fill="#8b95a3" font-size="10" text-anchor="middle">'+b.date.slice(5)+'</text>';
+  });
+  return '<svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="السيولة اليومية">'+grid+bars+'</svg>';
+}
+
+/* ================= تنبيه فوري عند إيداع جديد ================= */
+var APX_SEEN_DEP=null, APX_AUDIO=null;
+function apxDing(){
+  try{
+    var AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;
+    APX_AUDIO=APX_AUDIO||new AC();
+    var ctx=APX_AUDIO;if(ctx.state==='suspended'){try{ctx.resume();}catch(e){}}
+    var now=ctx.currentTime;
+    [880,1320].forEach(function(f,i){
+      var o=ctx.createOscillator(),g=ctx.createGain();
+      o.type='sine';o.frequency.value=f;
+      var s=now+i*0.16;
+      g.gain.setValueAtTime(0.0001,s);
+      g.gain.exponentialRampToValueAtTime(0.28,s+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001,s+0.30);
+      o.connect(g);g.connect(ctx.destination);o.start(s);o.stop(s+0.34);
+    });
+  }catch(e){}
+}
+function showDepBanner(text){
+  var b=$('mxBanner');if(!b)return;
+  b.innerHTML='★ '+text+' <span onclick="$(\'mxBanner\').style.display=\'none\'" style="margin-inline-start:10px;color:var(--gold1);font-weight:900;cursor:pointer">✕</span>';
+  b.style.display='block';
+  clearTimeout(b._t);b._t=setTimeout(function(){b.style.display='none';},7000);
+}
+async function watchDeposits(){
+  if(!SUP_TOKEN)return;
+  try{
+    var r=await fetch('/api/wallet/me',{headers:{'Authorization':'Bearer '+SUP_TOKEN}});
+    if(!r.ok)return;
+    var d=await r.json();var deps=d.deposits||[];
+    var latest=deps[0]?deps[0].id:null;
+    if(APX_SEEN_DEP===null){APX_SEEN_DEP=localStorage.getItem('apex_seen_dep')||latest;}
+    if(latest&&latest!==APX_SEEN_DEP){
+      APX_SEEN_DEP=latest;localStorage.setItem('apex_seen_dep',latest);
+      var dd=deps[0]||{};
+      if(!document.hidden){apxDing();}
+      var txt='إيداع جديد: '+(Number(dd.amount)||0).toLocaleString('en-US',{maximumFractionDigits:6})+' '+String(dd.currency||'').toUpperCase();
+      if(dd.fromName)txt+=' — من '+dd.fromName;
+      showDepBanner(txt);
+      try{if(window.navigator&&navigator.vibrate)navigator.vibrate([90,60,90]);}catch(e){}
+      try{if('Notification' in window&&Notification.permission==='granted'){new Notification('Apex — إيداع جديد',{body:txt});}}catch(e){}
+    } else if(latest){APX_SEEN_DEP=latest;localStorage.setItem('apex_seen_dep',latest);}
+  }catch(e){}
+}
+/* كتم صوت التنبيه حتى تتفاعل الصفحة (متطلب المتصفحات لتحويل الصوت) */
+document.addEventListener('click',function _aw(){try{if(APX_AUDIO&&APX_AUDIO.state==='suspended')APX_AUDIO.resume();}catch(e){}try{if('Notification' in window&&Notification.permission==='default')Notification.requestPermission();}catch(e){}document.removeEventListener('click',_aw);},false);
+document.addEventListener('visibilitychange',function(){if(!document.hidden){try{watchDeposits();}catch(e){}}});
+if(SUP_TOKEN){setTimeout(watchDeposits,1200);setInterval(watchDeposits,6000);}
 
 /* ===== الجلسة والمستخدم ===== */
 const sess=JSON.parse(localStorage.getItem('skygo_session')||'{}');
