@@ -205,6 +205,7 @@ tr:last-child td{border-bottom:0}
       <div class="navi" data-pg="backup" onclick="nav('backup')"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg><span>النسخ الاحتياطي</span></div>
       <div class="navi" data-pg="security" onclick="nav('security')"><svg viewBox="0 0 24 24"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z"/><path d="M12 8v4M12 16h.01"/></svg><span>سجل الأمان</span><span class="badge" id="badgeSec"></span></div>
       <div class="navi" data-pg="support" onclick="nav('support')"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg><span>الدعم والشكاوى</span><span class="badge" id="badgeChat"></span></div>
+      <div class="navi" data-pg="recover" onclick="nav('recover')"><svg viewBox="0 0 24 24"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0115-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 01-15 6.7L3 16"/></svg><span>استعادة حساب</span></div>
     </div>
     <div class="main">
       <!-- OVERVIEW -->
@@ -442,13 +443,6 @@ tr:last-child td{border-bottom:0}
           </div>
           <div id="logsTable"></div>
         </div>
-        <div class="card" style="margin-top:16px">
-          <div class="card-h"><b>سجل عمليات التجميد / فك التجميد</b>
-            <div class="sp"></div>
-            <button class="btn ghost sm" onclick="loadFreezeLog()">تحديث ↻</button>
-          </div>
-          <div id="freezeLogTable"></div>
-        </div>
       </div>
       <!-- SECURITY (balance-tampering / money-safety attempts) -->
       <div class="page" id="pg-security">
@@ -471,6 +465,27 @@ tr:last-child td{border-bottom:0}
             <button class="btn ghost sm" onclick="loadSecurity()">تحديث ↻</button>
           </div>
           <div id="secTable"></div>
+        </div>
+      </div>
+      <!-- RECOVER ACCOUNT -->
+      <div class="page" id="pg-recover">
+        <h2 class="tt">استعادة حساب</h2>
+        <div class="psub">للمستخدم الذي فقد بياناته (البريد وكلمة المرور): ابحث بالبريد القديم، ثم حوّل الحساب إلى بريد جديد وعيّن له كلمة مرور جديدة.</div>
+        <div class="card" style="max-width:620px">
+          <div class="card-h"><b>استعادة حساب مستخدم</b></div>
+          <div style="padding:16px">
+            <div class="fld"><label>البريد الحالي (القديم) للحساب</label>
+              <div style="display:flex;gap:8px">
+                <input id="rcOld" type="email" placeholder="old@mail.com" style="direction:ltr;flex:1">
+                <button class="btn ghost sm" onclick="rcLookup()">بحث ط</button>
+              </div>
+            </div>
+            <div id="rcFound" style="display:none;background:var(--panel2,#1c232c);border:1px solid var(--border,#252d38);border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:13px;line-height:1.9"></div>
+            <div class="fld"><label>البريد الجديد (اختياري — اتركه فارغاً لإبقاء نفس البريد)</label><input id="rcNew" type="email" placeholder="new@mail.com" style="direction:ltr"></div>
+            <div class="fld"><label>كلمة المرور الجديدة (6 أحرف على الأقل)</label><input id="rcPass" type="text" placeholder="كلمة مرور جديدة" style="direction:ltr"></div>
+            <button class="btn full" onclick="rcRecover()">تطبيق الاستعادة</button>
+            <div class="psub" style="margin-top:14px;line-height:1.8">ملاحظة: يُرسل للمستخدم إشعار + بريد إلى العنوان الجديد يُعلمه بالاستعادة. تُسجّل العملية في سجل الأدمن.</div>
+          </div>
         </div>
       </div>
     </div>
@@ -626,6 +641,52 @@ async function api(path,opts){
   const d=await r.json().catch(()=>({}));
   if(!r.ok)throw new Error(d.error||'error');
   return d;
+}
+/* ---- استعادة حساب ---- */
+var RC_EMAIL_RE=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function rcReset(){var f=$('rcFound');if(f){f.style.display='none';f.innerHTML='';}['rcOld','rcNew','rcPass'].forEach(function(id){if($(id))$(id).value='';});}
+function rcErr(e){
+  if(e==='bad_email'||e==='bad_old_email')return 'البريد القديم غير صالح.';
+  if(e==='bad_new_email')return 'البريد الجديد غير صالح.';
+  if(e==='not_found')return 'لا يوجد حساب بالبريد القديم.';
+  if(e==='email_exists')return 'البريد الجديد مستخدم من حساب آخر.';
+  if(e==='weak_password')return 'كلمة المرور قصيرة جداً (6 أحرف على الأقل).';
+  if(e==='nothing_to_change')return 'لا يوجد ما يُغيّر: أدخل بريداً جديداً أو كلمة مرور.';
+  return 'تعذّرت العملية.';
+}
+async function rcLookup(){
+  var email=($('rcOld').value||'').trim().toLowerCase();
+  var f=$('rcFound');
+  if(!RC_EMAIL_RE.test(email)){toast('أدخل بريداً صالحاً');return;}
+  try{
+    var d=await api('/api/admin/account-lookup?email='+encodeURIComponent(email));
+    var u=d.user||{};
+    var stMap={approved:'موافَق',pending:'قيد المراجعة',rejected:'مرفوض',banned:'محظور'};
+    f.innerHTML='<b>✓ تم العثور على الحساب</b><br>الاسم: '+esc(u.name||'—')+'<br>البريد الحالي: <span style="direction:ltr;display:inline-block">'+esc(u.email||'')+'</span><br>الحالة: '+esc(stMap[u.status]||u.status||'—')+'<br>المعرّف: '+esc(u.id||'');
+    f.style.display='block';
+  }catch(e){
+    f.innerHTML='<b style="color:var(--red,#f6465d)">✗ '+rcErr(e.message)+'</b>';
+    f.style.display='block';
+  }
+}
+async function rcRecover(){
+  var oldEmail=($('rcOld').value||'').trim().toLowerCase();
+  var newEmail=($('rcNew').value||'').trim().toLowerCase();
+  var newPassword=$('rcPass').value||'';
+  if(!RC_EMAIL_RE.test(oldEmail)){toast('أدخل البريد القديم الصحيح');return;}
+  if(newEmail&&!RC_EMAIL_RE.test(newEmail)){toast('البريد الجديد غير صالح');return;}
+  if(newPassword&&newPassword.length<6){toast('كلمة المرور 6 أحرف على الأقل');return;}
+  if(!newPassword&&(!newEmail||newEmail===oldEmail)){toast('أدخل بريداً جديداً أو كلمة مرور جديدة');return;}
+  if(!confirm('تأكيد استعادة الحساب '+oldEmail+(newEmail&&newEmail!==oldEmail?(' ← '+newEmail):'')+(newPassword?' + كلمة مرور جديدة':'')+'؟'))return;
+  try{
+    var d=await api('/api/admin/recover-account',{method:'POST',body:JSON.stringify({oldEmail:oldEmail,newEmail:newEmail,newPassword:newPassword})});
+    toast('✓ تمت استعادة الحساب → '+(d.newEmail||oldEmail));
+    var f=$('rcFound');
+    f.innerHTML='<b style="color:var(--green,#0ecb81)">✓ تمت الاستعادة بنجاح</b><br>البريد الجديد: <span style="direction:ltr;display:inline-block">'+esc(d.newEmail||oldEmail)+'</span>'+(d.passwordReset?'<br>تم تعيين كلمة مرور جديدة.':'');
+    f.style.display='block';
+    $('rcNew').value='';$('rcPass').value='';$('rcOld').value=(d.newEmail||oldEmail);
+    if($('pg-logs').classList.contains('on'))loadLogs();
+  }catch(e){toast(rcErr(e.message));}
 }
 
 /* ===== QRMini: مولّد رمز QR محلي (مستند إلى Nayuki qrcodegen — public domain) ===== */
@@ -942,10 +1003,11 @@ function nav(pg){
   if(pg==='apx')axLoad();
   if(pg==='commission')loadCommission();
   if(pg==='finance')loadFinance();
-  if(pg==='logs'){loadLogs();loadFreezeLog();}
+  if(pg==='logs')loadLogs();
   if(pg==='backup')loadBackups();
   if(pg==='security')loadSecurity();
   if(pg==='support')loadChats();
+  if(pg==='recover')rcReset();
 }
 async function refreshAll(){await refreshStats();refreshHealth();loadRecent();loadAdminAlerts();}
 
@@ -1221,13 +1283,13 @@ async function loadUsers(){
         else if(u.status==='approved')a='<button class="btn ghost sm" onclick="ban(\''+u.id+'\')">حظر</button><button class="btn ghost sm" onclick="banTemp(\''+u.id+'\')">⏱ حظر مؤقّت</button>';
         else if(u.status==='banned')a='<button class="btn green sm" onclick="unban(\''+u.id+'\')">رفع الحظر</button>';
         else if(u.status==='rejected')a='<button class="btn green sm" onclick="approve(\''+u.id+'\')">موافقة</button>';
-        if(u.status!=='rejected'){a+=u.frozen?('<button class="btn green sm" onclick="unfreeze(\''+u.id+'\')">❄ فك التجميد</button>'):('<button class="btn ghost sm" onclick="freeze(\''+u.id+'\')">❄ تجميد الرصيد</button><button class="btn ghost sm" onclick="freezeTemp(\''+u.id+'\')">⏳ تجميد مؤقّت</button>');}
+        if(u.status!=='rejected'){a+=u.frozen?('<button class="btn green sm" onclick="unfreeze(\''+u.id+'\')">❄ فك التجميد</button>'):('<button class="btn ghost sm" onclick="freeze(\''+u.id+'\')">❄ تجميد الرصيد</button>');}
         a+='<button class="btn ghost sm" onclick="openNotify(\''+u.id+'\',\''+nm+'\')">🔔 إشعار/رصيد</button>';
         a+='<button class="btn ghost sm" onclick="openBal(\''+u.id+'\',\''+nm+'\')">أرصدة وعملات</button>';
         a+='<button class="btn ghost sm" onclick="delUser(\''+u.id+'\')">حذف</button>';
         var badges='<span class="pill '+u.status+'">'+st[u.status]+'</span>';
         if(u.status==='banned'&&u.banUntil&&u.banUntil>Date.now())badges+=' <span class="pill pending" title="حظر مؤقّت">⏱ '+banLeft(u.banUntil)+'</span>';
-        if(u.frozen)badges+=' <span class="pill banned" title="الرصيد مجمّد">❄ مجمّد'+(u.freezeUntil&&u.freezeUntil>Date.now()?(' · '+freezeLeft(u.freezeUntil)):' (دائم)')+'</span>';
+        if(u.frozen)badges+=' <span class="pill banned" title="الرصيد مجمّد">❄ مجمّد</span>';
         return '<tr><td class="u-name">'+esc(u.name)+'</td><td class="u-mail">'+esc(u.email)+'</td><td style="direction:ltr">'+u.uid+'</td>'+idCell(u)+'<td>'+badges+'</td><td class="acts">'+a+'</td></tr>';}).join('')+'</tbody></table>';
   }catch(e){}
 }
@@ -1237,20 +1299,8 @@ async function banTemp(id){
   if(v===null)return;var hours=Number(v);if(!(hours>0)){toast('مدة غير صالحة');return;}
   try{await api('/api/admin/users/'+id+'/ban-temp',{method:'POST',body:JSON.stringify({hours:hours})});toast('تم الحظر المؤقّت '+hours+' ساعة');loadUsers();refreshStats();}catch(e){toast('تعذّر التنفيذ');}
 }
-async function freeze(id){if(!confirm('تجميد رصيد هذا المستخدم بشكل دائم؟ لن يستطيع السحب أو التحويل حتى ترفعه يدوياً.'))return;try{await api('/api/admin/users/'+id+'/freeze',{method:'POST',body:JSON.stringify({})});toast('تم تجميد الرصيد (دائم)');loadUsers();}catch(e){toast('تعذّر التنفيذ');}}
+async function freeze(id){if(!confirm('تجميد رصيد هذا المستخدم؟ لن يستطيع السحب أو التحويل.'))return;try{await api('/api/admin/users/'+id+'/freeze',{method:'POST'});toast('تم تجميد الرصيد');loadUsers();}catch(e){toast('تعذّر التنفيذ');}}
 async function unfreeze(id){try{await api('/api/admin/users/'+id+'/unfreeze',{method:'POST'});toast('تم رفع التجميد');loadUsers();}catch(e){toast('تعذّر التنفيذ');}}
-function freezeLeft(until){var ms=until-Date.now();if(ms<=0)return 'انتهى';var m=Math.round(ms/60000);if(m<60)return 'متبقٍّ '+m+' د';var h=Math.floor(m/60),mm=m%60;if(h<24)return 'متبقٍّ '+h+'س'+(mm?(' '+mm+'د'):'');var d=Math.floor(h/24);return 'متبقٍّ '+d+' يوم';}
-async function freezeTemp(id){
-  var v=prompt('مدة تجميد الرصيد:\nاكتب رقمًا ثم اختر الوحدة من السؤال التالي.\nمثال: 30 = ثلاثون حسب الوحدة.','30');
-  if(v===null)return;var num=Number(v);if(!(num>0)){toast('مدة غير صالحة');return;}
-  var u=(prompt('اختر الوحدة: اكتب د = دقائق، س = ساعات، ي = أيام','س')||'س').trim();
-  var body={};
-  if(u==='د'||u==='دقائق'||u.toLowerCase()==='m')body.minutes=num;
-  else if(u==='ي'||u==='يوم'||u==='أيام'||u.toLowerCase()==='a')body.days=num;
-  else body.hours=num;
-  try{var r=await api('/api/admin/users/'+id+'/freeze-temp',{method:'POST',body:JSON.stringify(body)});
-    toast('تم التجميد المؤقّت حتى '+new Date(r.freezeUntil).toLocaleString('ar'));loadUsers();}catch(e){toast('تعذّر التنفيذ');}
-}
 async function ban(id){if(!confirm('حظر هذا المستخدم؟'))return;try{await api('/api/admin/users/'+id+'/ban',{method:'POST'});toast('تم الحظر');loadUsers();refreshStats();}catch(e){}}
 async function unban(id){try{await api('/api/admin/users/'+id+'/unban',{method:'POST'});toast('تم رفع الحظر');loadUsers();refreshStats();}catch(e){}}
 async function delUser(id){if(!confirm('حذف المستخدم نهائياً؟'))return;try{await api('/api/admin/users/'+id,{method:'DELETE'});toast('تم الحذف');loadUsers();refreshStats();}catch(e){}}
@@ -1473,16 +1523,7 @@ async function loadLogs(){
   }catch(e){}
 }
 
-/* ---- سجل التجميد / فك التجميد ---- */
-function freezeActionLabel(a){return ({freeze:'تجميد الرصيد',unfreeze:'فك التجميد',freeze_temp:'تجميد مؤقّت',auto_unfreeze:'فك تلقائي (انتهاء المدة)'})[a]||esc(a||'-');}
-function freezeActionPill(a){var on=(a==='freeze'||a==='freeze_temp');return (on?'<span class="pill banned">':'<span class="pill approved">')+freezeActionLabel(a)+'</span>';}
-async function loadFreezeLog(){
-  try{const d=await api('/api/admin/freeze-log');const rows=d.entries||[];
-    if(!rows.length){$('freezeLogTable').innerHTML='<div class="empty">لا توجد عمليات تجميد مسجّلة</div>';return;}
-    $('freezeLogTable').innerHTML='<table><thead><tr><th>العملية</th><th>الحساب</th><th>بواسطة</th><th>حتى</th><th>ملاحظة</th><th>التاريخ</th></tr></thead><tbody>'+
-      rows.map(function(l){return '<tr><td>'+freezeActionPill(l.action)+'</td><td class="u-mail">'+esc(l.name||l.email||l.userId||'-')+'</td><td class="u-name">'+esc(l.by||l.admin||'admin')+'</td><td style="color:var(--muted);direction:ltr;text-align:right">'+(l.freezeUntil?fmtTime(l.freezeUntil):'-')+'</td><td style="color:var(--muted)">'+esc(l.note||'-')+'</td><td style="color:var(--muted)">'+fmtTime(l.at)+'</td></tr>';}).join('')+'</tbody></table>';
-  }catch(e){$('freezeLogTable').innerHTML='<div class="empty">تعذّر تحميل السجل</div>';}
-}
+/* ---- سجل الأمان: محاولات التلاعب بالرصيد ---- */
 var SEC_FILTER='';
 /* ترجمة نوع الحدث إلى وصف عربي مختصر */
 function secKind(k){return ({below_zero_apply:'خصم يتجاوز الرصيد (محفظة)',below_zero_market:'أمر سوق يتجاوز الرصيد',below_zero_transfer:'تحويل يتجاوز الرصيد',order_fill_below_zero:'فشل تنفيذ أمر معلّق (رصيد)',invalid_delta:'قيم تعديل غير صالحة',symbol_mismatch:'زوج غير متطابق',oversize_order:'أمر بقيمة ضخمة',bad_fee:'رسوم مزيفة'})[k]||esc(k||'-');}

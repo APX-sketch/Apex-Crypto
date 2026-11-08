@@ -2907,6 +2907,75 @@ async function adminSetFrozen(id, frozen, res, req) {
 app.post('/api/admin/users/:id/freeze', requireAdmin, (req, res) => adminSetFrozen(req.params.id, true, res, req));
 app.post('/api/admin/users/:id/unfreeze', requireAdmin, (req, res) => adminSetFrozen(req.params.id, false, res, req));
 
+// ---- Admin: استعام حساب مستخدم (البحث بالبريد) ----
+app.get('/api/admin/account-lookup', requireAdmin, async (req, res) => {
+  try {
+    const email = String(req.query.email || '').trim().toLowerCase();
+    if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'bad_email' });
+    const u = await dbGetUserByEmail(email);
+    if (!u) return res.status(404).json({ error: 'not_found' });
+    res.json({ ok: true, user: dbPublicUser(u) });
+  } catch (err) {
+    console.error('account-lookup error:', err.message);
+    res.status(500).json({ error: 'lookup_failed' });
+  }
+});
+
+// ---- Admin: استعادة حساب (إعادة البريد و/أو كلمة المرور) ----
+// للمستخدم الذي فقد كل بياناته: يبحث الأدمن بالبريد القديم، ثم يحوّل الحساب
+// إلى بريد جديد ويعيّن كلمة مرور جديدة. body: { oldEmail, newEmail?, newPassword? }
+app.post('/api/admin/recover-account', requireAdmin, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const oldEmail = String(b.oldEmail || '').trim().toLowerCase();
+    const newEmailRaw = String(b.newEmail || '').trim().toLowerCase();
+    const newPassword = String(b.newPassword || '');
+    if (!EMAIL_RE.test(oldEmail)) return res.status(400).json({ error: 'bad_old_email' });
+    const user = await dbGetUserByEmail(oldEmail);
+    if (!user) return res.status(404).json({ error: 'not_found' });
+    let newEmail = newEmailRaw;
+    if (newEmail) {
+      if (!EMAIL_RE.test(newEmail) || newEmail.length > 160) return res.status(400).json({ error: 'bad_new_email' });
+      if (newEmail !== oldEmail) {
+        const taken = await dbGetUserByEmail(newEmail);
+        if (taken && String(taken.id) !== String(user.id)) return res.status(409).json({ error: 'email_exists' });
+      }
+    } else {
+      newEmail = oldEmail;
+    }
+    if (newPassword && (newPassword.length < 6 || newPassword.length > 200)) return res.status(400).json({ error: 'weak_password' });
+    if (!newPassword && newEmail === oldEmail) return res.status(400).json({ error: 'nothing_to_change' });
+    if (newPassword) {
+      await pool.query('UPDATE users SET email = ?, password = ? WHERE id = ?', [newEmail, hashPassword(newPassword), user.id]);
+    } else {
+      await pool.query('UPDATE users SET email = ? WHERE id = ?', [newEmail, user.id]);
+    }
+    try { store.updateUser && store.updateUser(String(user.id), { email: newEmail }); } catch (e) {}
+    const u = await dbGetUserById(user.id);
+    const emailChanged = newEmail !== oldEmail;
+    try {
+      store.addNotification && store.addNotification(String(user.id), {
+        title: 'استعادة الحساب', kind: 'security',
+        body: 'قامت الإدارة باستعادة حسابك' + (emailChanged ? (' وتحويله إلى البريد ' + newEmail) : '') + (newPassword ? ' وتعيين كلمة مرور جديدة.' : '.'),
+      });
+    } catch (e) {}
+    try {
+      await sendMail({
+        to: newEmail,
+        subject: 'استعادة الحساب - Apex',
+        text: 'تمّت استعادة حسابك من قبل إدارة Apex.' + (emailChanged ? (' بريدك الجديد: ' + newEmail + '.') : '') + (newPassword ? ' تم تعيين كلمة مرور جديدة؛ سجّل الدخول ثم غيّرها.' : ''),
+        html: '<div style="font-family:Tahoma,Arial,sans-serif;direction:rtl;text-align:right"><h2 style="margin:0 0 8px">استعادة الحساب</h2><p>تمّت استعادة حسابك من قبل إدارة Apex.</p>' + (emailChanged ? ('<p>بريدك الجديد: <b>' + newEmail + '</b></p>') : '') + (newPassword ? '<p>تم تعيين كلمة مرور جديدة لحسابك؛ يُرجى تسجيل الدخول ثم تغييرها من الإعدادات.</p>' : '') + '<p>إن لم تطلب ذلك تواصل مع الدعم فوراً.</p></div>',
+      });
+    } catch (e) {}
+    try { store.logAdmin && store.logAdmin({ admin: 'admin', action: 'account_recover', targetId: String(user.id), targetEmail: newEmail, targetName: u && (u.name || u.username), note: 'استعادة حساب من ' + oldEmail + ' إلى ' + newEmail + (newPassword ? ' + كلمة مرور جديدة' : '') }); } catch (e) {}
+    try { logOps(req, { user: { id: String(user.id), uid: user.id, name: u && (u.name || u.username || u.email), email: newEmail }, category: 'account', kind: 'account_recovered', status: 'ok', detail: 'استعادة حساب بواسطة الأدمن', meta: { oldEmail, newEmail, passwordReset: !!newPassword } }); } catch (e) {}
+    res.json({ ok: true, user: dbPublicUser(u), oldEmail, newEmail, emailChanged, passwordReset: !!newPassword });
+  } catch (err) {
+    console.error('recover-account error:', err.message);
+    res.status(500).json({ error: 'recover_failed' });
+  }
+});
+
 app.delete('/api/admin/users/:id', requireAdmin, async (req, res) => {
   try {
     await pool.query('DELETE FROM id_documents WHERE user_id = ?', [req.params.id]);
@@ -4569,6 +4638,58 @@ const withdrawOtps = new OtpStore({ ttlMs: 5 * 60 * 1000, maxTries: 5 });
 const loginOtps = new OtpStore({ ttlMs: 5 * 60 * 1000, maxTries: 5 });
 // رمز تأكيد تغيير البريد (يُرسَل للبريد الجديد) — مُفتاح بمعرّف المستخدم
 const emailChangeOtps = new OtpStore({ ttlMs: 5 * 60 * 1000, maxTries: 5 });
+// رمز إعادة تعيين كلمة المرور (نسيت كلمة المرور) — مُفتاح بالبريد الإلكتروني
+const passwordResetOtps = new OtpStore({ ttlMs: 15 * 60 * 1000, maxTries: 5 });
+
+// ---- نسيت كلمة المرور: الخطوة 1 — إرسال رمز للبريد ----
+// لا نكشف هل البريد مسجّل أم لا (حماية من تعداد الحسابات): نردّ ok دائماً.
+app.post('/api/auth/forgot-password', strictLimiter, async (req, res) => {
+  try {
+    const email = String((req.body || {}).email || '').trim().toLowerCase();
+    if (!EMAIL_RE.test(email) || email.length > 160) return res.status(400).json({ error: 'bad_email' });
+    const devMode = !isMailerConfigured() || process.env.OTP_DEBUG === 'true';
+    const user = await dbGetUserByEmail(email);
+    if (!user) return res.json({ ok: true, sent: true });
+    const { code, expiresInSec } = passwordResetOtps.issue(email, { uid: user.id });
+    const mins = Math.max(1, Math.round(expiresInSec / 60));
+    try {
+      await sendMail({
+        to: user.email,
+        subject: 'إعادة تعيين كلمة المرور - Apex',
+        text: 'رمز إعادة تعيين كلمة المرور الخاص بك هو: ' + code + '\nالرمز صالح لمدة ' + mins + ' دقيقة. إن لم تطلب ذلك فتجاهل هذه الرسالة.',
+        html: '<div style="font-family:Tahoma,Arial,sans-serif;direction:rtl;text-align:right"><h2 style="margin:0 0 8px">إعادة تعيين كلمة المرور</h2><p>رمز التحقق الخاص بك:</p><p style="font-size:28px;font-weight:bold;letter-spacing:6px;color:#e0a615">' + code + '</p><p>الرمز صالح لمدة ' + mins + ' دقيقة. إن لم تطلب إعادة التعيين فتجاهل هذه الرسالة.</p></div>'
+      });
+    } catch (e) {}
+    try { logSecurity(req, { user: { id: String(user.id), uid: user.id, name: user.name || user.username || user.email, email: user.email }, kind: 'password_reset_requested', severity: 'warning', detail: 'طلب إعادة تعيين كلمة المرور (نسيت كلمة المرور)' }); } catch (e) {}
+    res.json({ ok: true, sent: true, expiresInSec, devCode: devMode ? code : undefined });
+  } catch (err) {
+    console.error('forgot-password error:', err.message);
+    res.status(500).json({ error: 'forgot_failed' });
+  }
+});
+
+// ---- نسيت كلمة المرور: الخطوة 2 — التحقق من الرمز وتعيين كلمة مرور جديدة ----
+app.post('/api/auth/reset-password', strictLimiter, async (req, res) => {
+  try {
+    const email = String((req.body || {}).email || '').trim().toLowerCase();
+    const code = String((req.body || {}).code || '').trim();
+    const newPassword = String((req.body || {}).newPassword || '');
+    if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'bad_email' });
+    if (newPassword.length < 6 || newPassword.length > 200) return res.status(400).json({ error: 'weak_password' });
+    const vr = passwordResetOtps.verify(email, code);
+    if (!vr.ok) return res.status(400).json({ error: vr.error });
+    const user = await dbGetUserByEmail(email);
+    if (!user) return res.status(404).json({ error: 'not_found' });
+    await pool.query('UPDATE users SET password = ? WHERE id = ?', [hashPassword(newPassword), user.id]);
+    try { store.addNotification && store.addNotification(String(user.id), { title: 'تغيير كلمة المرور', kind: 'security', body: 'تمّت إعادة تعيين كلمة مرور حسابك بنجاح. إن لم تكن أنت، تواصل مع الدعم فوراً.' }); } catch (e) {}
+    try { logSecurity(req, { user: { id: String(user.id), uid: user.id, name: user.name || user.username || user.email, email: user.email }, kind: 'password_reset_done', severity: 'warning', detail: 'تمّت إعادة تعيين كلمة المرور بنجاح' }); } catch (e) {}
+    try { await sendMail({ to: user.email, subject: 'تم تغيير كلمة المرور - Apex', text: 'تمّ تغيير كلمة مرور حسابك بنجاح. إن لم تكن أنت من قام بذلك، تواصل مع الدعم فوراً.' }); } catch (e) {}
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('reset-password error:', err.message);
+    res.status(500).json({ error: 'reset_failed' });
+  }
+});
 
 // طلب رمز OTP لتأكيد السحب (يُرسل بالبريد + إشعار داخل التطبيق)
 app.post('/api/wallet/withdraw/request-otp', strictLimiter, requireUser, requireApproved, (req, res) => {
