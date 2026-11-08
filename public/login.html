@@ -39,11 +39,19 @@ h1{font-size:20px;margin:0 0 4px}
     <h1 data-i18n="loginTitle">تسجيل الدخول</h1>
     <div class="sub" data-i18n="loginSub">أدخل بيانات حسابك للمتابعة</div>
     <div class="msg" id="msg"></div>
-    <div class="fld"><label data-i18n="email">البريد الإلكتروني</label><input id="email" type="email" autocomplete="email" placeholder="name@email.com" dir="ltr" style="text-align:right"></div>
-    <div class="fld"><label data-i18n="password">كلمة المرور</label><input id="pass" type="password" autocomplete="current-password" placeholder="••••••••"></div>
-    <div style="text-align:left;margin:-6px 0 2px"><a href="reset-password.html" style="color:var(--gold2);font-size:12.5px;font-weight:700;text-decoration:none">هل نسيت كلمة المرور؟</a></div>
-    <button class="btn" id="submitBtn" onclick="doLogin()">دخول</button>
-    <div class="alt">ليس لديك حساب؟ <a href="register.html">إنشاء حساب</a></div>
+    <div id="credBox">
+      <div class="fld"><label data-i18n="email">البريد الإلكتروني</label><input id="email" type="email" autocomplete="email" placeholder="name@email.com" dir="ltr" style="text-align:right"></div>
+      <div class="fld"><label data-i18n="password">كلمة المرور</label><input id="pass" type="password" autocomplete="current-password" placeholder="••••••••"></div>
+      <div style="text-align:left;margin:-6px 0 2px"><a href="reset-password.html" style="color:var(--gold2);font-size:12.5px;font-weight:700;text-decoration:none">هل نسيت كلمة المرور؟</a></div>
+      <button class="btn" id="submitBtn" onclick="doLogin()">دخول</button>
+      <div class="alt">ليس لديك حساب؟ <a href="register.html">إنشاء حساب</a></div>
+    </div>
+    <div id="otpBox" style="display:none">
+      <div class="sub" id="otpHint" style="margin-bottom:14px">أدخل رمز التحقق المرسل إلى بريدك.</div>
+      <div class="fld"><label>رمز التحقق</label><input id="otpCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="000000" dir="ltr" style="text-align:center;letter-spacing:8px;font-size:20px;font-weight:800"></div>
+      <button class="btn" id="otpBtn" onclick="doVerify()">تأكيد الدخول</button>
+      <div class="alt"><a href="#" id="resendLink" onclick="doResend();return false;">إعادة إرسال الرمز</a> · <a href="#" onclick="otpBack();return false;">رجوع</a></div>
+    </div>
   </div>
 </div>
 <script>
@@ -64,7 +72,57 @@ async function doLogin(){
       else showMsg('البريد أو كلمة المرور غير صحيحة','err');
       btn.disabled=false;btn.textContent='دخول';return;
     }
-const sess = {
+    // خطوة التحقق بخطوتين: الخادم يطلب رمز بريدي قبل إصدار التوكن
+    if(d.otpRequired){
+      OTP_EMAIL=d.email||email;
+      $('credBox').style.display='none';
+      $('otpBox').style.display='block';
+      $('otpHint').textContent='أدخل رمز التحقق المرسل إلى '+(OTP_EMAIL||'بريدك')+'.';
+      showMsg(d.devCode?('وضع التطوير: الرمز '+d.devCode):'تم إرسال رمز التحقق إلى بريدك.', d.devCode?'warn':'ok');
+      btn.disabled=false;btn.textContent='دخول';
+      setTimeout(function(){$('otpCode').focus();},80);
+      return;
+    }
+    finishLogin(d);
+  }catch(e){showMsg('خطأ في الاتصال بالخادم','err');btn.disabled=false;btn.textContent='دخول';}
+}
+function mapOtpErr(e){
+  if(e==='bad_code'||e==='invalid')return 'رمز التحقق غير صحيح.';
+  if(e==='expired'||e==='otp_expired')return 'انتهت صلاحية الرمز، اطلب رمزاً جديداً.';
+  if(e==='too_many'||e==='locked')return 'محاولات كثيرة، اطلب رمزاً جديداً.';
+  if(e==='banned')return 'تم حظر هذا الحساب. تواصل مع الدعم.';
+  return 'تعذّر التحقق، حاول مجدداً.';
+}
+async function doVerify(){
+  const code=($('otpCode').value||'').trim();
+  if(!code)return showMsg('أدخل رمز التحقق');
+  const btn=$('otpBtn');btn.disabled=true;btn.textContent='جارٍ التحقق...';
+  try{
+    const r=await fetch('/api/auth/login/verify-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:OTP_EMAIL,code:code})});
+    const d=await r.json();
+    if(!r.ok){showMsg(mapOtpErr(d.error),'err');btn.disabled=false;btn.textContent='تأكيد الدخول';return;}
+    finishLogin(d);
+  }catch(e){showMsg('خطأ في الاتصال بالخادم','err');btn.disabled=false;btn.textContent='تأكيد الدخول';}
+}
+async function doResend(){
+  if(!OTP_EMAIL)return;
+  showMsg('جارٍ إعادة الإرسال...','ok');
+  try{
+    const r=await fetch('/api/auth/login/resend-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:OTP_EMAIL})});
+    const d=await r.json().catch(function(){return{};});
+    showMsg(d.devCode?('وضع التطوير: الرمز '+d.devCode):'تم إرسال رمز جديد إلى بريدك.', d.devCode?'warn':'ok');
+  }catch(e){showMsg('تعذّر إعادة الإرسال، حاول مجدداً.','err');}
+}
+function otpBack(){
+  OTP_EMAIL='';
+  $('otpBox').style.display='none';
+  $('credBox').style.display='block';
+  $('otpCode').value='';
+  clearMsgSoft();
+}
+function clearMsgSoft(){const m=$('msg');m.textContent='';m.className='msg';}
+function finishLogin(d){
+  const sess = {
       id: d.user.id,
       uid: d.user.id,
       username: d.user.username,
@@ -77,12 +135,12 @@ const sess = {
     localStorage.setItem('apex_user', JSON.stringify(sess));
     localStorage.setItem('apex_token', d.token);
     localStorage.setItem('currentUser', JSON.stringify(sess));
-    
+
     location.replace(getNext());
-  
-  }catch(e){showMsg('خطأ في الاتصال بالخادم','err');btn.disabled=false;btn.textContent='دخول';}
 }
+var OTP_EMAIL='';
 $('pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+$('otpCode').addEventListener('keydown',e=>{if(e.key==='Enter')doVerify();});
 /* رسالة الجلسة الواحدة: إن تمّ فصل الجهاز لأنّ الحساب فُتح على جهاز آخر */
 (function(){
   try{
