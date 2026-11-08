@@ -44,6 +44,7 @@ h1{font-size:20px;margin:0 0 4px}
       <div class="fld"><label data-i18n="password">كلمة المرور</label><input id="pass" type="password" autocomplete="current-password" placeholder="••••••••"></div>
       <div style="text-align:left;margin:-6px 0 2px"><a href="reset-password.html" style="color:var(--gold2);font-size:12.5px;font-weight:700;text-decoration:none">هل نسيت كلمة المرور؟</a></div>
       <button class="btn" id="submitBtn" onclick="doLogin()">دخول</button>
+      <button class="btn" id="bioBtn" onclick="doBioLogin()" style="display:none;background:var(--panel2,#1a1f2b);color:var(--gold2,#f0b90b);border:1px solid var(--border,#2a3140);margin-top:10px">🔑 الدخول بالبصمة / الوجه</button>
       <div class="alt">ليس لديك حساب؟ <a href="register.html">إنشاء حساب</a></div>
     </div>
     <div id="otpBox" style="display:none">
@@ -141,6 +142,47 @@ function finishLogin(d){
 var OTP_EMAIL='';
 $('pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
 $('otpCode').addEventListener('keydown',e=>{if(e.key==='Enter')doVerify();});
+
+/* ===== الدخول السريع بالبصمة/الوجه (WebAuthn) =====
+   إن وجد رمز بيومتري محفوظ على هذا الجهاز نعرض زر الدخول السريع.
+   التحقّق الحيوي (بصمة/وجه) يتم محلياً، ثم نرسل bioToken للخادم لإصدار الجلسة. */
+function _bufFromB64u(str){str=String(str||'').replace(/-/g,'+').replace(/_/g,'/');while(str.length%4)str+='=';var bin=atob(str),b=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)b[i]=bin.charCodeAt(i);return b.buffer;}
+function _randBuf(n){var b=new Uint8Array(n);(window.crypto||{}).getRandomValues&&window.crypto.getRandomValues(b);return b.buffer;}
+(function(){
+  try{
+    if(localStorage.getItem('apex_bio')==='1'&&localStorage.getItem('apex_bio_token')&&window.PublicKeyCredential&&navigator.credentials&&navigator.credentials.get){
+      $('bioBtn').style.display='block';
+    }
+  }catch(e){}
+})();
+async function doBioLogin(){
+  const bioToken=localStorage.getItem('apex_bio_token')||'';
+  const credId=localStorage.getItem('apex_bio_cred')||'';
+  if(!bioToken){showMsg('لا توجد بصمة مسجّلة على هذا الجهاز','err');return;}
+  const btn=$('bioBtn');btn.disabled=true;var old=btn.textContent;btn.textContent='جارٍ التحقّق...';
+  try{
+    // التحقّق الحيوي محلياً على الجهاز
+    const opts={publicKey:{challenge:_randBuf(32),timeout:60000,userVerification:'required',rpId:location.hostname}};
+    if(credId)opts.publicKey.allowCredentials=[{type:'public-key',id:_bufFromB64u(credId),transports:['internal']}];
+    const assertion=await navigator.credentials.get(opts);
+    if(!assertion){showMsg('تم إلغاء التحقّق','err');btn.disabled=false;btn.textContent=old;return;}
+    // نجاح التحقّق → أصدر الجلسة من الخادم
+    const r=await fetch('/api/auth/biometric/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bioToken})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok){
+      if(d.error==='banned')showMsg('تم حظر هذا الحساب. تواصل مع الدعم.','err');
+      else{showMsg('انتهت صلاحية البصمة، سجّل بالبريد وكلمة المرور.','err');
+        try{localStorage.removeItem('apex_bio_token');}catch(e){}
+        btn.style.display='none';}
+      btn.disabled=false;btn.textContent=old;return;
+    }
+    finishLogin(d);
+  }catch(e){
+    if(e&&(e.name==='NotAllowedError'||e.name==='AbortError'))showMsg('تم إلغاء التحقّق','err');
+    else showMsg('تعذّر الدخول بالبصمة، حاول مجدداً.','err');
+    btn.disabled=false;btn.textContent=old;
+  }
+}
 /* رسالة الجلسة الواحدة: إن تمّ فصل الجهاز لأنّ الحساب فُتح على جهاز آخر */
 (function(){
   try{

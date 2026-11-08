@@ -1332,11 +1332,13 @@ async function loadUsers(){
     const st={pending:'قيد المراجعة',approved:'موافَق',rejected:'مرفوض',banned:'محظور'};
     $('usersTable').innerHTML='<table><thead><tr><th>الاسم</th><th>البريد</th><th>UID</th><th>الهوية</th><th>الحالة</th><th></th></tr></thead><tbody>'+
       users.map(u=>{let a='';var nm=esc(u.name).replace(/'/g,"\\'");
-        if(u.status==='pending')a='<button class="btn green sm" onclick="approve(\''+u.id+'\')">موافقة</button><button class="btn red sm" onclick="reject(\''+u.id+'\')">رفض</button>';
-        else if(u.status==='approved')a='<button class="btn ghost sm" onclick="ban(\''+u.id+'\')">حظر</button><button class="btn ghost sm" onclick="banTemp(\''+u.id+'\')">⏱ حظر مؤقّت</button>';
-        else if(u.status==='banned')a='<button class="btn green sm" onclick="unban(\''+u.id+'\')">رفع الحظر</button>';
-        else if(u.status==='rejected')a='<button class="btn green sm" onclick="approve(\''+u.id+'\')">موافقة</button>';
-        if(u.status!=='rejected'){a+=u.frozen?('<button class="btn green sm" onclick="unfreeze(\''+u.id+'\')">❄ فك التجميد</button>'):('<button class="btn ghost sm" onclick="freeze(\''+u.id+'\')">❄ تجميد الرصيد</button>');}
+        // زر فك التجميد بارز وواضح أولاً عندما يكون الرصيد مجمّداً
+        if(u.frozen){a+='<button class="btn green sm" style="background:var(--green);color:#06281b;font-weight:800;border:0;box-shadow:0 0 0 2px rgba(14,203,129,.35)" onclick="unfreeze(\''+u.id+'\')">❄ فك التجميد</button>';}
+        if(u.status==='pending')a+='<button class="btn green sm" onclick="approve(\''+u.id+'\')">موافقة</button><button class="btn red sm" onclick="reject(\''+u.id+'\')">رفض</button>';
+        else if(u.status==='approved')a+='<button class="btn ghost sm" onclick="ban(\''+u.id+'\')">حظر</button><button class="btn ghost sm" onclick="banTemp(\''+u.id+'\')">⏱ حظر مؤقّت</button>';
+        else if(u.status==='banned')a+='<button class="btn green sm" onclick="unban(\''+u.id+'\')">رفع الحظر</button>';
+        else if(u.status==='rejected')a+='<button class="btn green sm" onclick="approve(\''+u.id+'\')">موافقة</button>';
+        if(u.status!=='rejected'&&!u.frozen){a+='<button class="btn ghost sm" onclick="freeze(\''+u.id+'\')">❄ تجميد الرصيد</button>';}
         a+='<button class="btn ghost sm" onclick="openNotify(\''+u.id+'\',\''+nm+'\')">🔔 إشعار/رصيد</button>';
         a+='<button class="btn ghost sm" onclick="openBal(\''+u.id+'\',\''+nm+'\')">أرصدة وعملات</button>';
         a+='<button class="btn ghost sm" onclick="delUser(\''+u.id+'\')">حذف</button>';

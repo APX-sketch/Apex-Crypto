@@ -478,6 +478,35 @@ function verifyDeviceToken(token, userId, deviceId) {
   } catch (e) { return false; }
 }
 
+// ---- دخول سريع بالبصمة/الوجه (Biometric quick-login) ----
+// التحقّق الحيوي (بصمة/وجه) يتم محلياً على جهاز المستخدم عبر WebAuthn
+// (navigator.credentials). بعد نجاحه يُرسل العميل رمزاً موقّعاً (bioToken)
+// مرتبطاً بمعرّف المستخدم خزّنه عند التفعيل؛ الخادم يتحقّق من توقيعه ثم يُصدر جلسة.
+// الرمز موقّع بـ SESSION_SECRET (HMAC) فلا يُزوّر ولا يصلح لحساب آخر.
+const BIO_TTL_MS = Number(process.env.BIO_TOKEN_TTL_MS || 180 * 24 * 60 * 60 * 1000); // 180 يوماً
+function signBioToken(userId) {
+  const payload = 'bio.' + String(userId) + '.' + (Date.now() + BIO_TTL_MS);
+  const sig = createHmac('sha256', SESSION_SECRET).update(payload).digest();
+  return b64url(payload) + '.' + b64url(sig);
+}
+function verifyBioToken(token) {
+  try {
+    const t = String(token || '');
+    const dot = t.lastIndexOf('.');
+    if (dot <= 0) return null;
+    const payloadB64 = t.slice(0, dot);
+    const sigB64 = t.slice(dot + 1);
+    const payload = Buffer.from(payloadB64.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+    const expected = createHmac('sha256', SESSION_SECRET).update(payload).digest();
+    const got = Buffer.from(sigB64.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+    if (expected.length !== got.length || !timingSafeEqual(expected, got)) return null;
+    const parts = payload.split('.');
+    if (parts[0] !== 'bio') return null;
+    if (Number(parts[2]) < Date.now()) return null;
+    return { id: String(parts[1]) };
+  } catch (e) { return null; }
+}
+
 // Read a single user row (identity + status) by id / email.
 async function dbGetUserById(id) {
   const [rows] = await pool.query(
@@ -1901,6 +1930,42 @@ app.post('/api/auth/login/resend-otp', strictLimiter, async (req, res) => {
   }
 });
 
+// ---- تسجيل البصمة/الوجه (Biometric enroll) ----
+// يُستدعى بعد أن ينجح المستخدم في تسجيل بصمته/وجهه محلياً (WebAuthn)
+// وهو مسجّل دخول بالفعل (requireUser). نُصدر bioToken موقّعاً مرتبطاً
+// بمعرّفه يخزّنه العميل محلياً لاستخدامه في الدخول السريع لاحقاً.
+app.post('/api/auth/biometric/enroll', strictLimiter, requireUser, async (req, res) => {
+  try {
+    const bioToken = signBioToken(req.user.id);
+    res.json({ ok: true, bioToken, email: req.user.email || '', ttlDays: Math.round(BIO_TTL_MS / 86400000) });
+  } catch (err) {
+    console.error('Biometric enroll error:', err);
+    res.status(500).json({ error: 'bio_enroll_failed' });
+  }
+});
+
+// ---- الدخول السريع بالبصمة/الوجه (Biometric login) ----
+// بعد نجاح التحقّق الحيوي محلياً على الجهاز، يُرسل العميل bioToken.
+// نتحقّق من توقيعه ثم نُصدر جلسة (نفس شكل رد الدخول). المحظور ممنوع.
+app.post('/api/auth/biometric/login', strictLimiter, async (req, res) => {
+  try {
+    const bioToken = String((req.body || {}).bioToken || '');
+    const v = verifyBioToken(bioToken);
+    if (!v) return res.status(401).json({ error: 'bio_invalid' });
+    const user = await dbGetUserById(v.id);
+    if (!user) return res.status(401).json({ error: 'bio_invalid' });
+    await maybeExpireTempBan(user);
+    await maybeExpireFrozen(user);
+    if (user.status === 'banned') return res.status(403).json({ error: 'banned' });
+    try { await pool.query('UPDATE users SET last_seen = ? WHERE id = ?', [Date.now(), user.id]); } catch (e) {}
+    const token = signUserToken(user.id);
+    res.json({ ok: true, token, status: user.status || 'pending', user: dbPublicUser(user), biometric: true });
+  } catch (err) {
+    console.error('Biometric login error:', err);
+    res.status(500).json({ error: 'bio_login_failed' });
+  }
+});
+
 // ---- Who am I: return the CURRENT identity + approval status from the DB ----
 // The client polls this to render the KYC badge. Without this route the front
 // end fell through to static files, got HTML instead of JSON, silently failed,
@@ -3005,7 +3070,7 @@ async function adminSetFrozen(id, frozen, res, req, until) {
     try {
       store.addNotification && u && store.addNotification(String(id), {
         title: frozen ? 'تجميد الرصيد' : 'رفع تجميد الرصيد', kind: 'admin',
-        body: frozen ? (temp ? 'تم تجميد رصيدك مؤقتاً؛ لا يمكن السحب أو التحويل حتى انتهاء المدة.' : 'تم تجميد رصيدك؛ لا يمكن السحب أو التحويل حتى رفعه.') : 'تم رفع التجميد عن رصيدك؛ يمكنك السحب والتحويل الآن.',
+        body: frozen ? (temp ? 'تم تجميد رصيدك مؤقتاً؛ لا يمكن السحب أو التحويل حتى انتهاء المدة.' : 'تم تجميد رصيدك؛ لا يمكن السحب أو التحويل .') : 'تم رفع التجميد عن رصيدك؛ يمكنك السحب والتحويل الآن.',
       });
     } catch (e) {}
     res.json({ ok: true, frozen: !!frozen, frozenUntil, user: dbPublicUser(u) });

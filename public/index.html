@@ -564,7 +564,7 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
     <div class="grp">
       <div class="row" onclick="openSheet('shPass')"><span class="ic"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg></span><div class="tx"><b data-i18n="changePass">تغيير كلمة المرور</b><span data-i18n="changePassSub">حدّث كلمة المرور بانتظام</span></div><span class="ar">‹</span></div>
       <div class="row"><span class="ic"><svg viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg></span><div class="tx"><b data-i18n="twofa">المصادقة الثنائية 2FA</b><span data-i18n="twofaSub">حماية إضافية عند الدخول</span></div><div class="sw" id="sw2fa" onclick="toggleSec('2fa',this)"></div></div>
-      <div class="row"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg></span><div class="tx"><b data-i18n="biometric">بصمة / وجه</b><span data-i18n="biometricSub">تسجيل دخول سريع</span></div><div class="sw" id="swBio" onclick="toggleSec('bio',this)"></div></div>
+      <div class="row"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg></span><div class="tx"><b data-i18n="biometric">بصمة / وجه</b><span data-i18n="biometricSub">تسجيل دخول سريع</span></div><div class="sw" id="swBio" onclick="toggleBio(this)"></div></div>
     </div>
     <div class="grp">
       <div class="gt" data-i18n="antiTitle">رمز مكافحة التصيد</div>
@@ -997,6 +997,59 @@ function toggleSec(key,el){
   localStorage.setItem('apex_'+key,on?'1':'0');
   toast(on?t(key==='2fa'?'msg2faOn':'msgBioOn'):t(key==='2fa'?'msg2faOff':'msgBioOff'));
 }
+
+/* ===== البصمة/الوجه: تسجيل فعلي (WebAuthn) + دخول سريع =====
+   عند التفعيل نطلب من النظام تسجيل بصمة/وجه المستخدم (platform authenticator)
+   والتحقّق الحيوي يتم محلياً على الجهاز؛ ثم نستصدر bioToken موقّعاً من الخادم ونخزّنه محلياً. */
+function _b64uFromBuf(buf){var b=new Uint8Array(buf),s='';for(var i=0;i<b.length;i++)s+=String.fromCharCode(b[i]);return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
+function _bufFromB64u(str){str=String(str||'').replace(/-/g,'+').replace(/_/g,'/');while(str.length%4)str+='=';var bin=atob(str),b=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)b[i]=bin.charCodeAt(i);return b.buffer;}
+function _randBuf(n){var b=new Uint8Array(n);(window.crypto||{}).getRandomValues&&window.crypto.getRandomValues(b);return b.buffer;}
+
+async function toggleBio(el){
+  const turningOn=!el.classList.contains('on');
+  if(!turningOn){
+    // إيقاف: احذف بيانات البصمة المحلية
+    el.classList.remove('on');
+    localStorage.setItem('apex_bio','0');
+    localStorage.removeItem('apex_bio_token');
+    localStorage.removeItem('apex_bio_cred');
+    localStorage.removeItem('apex_bio_email');
+    toast(t('msgBioOff'));
+    return;
+  }
+  // التفعيل: يتطلّب دعم WebAuthn + HTTPS + مصادق مدمج
+  if(!(window.PublicKeyCredential&&navigator.credentials&&navigator.credentials.create)){
+    toast(t('msgBioUnsupported'));return;
+  }
+  const tok=(sess&&sess.token)||localStorage.getItem('apex_token')||'';
+  if(!tok){toast(t('msgNoUser'));return;}
+  const email=(sess.email||(curUser()&&curUser().email)||'').toLowerCase();
+  try{
+    const uidBuf=new TextEncoder().encode(String(sess.uid||email||'apex-user')).buffer;
+    const cred=await navigator.credentials.create({publicKey:{
+      challenge:_randBuf(32),
+      rp:{name:'Apex',id:location.hostname},
+      user:{id:uidBuf,name:email||'user',displayName:email||'Apex'},
+      pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],
+      authenticatorSelection:{authenticatorAttachment:'platform',userVerification:'required',residentKey:'preferred'},
+      timeout:60000,attestation:'none'
+    }});
+    if(!cred){toast(t('msgBioCancel'));return;}
+    // سجّل bioToken من الخادم
+    const r=await fetch('/api/auth/biometric/enroll',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok}});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok||!d.bioToken){toast(t('msgBioFail'));return;}
+    localStorage.setItem('apex_bio','1');
+    localStorage.setItem('apex_bio_token',d.bioToken);
+    localStorage.setItem('apex_bio_cred',_b64uFromBuf(cred.rawId));
+    localStorage.setItem('apex_bio_email',d.email||email||'');
+    el.classList.add('on');
+    toast(t('msgBioOn'));
+  }catch(e){
+    if(e&&(e.name==='NotAllowedError'||e.name==='AbortError'))toast(t('msgBioCancel'));
+    else toast(t('msgBioFail'));
+  }
+}
 function saveAnti(){
   const v=$('antiInp').value.trim();
   if(!v){toast(t('msgAntiEmpty'));return;}
@@ -1019,7 +1072,7 @@ function changePass(){
 }
 function initSecurity(){
   if(localStorage.getItem('apex_2fa')==='1')$('sw2fa').classList.add('on');
-  if(localStorage.getItem('apex_bio')==='1')$('swBio').classList.add('on');
+  if(localStorage.getItem('apex_bio')==='1'&&localStorage.getItem('apex_bio_token'))$('swBio').classList.add('on');
   const a=localStorage.getItem('apex_anti');if(a)$('antiInp').value=a;
   const at=sess.at||(curUser()&&curUser().at)||Date.now();
   try{$('lastLoginVal').textContent=new Date(at).toLocaleString();}catch(e){$('lastLoginVal').textContent='--';}
@@ -1151,9 +1204,9 @@ window.onApexLang=function(){if(KYC_CUR)applyKycStatus(KYC_CUR);};
 /* تهيئة */
 function initAll(){initSecurity();initKyc();initKycStatus();applyLang(curLang);}
 
-I18N.ar={security:'الأمان والحماية',kyc:'توثيق الهوية (KYC)',settings:'الإعدادات واللغة',help:'المساعدة والدعم',logout:'تسجيل الخروج',changePass:'تغيير كلمة المرور',changePassSub:'حدّث كلمة المرور بانتظام',twofa:'المصادقة الثنائية 2FA',twofaSub:'حماية إضافية عند الدخول',biometric:'بصمة / وجه',biometricSub:'تسجيل دخول سريع',antiTitle:'رمز مكافحة التصيد',save:'حفظ',lastLogin:'آخر تسجيل دخول',curPass:'كلمة المرور الحالية',newPass:'كلمة المرور الجديدة',confPass:'تأكيد كلمة المرور',saveNewPass:'حفظ كلمة المرور',kycVerified:'حساب موثّق',kycDesc:'تم التحقق من هويتك بنجاح. حسابك يتمتع بكامل الصلاحيات.',docType:'نوع الوثيقة',status:'الحالة',verified2:'✓ موثّق',level:'مستوى التوثيق',language:'اللغة',faq1q:'كيف أودع الأموال؟',faq1a:'اضغط على زر "إيداع" في الصفحة الرئيسية واتبع الخطوات.',faq2q:'كيف أحمي حسابي؟',faq2a:'فعّل المصادقة الثنائية 2FA ورمز مكافحة التصيد من قسم الأمان.',faq3q:'هل المنصة حقيقية؟',faq3a:'هذه منصة تدريبية (تداول تجريبي) بأسعار حية حقيقية من السوق.',liveChat:'الدردشة المباشرة',liveChatSub:'دعم فني 24/7',email:'البريد الإلكتروني',searchPh:'بحث عن عملة (BTC، ETH)...',totalAssets:'إجمالي الأصول (USDT)',deposit:'إيداع',withdraw:'سحب',transfer:'تحويل',more:'المزيد',liveMarkets:'أبرز الأسواق الحية',viewAll:'عرض الكل ‹',copy:'نسخ',supportMsg:'سيتواصل معك فريق الدعم قريباً',kycId:'بطاقة هوية وطنية',kycPass:'جواز سفر',kycLic:'رخصة قيادة',langChanged:'تم تغيير اللغة',msgSaved:'تم الحفظ بنجاح',msg2faOn:'تم تفعيل المصادقة الثنائية',msg2faOff:'تم إيقاف المصادقة الثنائية',msgBioOn:'تم تفعيل البصمة',msgBioOff:'تم إيقاف البصمة',msgAntiEmpty:'الرجاء إدخال رمز',msgNoUser:'تعذر إيجاد المستخدم',msgPassWrong:'كلمة المرور الحالية غير صحيحة',msgPassShort:'كلمة المرور قصيرة (8 أحرف على الأقل)',msgPassMismatch:'كلمتا المرور غير متطابقتين',msgPassChanged:'تم تغيير كلمة المرور بنجاح'};
+I18N.ar={security:'الأمان والحماية',kyc:'توثيق الهوية (KYC)',settings:'الإعدادات واللغة',help:'المساعدة والدعم',logout:'تسجيل الخروج',changePass:'تغيير كلمة المرور',changePassSub:'حدّث كلمة المرور بانتظام',twofa:'المصادقة الثنائية 2FA',twofaSub:'حماية إضافية عند الدخول',biometric:'بصمة / وجه',biometricSub:'تسجيل دخول سريع',antiTitle:'رمز مكافحة التصيد',save:'حفظ',lastLogin:'آخر تسجيل دخول',curPass:'كلمة المرور الحالية',newPass:'كلمة المرور الجديدة',confPass:'تأكيد كلمة المرور',saveNewPass:'حفظ كلمة المرور',kycVerified:'حساب موثّق',kycDesc:'تم التحقق من هويتك بنجاح. حسابك يتمتع بكامل الصلاحيات.',docType:'نوع الوثيقة',status:'الحالة',verified2:'✓ موثّق',level:'مستوى التوثيق',language:'اللغة',faq1q:'كيف أودع الأموال؟',faq1a:'اضغط على زر "إيداع" في الصفحة الرئيسية واتبع الخطوات.',faq2q:'كيف أحمي حسابي؟',faq2a:'فعّل المصادقة الثنائية 2FA ورمز مكافحة التصيد من قسم الأمان.',faq3q:'هل المنصة حقيقية؟',faq3a:'هذه منصة تدريبية (تداول تجريبي) بأسعار حية حقيقية من السوق.',liveChat:'الدردشة المباشرة',liveChatSub:'دعم فني 24/7',email:'البريد الإلكتروني',searchPh:'بحث عن عملة (BTC، ETH)...',totalAssets:'إجمالي الأصول (USDT)',deposit:'إيداع',withdraw:'سحب',transfer:'تحويل',more:'المزيد',liveMarkets:'أبرز الأسواق الحية',viewAll:'عرض الكل ‹',copy:'نسخ',supportMsg:'سيتواصل معك فريق الدعم قريباً',kycId:'بطاقة هوية وطنية',kycPass:'جواز سفر',kycLic:'رخصة قيادة',langChanged:'تم تغيير اللغة',msgSaved:'تم الحفظ بنجاح',msg2faOn:'تم تفعيل المصادقة الثنائية',msg2faOff:'تم إيقاف المصادقة الثنائية',msgBioOn:'تم تفعيل البصمة',msgBioOff:'تم إيقاف البصمة',msgAntiEmpty:'الرجاء إدخال رمز',msgNoUser:'تعذر إيجاد المستخدم',msgPassWrong:'كلمة المرور الحالية غير صحيحة',msgPassShort:'كلمة المرور قصيرة (8 أحرف على الأقل)',msgPassMismatch:'كلمتا المرور غير متطابقتين',msgPassChanged:'تم تغيير كلمة المرور بنجاح',msgBioUnsupported:'جهازك لا يدعم البصمة/الوجه',msgBioCancel:'تم إلغاء التسجيل',msgBioFail:'تعذّر تفعيل البصمة، حاول مجدداً'};
 
-I18N.en={security:'Security & Protection',kyc:'Identity Verification (KYC)',settings:'Settings & Language',help:'Help & Support',logout:'Log out',changePass:'Change Password',changePassSub:'Update your password regularly',twofa:'Two-Factor Auth (2FA)',twofaSub:'Extra protection on login',biometric:'Fingerprint / Face',biometricSub:'Fast sign-in',antiTitle:'Anti-Phishing Code',save:'Save',lastLogin:'Last login',curPass:'Current password',newPass:'New password',confPass:'Confirm password',saveNewPass:'Save password',kycVerified:'Verified account',kycDesc:'Your identity has been verified successfully. Your account has full access.',docType:'Document type',status:'Status',verified2:'✓ Verified',level:'Verification level',language:'Language',faq1q:'How do I deposit funds?',faq1a:'Tap the "Deposit" button on the home page and follow the steps.',faq2q:'How do I protect my account?',faq2a:'Enable 2FA and the anti-phishing code from the Security section.',faq3q:'Is the platform real?',faq3a:'This is a training platform (paper trading) with real live market prices.',liveChat:'Live Chat',liveChatSub:'24/7 technical support',email:'Email',searchPh:'Search a coin (BTC, ETH)...',totalAssets:'Total Assets (USDT)',deposit:'Deposit',withdraw:'Withdraw',transfer:'Transfer',more:'More',liveMarkets:'Top Live Markets',viewAll:'View all ›',copy:'Copy',supportMsg:'Our support team will contact you soon',kycId:'National ID Card',kycPass:'Passport',kycLic:'Driver License',langChanged:'Language changed',msgSaved:'Saved successfully',msg2faOn:'Two-factor auth enabled',msg2faOff:'Two-factor auth disabled',msgBioOn:'Biometric enabled',msgBioOff:'Biometric disabled',msgAntiEmpty:'Please enter a code',msgNoUser:'User not found',msgPassWrong:'Current password is incorrect',msgPassShort:'Password too short (min 8 chars)',msgPassMismatch:'Passwords do not match',msgPassChanged:'Password changed successfully'};
+I18N.en={security:'Security & Protection',kyc:'Identity Verification (KYC)',settings:'Settings & Language',help:'Help & Support',logout:'Log out',changePass:'Change Password',changePassSub:'Update your password regularly',twofa:'Two-Factor Auth (2FA)',twofaSub:'Extra protection on login',biometric:'Fingerprint / Face',biometricSub:'Fast sign-in',antiTitle:'Anti-Phishing Code',save:'Save',lastLogin:'Last login',curPass:'Current password',newPass:'New password',confPass:'Confirm password',saveNewPass:'Save password',kycVerified:'Verified account',kycDesc:'Your identity has been verified successfully. Your account has full access.',docType:'Document type',status:'Status',verified2:'✓ Verified',level:'Verification level',language:'Language',faq1q:'How do I deposit funds?',faq1a:'Tap the "Deposit" button on the home page and follow the steps.',faq2q:'How do I protect my account?',faq2a:'Enable 2FA and the anti-phishing code from the Security section.',faq3q:'Is the platform real?',faq3a:'This is a training platform (paper trading) with real live market prices.',liveChat:'Live Chat',liveChatSub:'24/7 technical support',email:'Email',searchPh:'Search a coin (BTC, ETH)...',totalAssets:'Total Assets (USDT)',deposit:'Deposit',withdraw:'Withdraw',transfer:'Transfer',more:'More',liveMarkets:'Top Live Markets',viewAll:'View all ›',copy:'Copy',supportMsg:'Our support team will contact you soon',kycId:'National ID Card',kycPass:'Passport',kycLic:'Driver License',langChanged:'Language changed',msgSaved:'Saved successfully',msg2faOn:'Two-factor auth enabled',msg2faOff:'Two-factor auth disabled',msgBioOn:'Biometric enabled',msgBioOff:'Biometric disabled',msgAntiEmpty:'Please enter a code',msgNoUser:'User not found',msgPassWrong:'Current password is incorrect',msgPassShort:'Password too short (min 8 chars)',msgPassMismatch:'Passwords do not match',msgPassChanged:'Password changed successfully',msgBioUnsupported:'Your device does not support biometrics',msgBioCancel:'Enrollment cancelled',msgBioFail:'Could not enable biometrics, try again'};
 
 I18N.fr={security:'Sécurité & Protection',kyc:'Vérification d\'identité (KYC)',settings:'Paramètres & Langue',help:'Aide & Support',logout:'Déconnexion',changePass:'Changer le mot de passe',changePassSub:'Mettez à jour régulièrement',twofa:'Authentification à deux facteurs',twofaSub:'Protection supplémentaire',biometric:'Empreinte / Visage',biometricSub:'Connexion rapide',antiTitle:'Code anti-hameçonnage',save:'Enregistrer',lastLogin:'Dernière connexion',curPass:'Mot de passe actuel',newPass:'Nouveau mot de passe',confPass:'Confirmer le mot de passe',saveNewPass:'Enregistrer',kycVerified:'Compte vérifié',kycDesc:'Votre identité a été vérifiée avec succès. Accès complet.',docType:'Type de document',status:'Statut',verified2:'✓ Vérifié',level:'Niveau de vérification',language:'Langue',faq1q:'Comment déposer des fonds ?',faq1a:'Appuyez sur "Dépôt" sur la page d\'accueil et suivez les étapes.',faq2q:'Comment protéger mon compte ?',faq2a:'Activez la 2FA et le code anti-hameçonnage dans Sécurité.',faq3q:'La plateforme est-elle réelle ?',faq3a:'Ceci est une plateforme d\'entraînement (trading papier) avec de vrais prix.',liveChat:'Chat en direct',liveChatSub:'Support 24/7',email:'E-mail',searchPh:'Rechercher une pièce (BTC, ETH)...',totalAssets:'Actifs totaux (USDT)',deposit:'Dépôt',withdraw:'Retrait',transfer:'Transfert',more:'Plus',liveMarkets:'Meilleurs marchés en direct',viewAll:'Tout voir ›',copy:'Copier',supportMsg:'Notre équipe vous contactera bientôt',kycId:'Carte d\'identité',kycPass:'Passeport',kycLic:'Permis de conduire',langChanged:'Langue modifiée',msgSaved:'Enregistré avec succès',msg2faOn:'2FA activée',msg2faOff:'2FA désactivée',msgBioOn:'Biométrie activée',msgBioOff:'Biométrie désactivée',msgAntiEmpty:'Veuillez saisir un code',msgNoUser:'Utilisateur introuvable',msgPassWrong:'Mot de passe actuel incorrect',msgPassShort:'Mot de passe trop court (min 8)',msgPassMismatch:'Les mots de passe ne correspondent pas',msgPassChanged:'Mot de passe modifié'};
 I18N.es={security:'Seguridad y Protección',kyc:'Verificación de identidad (KYC)',settings:'Ajustes e Idioma',help:'Ayuda y Soporte',logout:'Cerrar sesión',changePass:'Cambiar contraseña',changePassSub:'Actualiza tu contraseña con frecuencia',twofa:'Autenticación de dos factores',twofaSub:'Protección adicional al iniciar',biometric:'Huella / Rostro',biometricSub:'Inicio rápido',antiTitle:'Código anti-phishing',save:'Guardar',lastLogin:'Último inicio',curPass:'Contraseña actual',newPass:'Nueva contraseña',confPass:'Confirmar contraseña',saveNewPass:'Guardar',kycVerified:'Cuenta verificada',kycDesc:'Tu identidad se verificó con éxito. Acceso completo.',docType:'Tipo de documento',status:'Estado',verified2:'✓ Verificado',level:'Nivel de verificación',language:'Idioma',faq1q:'¿Cómo deposito fondos?',faq1a:'Toca "Depósito" en la página principal y sigue los pasos.',faq2q:'¿Cómo protejo mi cuenta?',faq2a:'Activa 2FA y el código anti-phishing en Seguridad.',faq3q:'¿La plataforma es real?',faq3a:'Es una plataforma de práctica (trading en papel) con precios reales.',liveChat:'Chat en vivo',liveChatSub:'Soporte 24/7',email:'Correo',searchPh:'Buscar moneda (BTC, ETH)...',totalAssets:'Activos totales (USDT)',deposit:'Depósito',withdraw:'Retirar',transfer:'Transferir',more:'Más',liveMarkets:'Mercados en vivo',viewAll:'Ver todo ›',copy:'Copiar',supportMsg:'Nuestro equipo te contactará pronto',kycId:'DNI / Cédula',kycPass:'Pasaporte',kycLic:'Licencia de conducir',langChanged:'Idioma cambiado',msgSaved:'Guardado con éxito',msg2faOn:'2FA activada',msg2faOff:'2FA desactivada',msgBioOn:'Biometría activada',msgBioOff:'Biometría desactivada',msgAntiEmpty:'Introduce un código',msgNoUser:'Usuario no encontrado',msgPassWrong:'Contraseña actual incorrecta',msgPassShort:'Contraseña muy corta (mín 8)',msgPassMismatch:'Las contraseñas no coinciden',msgPassChanged:'Contraseña cambiada'};
