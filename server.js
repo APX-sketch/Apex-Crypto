@@ -4678,7 +4678,7 @@ app.post('/api/square/live/start', requireUser, (req, res) => {
   LIVE.set(id, { id, uid: req.user.uid, host, title, startedAt: Date.now(),
     frame: '', frameAt: Date.now(), seq: 0, viewers: new Map(),
     likes: new Set(), comments: [], cseq: 0, commentsClosed: false,
-    supports: [], supportTotal: {} });
+    supports: [], supportTotal: {}, supportCount: 0, peakViewers: 0 });
   // تنبيه المتابعين فقط (نظام المتابعة الاجتماعية square_follows) أنّ صاحبهم بدأ بثاً — بشكل غير حاجز.
   (async () => {
     try {
@@ -4714,6 +4714,8 @@ app.get('/api/square/live/:id/frame', requireUser, async (req, res) => {
   if (!s) return res.status(404).json({ error: 'ended' });
   const me = s.uid === req.user.uid;
   if (!me) s.viewers.set(req.user.uid, Date.now());
+  const vc = liveViewerCount(s);
+  if (vc > (Number(s.peakViewers) || 0)) s.peakViewers = vc;
   let following = false;
   if (!me) {
     try {
@@ -4723,9 +4725,10 @@ app.get('/api/square/live/:id/frame', requireUser, async (req, res) => {
     } catch (e) {}
   }
   res.json({ ok: true, id: s.id, title: s.title, host: s.host, hostUid: s.uid, seq: s.seq,
-    frame: s.frame, viewers: liveViewerCount(s), startedAt: s.startedAt, me, following,
+    frame: s.frame, viewers: vc, peakViewers: s.peakViewers || 0, startedAt: s.startedAt, me, following,
     likes: s.likes.size, liked: s.likes.has(req.user.uid),
-    commentsClosed: !!s.commentsClosed, cseq: s.cseq,
+    commentsClosed: !!s.commentsClosed, cseq: s.cseq, commentsCount: s.comments.length,
+    supportCount: Number(s.supportCount) || 0,
     comments: s.comments.slice(-40),
     supports: s.supports.slice(-20), supportTotal: s.supportTotal });
 });
@@ -4789,6 +4792,7 @@ app.post('/api/square/live/:id/support', requireUser, (req, res) => {
   if (s.uid === req.user.uid) return res.status(400).json({ error: 'self_support' });
   const amount = Number((req.body || {}).amount);
   const currency = String((req.body || {}).currency || 'USDT').toUpperCase().slice(0, 12);
+  const gift = String((req.body || {}).gift || '').trim().slice(0, 40);
   if (!/^[A-Z0-9]{2,12}$/.test(currency)) return res.status(400).json({ error: 'bad_currency' });
   if (!amount || !isFinite(amount) || amount <= 0) return res.status(400).json({ error: 'invalid_amount' });
   // اخصم من الداعم ذرّياً (يرفض أي رصيد سالب)
@@ -4812,13 +4816,14 @@ app.post('/api/square/live/:id/support', requireUser, (req, res) => {
   // إشعار للمذيع
   try {
     store.addNotification(String(s.uid), { title: '\ud83c\udf81 دعم جديد في بثّك',
-      kind: 'money', body: donorName + ' دعمك بـ ' + amount + ' ' + currency + ' — شكراً له!' });
+      kind: 'money', body: donorName + (gift ? (' أرسل ' + gift + ' ') : ' دعمك ') + 'بـ ' + amount + ' ' + currency + ' — شكراً له!' });
   } catch (e) {}
-  // سجّل الدعم على كائن البثّ (قائمة + إجمالي لكل عملة) ليظهر للجميع
+  // سجّل الدعم على كائن البثّ (قائمة + إجمالي لكل عملة + عدّاد) ليظهر للجميع
   s.supportTotal[currency] = (Number(s.supportTotal[currency]) || 0) + amount;
-  s.supports.push({ uid: req.user.uid, name: donorName, amount, currency, at: Date.now() });
+  s.supportCount = (Number(s.supportCount) || 0) + 1;
+  s.supports.push({ uid: req.user.uid, name: donorName, amount, currency, gift: gift || '', at: Date.now() });
   if (s.supports.length > 200) s.supports.splice(0, s.supports.length - 200);
-  res.json({ ok: true, amount, currency, balance: Number((u.balances || {})[currency]) || 0,
+  res.json({ ok: true, amount, currency, gift: gift || '', balance: Number((u.balances || {})[currency]) || 0,
     supportTotal: s.supportTotal });
 });
 

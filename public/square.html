@@ -173,6 +173,24 @@ html[data-theme=light] .bnav{background:#fff}
 .suprow{display:flex;gap:8px;align-items:center;margin-bottom:12px}
 .suprow input{flex:1;padding:12px 14px;border-radius:12px;background:var(--panel2,#11161d);border:1px solid var(--border);color:var(--txt);font-size:14px;font-family:inherit}
 .suprow select{padding:12px 10px;border-radius:12px;background:var(--panel2,#11161d);border:1px solid var(--border);color:var(--txt);font-size:14px;font-family:inherit}
+.supgrid.gifts{grid-template-columns:repeat(4,1fr);gap:8px}
+.supgrid.gifts button{display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 0 8px}
+.supgrid.gifts button .ge{font-size:22px;line-height:1}
+.supgrid.gifts button .gn{font-size:10.5px;font-weight:800;color:var(--muted)}
+.supgrid.gifts button .gp{font-size:12px;font-weight:900}
+.supgrid.gifts button.sel .gn,.supgrid.gifts button.sel .gp{color:#231a02}
+.lfs-share{flex:0 0 auto;width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,.55);border:0;color:#fff;font-size:17px;cursor:pointer;line-height:1}
+.statsdlg{position:fixed;inset:0;z-index:1002;background:rgba(0,0,0,.72);display:none;align-items:flex-end;justify-content:center}
+.statsdlg.on{display:flex}
+.statsdlg .box{width:100%;max-width:480px;background:var(--panel);border-radius:18px 18px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom));border:1px solid var(--border)}
+.statsdlg h4{margin:0 0 14px;font-size:16px;font-weight:900}
+.stgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px}
+.stcard{background:var(--panel2,#11161d);border:1px solid var(--border);border-radius:14px;padding:13px 14px}
+.stcard .stk{font-size:11.5px;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:5px}
+.stcard .stv{font-size:20px;font-weight:900;margin-top:4px}
+.stearn{background:var(--panel2,#11161d);border:1px solid var(--border);border-radius:14px;padding:13px 14px;margin-bottom:14px}
+.stearn .stk{font-size:11.5px;color:var(--muted);font-weight:700;margin-bottom:6px}
+.stearn .stv{font-size:15px;font-weight:900;color:var(--gold1)}
 </style>
 <div class="hdr">
   <div class="brand">Apex<b>Square</b></div>
@@ -233,6 +251,7 @@ html[data-theme=light] .bnav{background:#fff}
     <button class="lfs-close" onclick="closeLive()">×</button>
     <div class="lfs-title"><span class="lfs-live">🔴 مباشر</span> <span id="liveTitle">البث المباشر</span></div>
     <button class="lfs-follow" id="liveFollowBtn" onclick="toggleFollowHost()" style="display:none">+ متابعة</button>
+    <button class="lfs-share" id="liveShareBtn" onclick="shareLive()" title="مشاركة البث">↪</button>
   </div>
   <div class="lfs-stage" id="liveWrap">
     <video id="liveVideo" playsinline muted autoplay style="display:none"></video>
@@ -249,6 +268,7 @@ html[data-theme=light] .bnav{background:#fff}
     <input id="liveCmtInput" placeholder="أضف تعليقاً…" onkeydown="if(event.key==='Enter')sendLiveComment()">
     <button class="lfs-send" id="liveCmtSend" onclick="sendLiveComment()">إرسال</button>
     <button class="lfs-ic" id="liveToggleBtn" onclick="toggleLiveComments()" title="إيقاف/تشغيل التعليقات" style="display:none">🔓</button>
+    <button class="lfs-ic" id="liveStatsBtn" onclick="openLiveStats()" title="إحصائيات البث" style="display:none">📊</button>
     <button class="lfs-stop" id="liveStopBtn" onclick="stopLive()" style="display:none">إنهاء</button>
   </div>
 </div>
@@ -256,9 +276,15 @@ html[data-theme=light] .bnav{background:#fff}
 <div class="supdlg" id="supDlg">
   <div class="box">
     <h4>🎁 دعم <span id="supHost"></span></h4>
-    <div class="supgrid" id="supGrid">
-      <button data-a="5">5</button><button data-a="10">10</button><button data-a="25">25</button><button data-a="50">50</button>
-      <button data-a="100">100</button><button data-a="250">250</button><button data-a="500">500</button><button data-a="1000">1000</button>
+    <div class="supgrid gifts" id="supGrid">
+      <button data-a="5" data-g="🌹 وردة"><span class="ge">🌹</span><span class="gn">وردة</span><span class="gp">5</span></button>
+      <button data-a="10" data-g="☕ قهوة"><span class="ge">☕</span><span class="gn">قهوة</span><span class="gp">10</span></button>
+      <button data-a="25" data-g="👍 إعجاب"><span class="ge">👍</span><span class="gn">إعجاب</span><span class="gp">25</span></button>
+      <button data-a="50" data-g="🎉 احتفال"><span class="ge">🎉</span><span class="gn">احتفال</span><span class="gp">50</span></button>
+      <button data-a="100" data-g="💎 ألماسة"><span class="ge">💎</span><span class="gn">ألماسة</span><span class="gp">100</span></button>
+      <button data-a="250" data-g="👑 تاج"><span class="ge">👑</span><span class="gn">تاج</span><span class="gp">250</span></button>
+      <button data-a="500" data-g="🚀 صاروخ"><span class="ge">🚀</span><span class="gn">صاروخ</span><span class="gp">500</span></button>
+      <button data-a="1000" data-g="🦁 أسد"><span class="ge">🦁</span><span class="gn">أسد</span><span class="gp">1000</span></button>
     </div>
     <div class="suprow">
       <input id="supAmount" type="number" min="0" step="any" placeholder="مبلغ آخر">
@@ -266,6 +292,22 @@ html[data-theme=light] .bnav{background:#fff}
     </div>
     <button class="btn" id="supSend" onclick="sendSupport()" style="background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#231a02">إرسال الدعم</button>
     <button class="btn" onclick="closeSupport()" style="margin-top:8px;background:transparent;color:var(--muted)">إلغاء</button>
+  </div>
+</div>
+<!-- LIVE STATS DIALOG (host) -->
+<div class="statsdlg" id="liveStatsDlg">
+  <div class="box">
+    <h4>📊 إحصائيات البث</h4>
+    <div class="stearn"><div class="stk">🎁 إجمالي الأرباح</div><div class="stv" id="stEarn">—</div></div>
+    <div class="stgrid">
+      <div class="stcard"><div class="stk">⏱️ المدة</div><div class="stv" id="stDur">0:00</div></div>
+      <div class="stcard"><div class="stk">👁️ المشاهدون الآن</div><div class="stv" id="stView">0</div></div>
+      <div class="stcard"><div class="stk">📈 الذروة</div><div class="stv" id="stPeak">0</div></div>
+      <div class="stcard"><div class="stk">❤️ الإعجابات</div><div class="stv" id="stLike">0</div></div>
+      <div class="stcard"><div class="stk">💬 التعليقات</div><div class="stv" id="stCmt">0</div></div>
+      <div class="stcard"><div class="stk">🎁 عدد الداعمين</div><div class="stv" id="stSup">0</div></div>
+    </div>
+    <button class="btn" onclick="closeLiveStats()" style="background:transparent;color:var(--muted)">إغلاق</button>
   </div>
 </div>
 <div id="toast" class="toast"></div>
@@ -421,33 +463,38 @@ function playPostVideo(id){var box=$('pvid-'+id);if(!box)return;box.innerHTML='<
 function handleVideo(file){if(!file)return;if(file.size>1900000){alert('حجم الفيديو كبير — الحد نحو 1.8 ميجابايت (اختر مقطعاً أقصر)');return;}var rd=new FileReader();rd.onload=function(ev){PENDING_VIDEO=ev.target.result;PENDING_IMG=null;$('imgPreview').innerHTML='';$('vidPreview').innerHTML='<video src="'+PENDING_VIDEO+'" controls playsinline style="width:100%;border-radius:12px;display:block"></video><button class="rm" onclick="removeVid()">×</button>';};rd.readAsDataURL(file);}
 function removeVid(){PENDING_VIDEO=null;$('vidPreview').innerHTML='';try{$('vidInput').value='';}catch(e){}}
 function loadLive(){api('/api/square/live').then(function(d){LIVES=(d&&d.live)||[];render();}).catch(function(){});}
-function openLiveModal(title,isHost){$('liveTitle').textContent=title||'البث المباشر';$('liveViewers').textContent='👁️ 0';$('liveLikeN').textContent='0';$('liveLikeBtn').classList.remove('liked');$('liveComments').innerHTML='';$('liveSupTotal').style.display='none';$('liveCmtInput').value='';$('liveCmtInput').disabled=false;$('liveCmtInput').placeholder='أضف تعليقاً…';$('liveStopBtn').style.display=isHost?'inline-flex':'none';$('liveToggleBtn').style.display=isHost?'flex':'none';$('liveLikeBtn').style.display=isHost?'none':'flex';$('liveSupBtn').style.display=isHost?'none':'flex';$('liveCmtSend').style.display='inline-flex';$('liveFollowBtn').style.display='none';$('liveMask').classList.add('on');}
+function openLiveModal(title,isHost){$('liveTitle').textContent=title||'البث المباشر';$('liveViewers').textContent='👁️ 0';$('liveLikeN').textContent='0';$('liveLikeBtn').classList.remove('liked');$('liveComments').innerHTML='';$('liveSupTotal').style.display='none';$('liveCmtInput').value='';$('liveCmtInput').disabled=false;$('liveCmtInput').placeholder='أضف تعليقاً…';$('liveStopBtn').style.display=isHost?'inline-flex':'none';$('liveToggleBtn').style.display=isHost?'flex':'none';$('liveStatsBtn').style.display=isHost?'flex':'none';$('liveLikeBtn').style.display=isHost?'none':'flex';$('liveSupBtn').style.display=isHost?'none':'flex';$('liveCmtSend').style.display='inline-flex';$('liveFollowBtn').style.display='none';$('liveMask').classList.add('on');}
 function startBroadcast(){if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){alert('المتصفّح لا يدعم الكاميرا');return;}var title=(prompt('عنوان البث المباشر:','بث مباشر')||'').trim();navigator.mediaDevices.getUserMedia({video:{width:640,height:480,facingMode:'user'},audio:false}).then(function(stream){api('/api/square/live/start',{method:'POST',body:JSON.stringify({title:title})}).then(function(d){closeCompose();openLiveModal(d.title||'بث مباشر',true);var v=$('liveVideo');v.srcObject=stream;v.style.display='block';$('liveImg').style.display='none';$('liveMsg').style.display='none';LIVE_STATE={id:d.id,mode:'host',stream:stream,sendTimer:null,pollTimer:null,lastSeq:-1,lastCseq:-1,_sending:false,commentsClosed:false};var cv=$('liveCanvas');var ctx=cv.getContext('2d');LIVE_STATE.sendTimer=setInterval(function(){if(!LIVE_STATE||LIVE_STATE.mode!=='host'||!v.videoWidth||LIVE_STATE._sending)return;var w=480,h=Math.round(v.videoHeight*w/v.videoWidth)||360;cv.width=w;cv.height=h;ctx.drawImage(v,0,0,w,h);var f=cv.toDataURL('image/jpeg',0.55);LIVE_STATE._sending=true;api('/api/square/live/'+LIVE_STATE.id+'/frame',{method:'POST',body:JSON.stringify({frame:f})}).then(function(r){if(r&&r.viewers!=null)$('liveViewers').textContent='👁️ '+r.viewers;}).catch(function(){}).then(function(){if(LIVE_STATE)LIVE_STATE._sending=false;});},400);LIVE_STATE.pollTimer=setInterval(pollLiveState,900);pollLiveState();}).catch(function(){stream.getTracks().forEach(function(t){t.stop();});alert('تعذّر بدء البث');});}).catch(function(){alert('تعذّر الوصول للكاميرا — تحقّق من الأذونات');});}
 function watchLive(id){openLiveModal('البث المباشر',false);var img=$('liveImg');$('liveVideo').style.display='none';img.style.display='none';$('liveMsg').style.display='block';$('liveMsg').textContent='…جارٍ الاتصال بالبث';LIVE_STATE={id:id,mode:'viewer',pollTimer:null,lastSeq:-1,lastCseq:-1,liked:false,commentsClosed:false,hostUid:null};pollLiveState();LIVE_STATE.pollTimer=setInterval(pollLiveState,600);}
-function pollLiveState(){if(!LIVE_STATE)return;var id=LIVE_STATE.id;api('/api/square/live/'+id+'/frame').then(function(d){if(!d||!LIVE_STATE||LIVE_STATE.id!==id)return;$('liveTitle').textContent=d.title||'البث المباشر';$('liveViewers').textContent='👁️ '+(d.viewers||0);if(LIVE_STATE.mode==='viewer'){var img=$('liveImg');if(d.frame&&d.seq!==LIVE_STATE.lastSeq){LIVE_STATE.lastSeq=d.seq;img.src=d.frame;img.style.display='block';$('liveMsg').style.display='none';}else if(!d.frame){$('liveMsg').style.display='block';$('liveMsg').textContent='بانتظار إشارة المذيع…';}LIVE_STATE.hostUid=d.hostUid;var fb=$('liveFollowBtn');fb.style.display='inline-flex';fb.classList.toggle('following',!!d.following);fb.textContent=d.following?'✓ متابَع':'+ متابعة';LIVE_STATE.liked=!!d.liked;$('liveLikeBtn').classList.toggle('liked',!!d.liked);}$('liveLikeN').textContent=fmtNum(d.likes||0);LIVE_STATE.commentsClosed=!!d.commentsClosed;applyCommentsLock();renderSupportTotal(d.supportTotal);renderLiveFeed(d.comments||[],d.supports||[]);}).catch(function(e){var msg=String(e||'');if(msg.indexOf('ended')>=0||msg.indexOf('not_live')>=0){$('liveMsg').style.display='block';$('liveMsg').textContent='انتهى البث المباشر';$('liveImg').style.display='none';if(LIVE_STATE){if(LIVE_STATE.pollTimer)clearInterval(LIVE_STATE.pollTimer);if(LIVE_STATE.sendTimer)clearInterval(LIVE_STATE.sendTimer);}}});}
-function renderLiveFeed(comments,supports){var items=[];(comments||[]).forEach(function(c){items.push({at:c.at,html:'<div class="lfs-cmt"><b>'+esc(c.name)+'</b>'+esc(c.text)+'</div>'});});(supports||[]).forEach(function(s){items.push({at:s.at,html:'<div class="lfs-cmt sup">🎁 <b>'+esc(s.name)+'</b> دعم بـ '+esc(s.amount)+' '+esc(s.currency)+'</div>'});});items.sort(function(a,b){return a.at-b.at;});items=items.slice(-40);var box=$('liveComments');box.innerHTML=items.map(function(i){return i.html;}).join('');box.scrollTop=box.scrollHeight;}
+function pollLiveState(){if(!LIVE_STATE)return;var id=LIVE_STATE.id;api('/api/square/live/'+id+'/frame').then(function(d){if(!d||!LIVE_STATE||LIVE_STATE.id!==id)return;$('liveTitle').textContent=d.title||'البث المباشر';$('liveViewers').textContent='👁️ '+(d.viewers||0);if(LIVE_STATE.mode==='viewer'){var img=$('liveImg');if(d.frame&&d.seq!==LIVE_STATE.lastSeq){LIVE_STATE.lastSeq=d.seq;img.src=d.frame;img.style.display='block';$('liveMsg').style.display='none';}else if(!d.frame){$('liveMsg').style.display='block';$('liveMsg').textContent='بانتظار إشارة المذيع…';}LIVE_STATE.hostUid=d.hostUid;var fb=$('liveFollowBtn');fb.style.display='inline-flex';fb.classList.toggle('following',!!d.following);fb.textContent=d.following?'✓ متابَع':'+ متابعة';LIVE_STATE.liked=!!d.liked;$('liveLikeBtn').classList.toggle('liked',!!d.liked);}$('liveLikeN').textContent=fmtNum(d.likes||0);LIVE_STATE.commentsClosed=!!d.commentsClosed;LIVE_STATE.stats=d;applyCommentsLock();renderSupportTotal(d.supportTotal);renderLiveFeed(d.comments||[],d.supports||[]);if($('liveStatsDlg').classList.contains('on'))refreshLiveStats();}).catch(function(e){var msg=String(e||'');if(msg.indexOf('ended')>=0||msg.indexOf('not_live')>=0){$('liveMsg').style.display='block';$('liveMsg').textContent='انتهى البث المباشر';$('liveImg').style.display='none';if(LIVE_STATE){if(LIVE_STATE.pollTimer)clearInterval(LIVE_STATE.pollTimer);if(LIVE_STATE.sendTimer)clearInterval(LIVE_STATE.sendTimer);}}});}
+function renderLiveFeed(comments,supports){var items=[];(comments||[]).forEach(function(c){items.push({at:c.at,html:'<div class="lfs-cmt"><b>'+esc(c.name)+'</b>'+esc(c.text)+'</div>'});});(supports||[]).forEach(function(s){var g=s.gift?(esc(s.gift)+' '):'🎁 ';items.push({at:s.at,html:'<div class="lfs-cmt sup">'+g+'<b>'+esc(s.name)+'</b> دعم بـ '+esc(s.amount)+' '+esc(s.currency)+'</div>'});});items.sort(function(a,b){return a.at-b.at;});items=items.slice(-40);var box=$('liveComments');box.innerHTML=items.map(function(i){return i.html;}).join('');box.scrollTop=box.scrollHeight;}
 function renderSupportTotal(tot){var el=$('liveSupTotal');tot=tot||{};var keys=Object.keys(tot);if(!keys.length){el.style.display='none';return;}el.style.display='block';el.textContent='🎁 '+keys.map(function(k){return (+tot[k]).toLocaleString()+' '+k;}).join(' · ');}
 function applyCommentsLock(){if(!LIVE_STATE)return;var closed=LIVE_STATE.commentsClosed;var inp=$('liveCmtInput'),snd=$('liveCmtSend');if(inp){if(closed){inp.disabled=true;inp.placeholder='🔒 أُوقفت التعليقات من المذيع';}else{inp.disabled=false;inp.placeholder='أضف تعليقاً…';}}if(snd)snd.style.display=closed?'none':'inline-flex';var tg=$('liveToggleBtn');if(tg&&LIVE_STATE.mode==='host')tg.textContent=closed?'🔒':'🔓';}
 function toggleLiveLike(){if(!LIVE_STATE||LIVE_STATE.mode!=='viewer')return;api('/api/square/live/'+LIVE_STATE.id+'/like',{method:'POST'}).then(function(d){$('liveLikeN').textContent=fmtNum(d.likes||0);$('liveLikeBtn').classList.toggle('liked',!!d.liked);}).catch(function(){});}
 function sendLiveComment(){if(!LIVE_STATE)return;var inp=$('liveCmtInput');var t=(inp.value||'').trim();if(!t)return;api('/api/square/live/'+LIVE_STATE.id+'/comment',{method:'POST',body:JSON.stringify({text:t})}).then(function(){inp.value='';pollLiveState();}).catch(function(e){if(String(e).indexOf('comments_closed')>=0)toast('التعليقات موقفة من المذيع');});}
 function toggleLiveComments(){if(!LIVE_STATE||LIVE_STATE.mode!=='host')return;api('/api/square/live/'+LIVE_STATE.id+'/comments-toggle',{method:'POST'}).then(function(d){LIVE_STATE.commentsClosed=!!d.commentsClosed;applyCommentsLock();toast(d.commentsClosed?'أوقفت التعليقات':'فعّلت التعليقات');}).catch(function(){});}
-var SUP_AMT=0;
-function openSupport(){if(!LIVE_STATE||LIVE_STATE.mode!=='viewer')return;SUP_AMT=0;$('supHost').textContent=$('liveTitle').textContent||'';$('supAmount').value='';document.querySelectorAll('#supGrid button').forEach(function(b){b.classList.remove('sel');});$('supDlg').classList.add('on');}
+var SUP_AMT=0,SUP_GIFT='';
+function openSupport(){if(!LIVE_STATE||LIVE_STATE.mode!=='viewer')return;SUP_AMT=0;SUP_GIFT='';$('supHost').textContent=$('liveTitle').textContent||'';$('supAmount').value='';document.querySelectorAll('#supGrid button').forEach(function(b){b.classList.remove('sel');});$('supDlg').classList.add('on');}
 function closeSupport(){var d=$('supDlg');if(d)d.classList.remove('on');}
-function sendSupport(){if(!LIVE_STATE)return;var custom=parseFloat($('supAmount').value);var amount=custom>0?custom:SUP_AMT;if(!(amount>0)){alert('اختر مبلغاً أو أدخل قيمة');return;}var currency=$('supCurrency').value||'USDT';var btn=$('supSend');btn.disabled=true;api('/api/square/live/'+LIVE_STATE.id+'/support',{method:'POST',body:JSON.stringify({amount:amount,currency:currency})}).then(function(d){btn.disabled=false;closeSupport();toast('🎁 شكراً لدعمك بـ '+amount+' '+currency);pollLiveState();}).catch(function(e){btn.disabled=false;var m=String(e);if(m.indexOf('insufficient')>=0)alert('رصيدك غير كافٍ');else if(m.indexOf('self_support')>=0)alert('لا يمكنك دعم بثّك');else alert('تعذّر إرسال الدعم');});}
+function sendSupport(){if(!LIVE_STATE)return;var custom=parseFloat($('supAmount').value);var amount=custom>0?custom:SUP_AMT;var gift=custom>0?'':SUP_GIFT;if(!(amount>0)){alert('اختر هدية أو أدخل قيمة');return;}var currency=$('supCurrency').value||'USDT';var btn=$('supSend');btn.disabled=true;api('/api/square/live/'+LIVE_STATE.id+'/support',{method:'POST',body:JSON.stringify({amount:amount,currency:currency,gift:gift})}).then(function(d){btn.disabled=false;closeSupport();toast((gift?gift:'🎁')+' شكراً لدعمك بـ '+amount+' '+currency);pollLiveState();}).catch(function(e){btn.disabled=false;var m=String(e);if(m.indexOf('insufficient')>=0)alert('رصيدك غير كافٍ');else if(m.indexOf('self_support')>=0)alert('لا يمكنك دعم بثّك');else alert('تعذّر إرسال الدعم');});}
 function toggleFollowHost(){if(!LIVE_STATE||!LIVE_STATE.hostUid)return;api('/api/square/follow/'+LIVE_STATE.hostUid,{method:'POST'}).then(function(d){var fb=$('liveFollowBtn');fb.classList.toggle('following',!!d.following);fb.textContent=d.following?'✓ متابَع':'+ متابعة';toast(d.following?'تابعت المذيع — ستُنبّه عند بثّه':'ألغيت المتابعة');}).catch(function(){});}
+function fmtDur(ms){ms=Math.max(0,+ms||0);var s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor((s%3600)/60),ss=s%60;function p(n){return (n<10?'0':'')+n;}return (h>0?h+':':'')+(h>0?p(m):m)+':'+p(ss);}
+function refreshLiveStats(){var d=(LIVE_STATE&&LIVE_STATE.stats)||null;if(!d)return;$('stView').textContent=fmtNum(d.viewers||0);$('stPeak').textContent=fmtNum(d.peakViewers||0);$('stLike').textContent=fmtNum(d.likes||0);$('stCmt').textContent=fmtNum(d.commentsCount||0);$('stSup').textContent=fmtNum(d.supportCount||0);var tot=d.supportTotal||{};var keys=Object.keys(tot);$('stEarn').textContent=keys.length?keys.map(function(k){return (+tot[k]).toLocaleString()+' '+k;}).join(' · '):'—';$('stDur').textContent=d.startedAt?fmtDur(Date.now()-d.startedAt):'0:00';}
+function openLiveStats(){if(!LIVE_STATE||LIVE_STATE.mode!=='host')return;refreshLiveStats();$('liveStatsDlg').classList.add('on');}
+function closeLiveStats(){var d=$('liveStatsDlg');if(d)d.classList.remove('on');}
+function shareLive(){if(!LIVE_STATE||!LIVE_STATE.id)return;var url=location.origin+location.pathname+'#live='+encodeURIComponent(LIVE_STATE.id);var title=$('liveTitle').textContent||'بث مباشر';if(navigator.share){navigator.share({title:'Apex Square — '+title,text:'شاهد البث المباشر الآن 🔴',url:url}).catch(function(){});}else if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(url).then(function(){toast('✔ نُسخ رابط البث');}).catch(function(){toast(url);});}else{toast(url);}}
 function liveCleanup(){if(!LIVE_STATE)return;if(LIVE_STATE.sendTimer)clearInterval(LIVE_STATE.sendTimer);if(LIVE_STATE.pollTimer)clearInterval(LIVE_STATE.pollTimer);if(LIVE_STATE.mode==='host'){if(LIVE_STATE.stream)LIVE_STATE.stream.getTracks().forEach(function(t){t.stop();});api('/api/square/live/'+LIVE_STATE.id+'/stop',{method:'POST'}).catch(function(){});}LIVE_STATE=null;}
 function stopLive(){liveCleanup();closeLive();}
 function closeLive(){liveCleanup();var v=$('liveVideo');try{v.pause();v.srcObject=null;}catch(e){}$('liveMask').classList.remove('on');closeSupport();loadLive();}
-window.like=like;window.openCmt=openCmt;window.closeCmt=closeCmt;window.addCmt=addCmt;window.closeCompose=closeCompose;window.publish=publish;window.removeImg=removeImg;window.repost=repost;window.openStats=openStats;window.closeStats=closeStats;window.sharePost=sharePost;window.playPostVideo=playPostVideo;window.removeVid=removeVid;window.startBroadcast=startBroadcast;window.watchLive=watchLive;window.stopLive=stopLive;window.closeLive=closeLive;window.toggleLiveLike=toggleLiveLike;window.sendLiveComment=sendLiveComment;window.toggleLiveComments=toggleLiveComments;window.openSupport=openSupport;window.closeSupport=closeSupport;window.sendSupport=sendSupport;window.toggleFollowHost=toggleFollowHost;
-var _sg=$('supGrid');if(_sg)_sg.addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;document.querySelectorAll('#supGrid button').forEach(function(x){x.classList.remove('sel');});b.classList.add('sel');SUP_AMT=parseFloat(b.getAttribute('data-a'))||0;var sa=$('supAmount');if(sa)sa.value='';});
+window.like=like;window.openCmt=openCmt;window.closeCmt=closeCmt;window.addCmt=addCmt;window.closeCompose=closeCompose;window.publish=publish;window.removeImg=removeImg;window.repost=repost;window.openStats=openStats;window.closeStats=closeStats;window.sharePost=sharePost;window.playPostVideo=playPostVideo;window.removeVid=removeVid;window.startBroadcast=startBroadcast;window.watchLive=watchLive;window.stopLive=stopLive;window.closeLive=closeLive;window.toggleLiveLike=toggleLiveLike;window.sendLiveComment=sendLiveComment;window.toggleLiveComments=toggleLiveComments;window.openSupport=openSupport;window.closeSupport=closeSupport;window.sendSupport=sendSupport;window.toggleFollowHost=toggleFollowHost;window.shareLive=shareLive;window.openLiveStats=openLiveStats;window.closeLiveStats=closeLiveStats;
+var _sg=$('supGrid');if(_sg)_sg.addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;document.querySelectorAll('#supGrid button').forEach(function(x){x.classList.remove('sel');});b.classList.add('sel');SUP_AMT=parseFloat(b.getAttribute('data-a'))||0;SUP_GIFT=b.getAttribute('data-g')||'';var sa=$('supAmount');if(sa)sa.value='';});
 var _fab=$('fab');if(_fab)_fab.onclick=openCompose;
 var _ii=$('imgInput');if(_ii)_ii.addEventListener('change',function(e){handleImg(e.target.files&&e.target.files[0]);});
 var _ch=$('chips');if(_ch)_ch.addEventListener('click',function(e){var b=e.target.closest('.chip');if(!b)return;document.querySelectorAll('.chip').forEach(function(c){c.classList.remove('active');});b.classList.add('active');FILTER=b.dataset.f;TAG='';var _tb=$('tagbar');if(_tb){_tb.style.display='none';_tb.innerHTML='';}load();});
 var _q=$('q');if(_q)_q.addEventListener('input',function(e){QSTR=(e.target.value||'').trim();clearTimeout(window._qt);window._qt=setTimeout(load,300);});
 [$('composeMask'),$('cmtMask'),$('statMask')].forEach(function(m){if(m)m.addEventListener('click',function(e){if(e.target===m)m.classList.remove('on');});});
 load();loadTrending();loadLive();
-(function(){try{var h=(location.hash||'').match(/tag=([^&]+)/);if(h&&h[1])filterTag(decodeURIComponent(h[1]));}catch(e){}})();
+(function(){try{var hh=(location.hash||'');var lm=hh.match(/live=([^&]+)/);if(lm&&lm[1]){watchLive(decodeURIComponent(lm[1]));return;}var h=hh.match(/tag=([^&]+)/);if(h&&h[1])filterTag(decodeURIComponent(h[1]));}catch(e){}})();
 setInterval(function(){var a=$('composeMask'),b=$('cmtMask');if((!a||!a.classList.contains('on'))&&(!b||!b.classList.contains('on'))){load();loadTrending();loadLive();}},12000);
 </script>
 </body>
