@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { createHmac, randomBytes, timingSafeEqual, scryptSync } from 'node:crypto';
+import zlib from 'node:zlib';
 
 import { PriceCache } from './lib/priceCache.js';
 import { PortfolioStore } from './lib/portfolio.js';
@@ -1467,6 +1468,67 @@ app.use((req, res, next) => {
 app.use(cors({
   origin: ALLOWED_ORIGINS.includes('*') ? true : ALLOWED_ORIGINS,
 }));
+
+// ---- ضغط gzip مدمج (بلا حزم خارجية) ----
+// يضغط ردود JSON والـHTML/CSS/JS النصّية قبل إرسالها، فيوفّر حتى ~70-80%
+// من النقل — وهذا أكبر مستهلِك لأن صفحة التداول تستطلِع الأسعار باستمرار.
+// الصور (png/jpg) لا تُضغط (مضغوطة أصلاً) وتمرّ كما هي، ونعتمد على التخزين لها.
+function gzipMiddleware(req, res, next) {
+  if (req.method === 'HEAD') return next();
+  if (!/\bgzip\b/.test(req.headers['accept-encoding'] || '')) return next();
+  const MAX_BUFFER = 2 * 1024 * 1024; // لا تضغط الردود الضخمة (توفير ذاكرة/معالج)
+  const _write = res.write.bind(res);
+  const _end = res.end.bind(res);
+  let chunks = [];
+  let decided = false, compress = false, bailed = false, size = 0;
+  function decide() {
+    if (decided) return; decided = true;
+    const ct = String(res.getHeader('Content-Type') || '');
+    const enc = res.getHeader('Content-Encoding');
+    compress = !enc && res.statusCode === 200 && !res.getHeader('Content-Range') &&
+      /(json|javascript|text\/css|text\/html|svg|xml|text\/plain|text\/csv)/i.test(ct) &&
+      !/event-stream/i.test(ct);
+  }
+  res.write = function (chunk, enc2, cb) {
+    decide();
+    if (!compress || bailed) return _write(chunk, enc2, cb);
+    if (chunk) {
+      const b = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, typeof enc2 === 'string' ? enc2 : 'utf8');
+      size += b.length; chunks.push(b);
+      if (size > MAX_BUFFER) { // تجاوزنا الحد: أرسل دون ضغط
+        bailed = true; const pend = Buffer.concat(chunks); chunks = [];
+        return _write(pend, cb);
+      }
+    }
+    if (typeof enc2 === 'function') enc2(); else if (cb) cb();
+    return true;
+  };
+  res.end = function (chunk, enc2, cb) {
+    decide();
+    if (!compress || bailed) {
+      if (bailed && chunks.length) { const pend = Buffer.concat(chunks); chunks = []; _write(pend); }
+      return _end(chunk, enc2, cb);
+    }
+    if (chunk) {
+      const b = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, typeof enc2 === 'string' ? enc2 : 'utf8');
+      chunks.push(b);
+    }
+    const buf = Buffer.concat(chunks);
+    if (buf.length < 1024) { return _end(buf); } // أصغر من أن يستحقّ الضغط
+    if (buf.length > MAX_BUFFER) { return _end(buf); } // أضخم من أن يستحقّ الضغط → خام
+    zlib.gzip(buf, { level: 6 }, (err, gz) => {
+      if (err) { return _end(buf); }
+      res.setHeader('Content-Encoding', 'gzip');
+      res.setHeader('Vary', 'Accept-Encoding');
+      res.removeHeader('Content-Length');
+      res.setHeader('Content-Length', gz.length);
+      _end(gz);
+    });
+    return res;
+  };
+  next();
+}
+app.use(gzipMiddleware);
 
 
 // ---- Rate limiting (anti API-abuse) ----
@@ -4808,7 +4870,21 @@ app.delete('/api/square/posts/:id', requireUser, async (req, res) => {
 });
 
 // ---- Static frontend ----
-app.use(express.static(join(__dirname, 'public')));
+// تخزين المتصفّح: الأصول الثابتة (صور/CSS/JS/خطوط) تُخزّن أسبوعاً فيالمتصفّح
+// فلا يُعاد تحميلها عند الزيارة العائدة (أكبر توفير لأن الصور كثيرة وثقيلة).
+// صفحات HTML تبقى «no-cache» (تُراجَع دائماً وتردّ 304 إن لم تتغيّر) لتظلّ محدّثة بعد النشر.
+app.use(express.static(join(__dirname, 'public'), {
+  etag: true,
+  lastModified: true,
+  maxAge: '7d',
+  setHeaders: (res, filePath) => {
+    if (/\.html?$/i.test(filePath)) {
+      res.setHeader('Cache-Control', 'no-cache');
+    } else {
+      res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
+    }
+  },
+}));
 
 app.listen(3000, '0.0.0.0', () => {
     console.log('Server is running');
