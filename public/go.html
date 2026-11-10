@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Apex — جارٍ التحويل…</title>
+<style>
+  :root{--bg:#0b0e11;--panel:#141920;--border:#252d38;--txt:#eef2f6;--muted:#8a94a3;--gold1:#f8d979;--gold2:#e0a615;--green:#0ecb81;--red:#f6465d}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);color:var(--txt);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:20px;padding:30px 24px;max-width:380px;width:100%;text-align:center}
+  .logo{width:60px;height:60px;border-radius:16px;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:900;color:#231a02;background:linear-gradient(135deg,var(--gold1),var(--gold2))}
+  h1{font-size:18px;font-weight:900;margin-bottom:8px}
+  p{font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:18px}
+  .spin{width:34px;height:34px;border:3px solid var(--border);border-top-color:var(--gold2);border-radius:50%;margin:10px auto 18px;animation:sp 0.9s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .status{font-size:12px;color:var(--muted);min-height:18px;margin-bottom:14px}
+  .links{display:none;flex-direction:column;gap:10px}
+  .links.on{display:flex}
+  a.btn{display:block;text-decoration:none;border-radius:12px;padding:13px;font-weight:800;font-size:14px}
+  a.primary{background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#231a02}
+  a.ghost{background:none;border:1px solid var(--border);color:var(--txt)}
+  .ok{color:var(--green)}.bad{color:var(--red)}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">A</div>
+    <h1>Apex</h1>
+    <p id="msg">جارٍ البحث عن خادم متاح…</p>
+    <div class="spin" id="spin"></div>
+    <div class="status" id="status"></div>
+    <div class="links" id="links">
+      <a class="btn primary" id="lp" href="#">فتح السيرفر الأساسي</a>
+      <a class="btn ghost" id="lb" href="#">فتح السيرفر الاحتياطي</a>
+    </div>
+  </div>
+<script>
+(function(){
+  'use strict';
+  // ===== الخادمان (بنفس ترتيب api-config.js) =====
+  var PRIMARY = 'https://apex-crypto-5wqj.onrender.com';
+  var BACKUP  = 'https://apex-crypto-1.onrender.com';
+  var TIMEOUT = 4500;
+
+  // الصفحة المراد فتحها: ?p=admin.html (افتراضي index.html)
+  // تنقية صارمة: أسماء صفحات HTML فقط (منع أي تحويل خارجي/XSS)
+  function cleanPage(v){
+    v = String(v || '').trim();
+    return /^[A-Za-z0-9_\-]{1,40}\.html$/.test(v) ? v : 'index.html';
+  }
+  var params = new URLSearchParams(location.search);
+  var page = cleanPage(params.get('p'));
+
+  var $ = function(id){ return document.getElementById(id); };
+  function setStatus(txt, cls){ var s = $('status'); s.textContent = txt; s.className = 'status' + (cls ? ' ' + cls : ''); }
+
+  function health(base){
+    return new Promise(function(resolve){
+      var ctl = ('AbortController' in window) ? new AbortController() : null;
+      var t = setTimeout(function(){ if (ctl) ctl.abort(); resolve(false); }, TIMEOUT);
+      fetch(base + '/api/health', { method:'GET', cache:'no-store', signal: ctl ? ctl.signal : undefined })
+        .then(function(r){ clearTimeout(t); resolve(!!(r && r.ok)); })
+        .catch(function(){ clearTimeout(t); resolve(false); });
+    });
+  }
+
+  function goTo(base){
+    setStatus('تم العثور على خادم سليم — جارٍ التحويل…', 'ok');
+    location.replace(base + '/' + page);
+  }
+
+  function showManual(){
+    $('spin').style.display = 'none';
+    $('msg').textContent = 'تعذّر الوصول للخادمين تلقائياً. جرّب يدوياً:';
+    setStatus('');
+    $('lp').href = PRIMARY + '/' + page;
+    $('lb').href = BACKUP + '/' + page;
+    $('links').className = 'links on';
+  }
+
+  setStatus('فحص السيرفر الأساسي…');
+  health(PRIMARY).then(function(ok){
+    if (ok){ goTo(PRIMARY); return; }
+    setStatus('الأساسي غير متاح — فحص الاحتياطي…', 'bad');
+    health(BACKUP).then(function(ok2){
+      if (ok2){ goTo(BACKUP); return; }
+      showManual();
+    });
+  });
+})();
+</script>
+</body>
+</html>
