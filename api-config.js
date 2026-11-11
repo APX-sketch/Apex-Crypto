@@ -13,8 +13,12 @@
   window.__APEX_FAILOVER__ = true;
 
   // ===== الخادمان =====
-  var PRIMARY = 'https://apex-crypto-5wqj.onrender.com';  // الأساسي
-  var BACKUP  = 'https://apex-crypto-1.onrender.com';     // الاحتياطي
+  // مهمّ: تمّ توحيد الخادمين على خادم واحد (apex-crypto-1).
+  // السبب: وجود خادمين على نفس قاعدة البيانات كان يُسبّب split-brain؛
+  // فحص الصحة هنا كان يُوقِظ الخادم الآخر النائم فيطمس البيانات.
+  // بتوجيه الاثنين إلى apex-crypto-1 لن تُوقِظ الصفحة الخادم الآخر أبداً.
+  var PRIMARY = 'https://apex-crypto-1.onrender.com';     // الخادم الوحيد (الكاتب)
+  var BACKUP  = 'https://apex-crypto-1.onrender.com';     // نفسه (لا خادم ثانٍ)
   var HERE    = location.origin;                          // الخادم الذي قدّم الصفحة
   var KNOWN   = [PRIMARY, BACKUP, HERE];
   var KEY     = 'apex_api_base';

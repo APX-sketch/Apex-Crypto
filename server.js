@@ -121,6 +121,7 @@ const PERSIST_RO = (() => {
   return r === 'backup' || r === 'ro' || r === 'readonly' || r === 'read-only' || r === 'standby' || r === 'true' || r === '1';
 })();
 if (PERSIST_RO) console.log('[persist] هذا المثيل للقراءة فقط (PERSIST_RO): لن يكتب لقطات/نسخاً ولا يزامن wallets.');
+else console.log('[persist] هذا المثيل هو الكاتب (سيحفظ اللقطات إلى قاعدة البيانات).');
 
 // يقرّر ما إذا كان المحتوى الوارد "فقيراً" مقارنةً بما في kv_store،
 // بحيث يُعتبر استبداله طمساً خطِراً (يُرفض). يعتمد على طول النص
@@ -285,6 +286,7 @@ async function snapshotDataToDb(force) {
         'INSERT INTO kv_store (k, v, updated_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE v=VALUES(v), updated_at=VALUES(updated_at)',
         [f, content, Date.now()]);
       _lastSnapshotHash[f] = h;
+      console.log('[persist] حُفظت لقطة إلى قاعدة البيانات:', f, '(' + content.length + ' بايت)');
     }
   } catch (e) { console.warn('[persist] تعذّر حفظ اللقطة:', e.message); }
 }
