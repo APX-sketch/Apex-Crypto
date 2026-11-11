@@ -312,6 +312,81 @@ process.on('SIGINT', function () { _persistFinalSnapshot('SIGINT'); });
 const BACKUP_KEEP = 30;         // أقصى عدد نسخ محفوظة
 const BACKUP_EVERY_MS = 6 * 60 * 60 * 1000; // كل 6 ساعات
 let _backupTableReady = false;
+
+// ============================================================
+//  جدول مراقبة الأرصدة (balance_checks)
+// ------------------------------------------------------------
+//  في كل إقلاع + كل 10 دقائق نسجّل "بصمة" حالة الأرصدة:
+//  عدد المستخدمين، إجمالي الرصيد، وعدد العملات. فوراً نلفت
+//  النظر إذا انهار العدد بعد إعادة التشغيل (الفقدان). الجدول في
+//  قاعدة البيانات الدائمة فيبقى مرئياً في DBeaver دائماً.
+//  كما نخزّن أحدث "حالة سليمة" كاملة (kv_safeguard) ونستعيد
+//  منها تلقائياً لو أقلعنا على حالة فارغة/أضعف بكثير.
+// ============================================================
+let _balCheckReady = false;
+async function _ensureBalCheckTable() {
+  if (_balCheckReady) return;
+  await pool.query(
+    'CREATE TABLE IF NOT EXISTS balance_checks (' +
+    'id BIGINT AUTO_INCREMENT PRIMARY KEY, at BIGINT, reason VARCHAR(40), ' +
+    'users INT, currencies INT, total_balance DOUBLE, zero_users INT, ' +
+    'fingerprint VARCHAR(190), status VARCHAR(20), note VARCHAR(190)) ' +
+    'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
+  _balCheckReady = true;
+}
+// احسب ملخّص الأرصدة الحالية من الدفتر الحيّ.
+function balanceSummary() {
+  let users = 0, currencies = 0, total = 0, zeroUsers = 0;
+  const curSet = new Set();
+  try {
+    const list = (store && store.db && Array.isArray(store.db.users)) ? store.db.users : [];
+    for (const u of list) {
+      users++;
+      const bal = u.balances || {};
+      let sum = 0, has = false;
+      for (const k in bal) { const n = Number(bal[k]) || 0; if (n > 0) { has = true; sum += n; curSet.add(String(k).toUpperCase()); } }
+      total += sum;
+      if (!has) zeroUsers++;
+    }
+  } catch (e) {}
+  currencies = curSet.size;
+  // بصمة مختصرة (عدد مستخدمين + مجموع مقرّب) لكشف التغيّر المفاجئ
+  const fingerprint = users + 'u/' + currencies + 'c/' + Math.round(total);
+  return { users, currencies, total: +total.toFixed(6), zeroUsers, fingerprint };
+}
+// سجّل نقطة مراقبة. status يُحسب بمقارنة أحدث سجل سابق.
+async function recordBalanceCheck(reason) {
+  if (PERSIST_RO) return null;
+  try {
+    await _ensureBalCheckTable();
+    const s = balanceSummary();
+    // آخر سجل
+    let prev = null;
+    try {
+      const [pr] = await pool.query('SELECT users, total_balance, status FROM balance_checks ORDER BY id DESC LIMIT 1');
+      prev = pr && pr.length ? pr[0] : null;
+    } catch (e) {}
+    let status = 'ok', note = '';
+    if (prev && Number(prev.users) >= 2) {
+      const prevU = Number(prev.users) || 0;
+      if (s.users < prevU) { status = 'DROP'; note = 'انخفاض عدد المستخدمين من ' + prevU + ' إلى ' + s.users; }
+    }
+    await pool.query(
+      'INSERT INTO balance_checks (at, reason, users, currencies, total_balance, zero_users, fingerprint, status, note) ' +
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [Date.now(), String(reason || 'periodic').slice(0, 40), s.users, s.currencies, s.total, s.zeroUsers, s.fingerprint, status, note.slice(0, 190)]);
+    if (status === 'DROP') {
+      console.error('[balance-check] تحذير: انخفاض في الأرصدة عند', reason, '→', note);
+      try { pushAdminAlert({ kind: 'balance_drop', severity: 'critical', title: 'انخفاض في الأرصدة', body: note }); } catch (e) {}
+    } else {
+      console.log('[balance-check]', reason, '→', s.fingerprint, '(' + status + ')');
+    }
+    return s;
+  } catch (e) { console.warn('[balance-check] تعذّر التسجيل:', e.message); return null; }
+}
+// كل 10 دقائق نقطة مراقبة (إضافةً إلى نقطة عند كل إقلاع).
+setInterval(function () { recordBalanceCheck('periodic').catch(function () {}); }, 10 * 60 * 1000);
+
 async function _ensureBackupTable() {
   if (_backupTableReady) return;
   await pool.query('CREATE TABLE IF NOT EXISTS kv_backups (id BIGINT AUTO_INCREMENT PRIMARY KEY, created_at BIGINT, label VARCHAR(190), payload LONGTEXT) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
@@ -341,6 +416,90 @@ async function createBackup(label) {
 // نسخة تلقائية دورية + واحدة بعد الإقلاع بدقيقة
 setTimeout(function () { createBackup('auto-boot').catch(function () {}); }, 60000);
 setInterval(function () { createBackup('auto').catch(function () {}); }, BACKUP_EVERY_MS);
+
+// ============================================================
+//  حماية أخيرة (SAFEGUARD): أحدث حالة سليمة + استعادة تلقائية
+// ------------------------------------------------------------
+//  نحفظ "أحدث دفتر غنيّ" في جدول kv_safeguard كل دقيقة (فقط إذا
+//  كان أفضل/أغنى من المحفوظ، فلا يُطمَس الذهب بالتراب).
+//  وعند كل إقلاع: إذا أقلعنا على دفتر شبه فارغ بينما الحفظ غني،
+//  نستعيد تلقائياً من الحفظ — فالبيانات لا تُفقد أبداً.
+// ============================================================
+const SAFEGUARD_KEY = 'apex-data.json';
+const SAFEGUARD_MIN_USERS = 1; // أصغر عدد مستخدمين يمكن اعتباره "غنياً"
+let _safeguardReady = false;
+async function _ensureSafeguardTable() {
+  if (_safeguardReady) return;
+  await pool.query(
+    'CREATE TABLE IF NOT EXISTS kv_safeguard (k VARCHAR(190) PRIMARY KEY, v LONGTEXT, users INT, total_balance DOUBLE, updated_at BIGINT) ' +
+    'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
+  _safeguardReady = true;
+}
+function _countUsersInJson(txt) {
+  try { const d = JSON.parse(txt); return Array.isArray(d.users) ? d.users.length : 0; } catch (e) { return 0; }
+}
+function _totalInJson(txt) {
+  try {
+    const d = JSON.parse(txt); let t = 0;
+    for (const u of (d.users || [])) { for (const k in (u.balances || {})) { const n = Number(u.balances[k]) || 0; if (n > 0) t += n; } }
+    return +t.toFixed(6);
+  } catch (e) { return 0; }
+}
+// احفظ أحدث دفتر غنيّ (لا نستبدل غنيّاً بفقير أبداً)
+async function updateSafeguard() {
+  if (PERSIST_RO) return;
+  try {
+    const p = join(DATA_DIR, SAFEGUARD_KEY);
+    if (!existsSync(p)) return;
+    const content = readFileSync(p, 'utf8');
+    if (!content || content.trim() === '') return;
+    const users = _countUsersInJson(content);
+    const total = _totalInJson(content);
+    if (users < SAFEGUARD_MIN_USERS) return; // لا نحفظ دفتراً فارغاً فوق السليم
+    await _ensureSafeguardTable();
+    const [rows] = await pool.query('SELECT users, total_balance, v FROM kv_safeguard WHERE k = ?', [SAFEGUARD_KEY]);
+    const cur = rows && rows.length ? rows[0] : null;
+    // نحدّث فقط إذا كان الجديد أغنط أو مساوياً (عدد مستخدمين ثم إجمالي)
+    if (!cur || users > Number(cur.users) || (users === Number(cur.users) && total >= (Number(cur.total_balance) || 0))) {
+      await pool.query(
+        'INSERT INTO kv_safeguard (k, v, users, total_balance, updated_at) VALUES (?, ?, ?, ?, ?) ' +
+        'ON DUPLICATE KEY UPDATE v=VALUES(v), users=VALUES(users), total_balance=VALUES(total_balance), updated_at=VALUES(updated_at)',
+        [SAFEGUARD_KEY, content, users, total, Date.now()]);
+    }
+  } catch (e) { /* صامت */ }
+}
+setInterval(function () { updateSafeguard().catch(function () {}); }, 60 * 1000);
+// استعادة تلقائية عند الإقلاع إذا كنا على دفتر فارغ والحفظ غنيّ
+async function autoRecoverFromSafeguard() {
+  if (PERSIST_RO) return;
+  try {
+    await _ensureSafeguardTable();
+    const [rows] = await pool.query('SELECT v, users, total_balance FROM kv_safeguard WHERE k = ?', [SAFEGUARD_KEY]);
+    if (!rows || !rows.length) return;
+    const safeUsers = Number(rows[0].users) || 0;
+    if (safeUsers < SAFEGUARD_MIN_USERS) return;
+    const p = join(DATA_DIR, SAFEGUARD_KEY);
+    let cur = '';
+    try { if (existsSync(p)) cur = readFileSync(p, 'utf8'); } catch (e) {}
+    const curUsers = _countUsersInJson(cur);
+    // إذا الحالي فارغ/أضعف بكثير من الحفظ → استعد الحفظ
+    if (curUsers < safeUsers && (curUsers === 0 || curUsers < safeUsers * 0.5)) {
+      writeFileSync(p, rows[0].v);
+      _lastSnapshotHash[SAFEGUARD_KEY] = _persistHash(rows[0].v);
+      await pool.query(
+        'INSERT INTO kv_store (k, v, updated_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE v=VALUES(v), updated_at=VALUES(updated_at)',
+        [SAFEGUARD_KEY, rows[0].v, Date.now()]);
+      console.warn('[safeguard] استعدنا تلقائياً دفتراً غنياً (' + safeUsers + ' مستخدم) بدلاً من الحالي (' + curUsers + ')');
+    }
+  } catch (e) { console.warn('[safeguard] تعذّرت الاستعادة التلقائية:', e.message); }
+}
+// تسلسل الإقلاع: استعد إن لزم ← سجّل فحص رصيد 'boot' ← حدّث الحفظ
+if (!PERSIST_RO) {
+  autoRecoverFromSafeguard()
+    .then(function () { return recordBalanceCheck('boot'); })
+    .then(function () { return updateSafeguard(); })
+    .catch(function (e) { console.warn('[boot] تعذّر تسلسل الإقلاع:', e && e.message); });
+}
 
 // ============================================================
 //  MySQL USER LAYER (identity + status + KYC) — source of truth
@@ -3734,6 +3893,30 @@ app.get('/api/admin/balance-audit', requireAdmin, (req, res) => {
     total: balAudit.entries.length,
     entries: entries.slice(0, limit),
   });
+});
+
+// ---- Admin: مراقبة الأرصدة بعد كل إعادة تشغيل (balance_checks) ----
+// يعرض آخر 100 فحص (سبب/عدد مستخدمين/إجمالي/زمن) + آخر لقطة حفظ سليمة
+// (kv_safeguard) للمقارنة بين ما هو على القرص وبين آخر دفتر سليم محفوظ.
+app.get('/api/admin/balance-checks', requireAdmin, async (req, res) => {
+  try {
+    const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 500);
+    const out = { ok: true, checks: [], safeguard: null };
+    try {
+      const [rows] = await pool.query(
+        'SELECT id, reason, users, total_balance, created_at FROM balance_checks ORDER BY id DESC LIMIT ?',
+        [limit]);
+      out.checks = rows || [];
+    } catch (e) { out.checksError = e.message; }
+    try {
+      const [sf] = await pool.query(
+        'SELECT users, total_balance, updated_at FROM kv_safeguard WHERE k = ?', [SAFEGUARD_KEY]);
+      if (sf && sf.length) out.safeguard = sf[0];
+    } catch (e) { out.safeguardError = e.message; }
+    res.json(out);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
 });
 
 // ---- Admin: إحصائيات السيولة اليومية (لوحة تحكم) ----
