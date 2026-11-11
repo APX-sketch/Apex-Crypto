@@ -100,6 +100,45 @@ function _persistDbConfig() {
 }
 const _lastSnapshotHash = {};
 let _restoreInProgress = false;
+
+// ============================================================
+//  حماية ضدّ فقدان البيانات (SPLIT-BRAIN + طمس بالفارغ)
+// ------------------------------------------------------------
+//  السبب الجذري للمسح: تشغيل أكثر من مثيل (primary + backup) على
+//  نفس قاعدة البيانات. مثيلٌ أقلع بحالة فارغة/قديمة كان يرفع لقطة
+//  فارغة إلى kv_store ويطمس البيانات الجيّدة، كما كان يصفّر جدول
+//  wallets. هنا طبقتا حماية:
+//   (1) PERSIST_RO: اجعل المثيل الاحتياطي للقراءة فقط في ما يخصّ
+//       الحفظ — يستعيد عند الإقلاع لكن لا يكتب لقطات/نسخاً ولا
+//       يزامن wallets، فلا يطمس شيئاً. فعّلها على السيرفر الثاني
+//       بضبط متغيّر البيئة PERSIST_ROLE=backup.
+//   (2) حارس مانع للطمس: لا نستبدل صفّاً غنيّاً في kv_store بمحتوى
+//       فارغ/أصغر بكثير (دفتر بلا مستخدمين مثلاً)، فحتى لو حدث خطأ
+//       تبقى البيانات الجيّدة سليمة.
+// ============================================================
+const PERSIST_RO = (() => {
+  const r = String(process.env.PERSIST_ROLE || process.env.PERSIST_RO || '').trim().toLowerCase();
+  return r === 'backup' || r === 'ro' || r === 'readonly' || r === 'read-only' || r === 'standby' || r === 'true' || r === '1';
+})();
+if (PERSIST_RO) console.log('[persist] هذا المثيل للقراءة فقط (PERSIST_RO): لن يكتب لقطات/نسخاً ولا يزامن wallets.');
+
+// يقرّر ما إذا كان المحتوى الوارد "فقيراً" مقارنةً بما في kv_store،
+// بحيث يُعتبر استبداله طمساً خطِراً (يُرفض). يعتمد على طول النص
+// (لغة-محايد) + كشف الدفتر الفارغ {"users":[]} صراحةً.
+function _snapshotWouldWipe(existing, incoming) {
+  const oldLen = existing == null ? 0 : String(existing).length;
+  const newLen = incoming == null ? 0 : String(incoming).length;
+  if (oldLen < 200) return false; // لا شيء ذو قيمة لنحميه
+  // دفتر فيه مستخدمون سابقاً تحوّل إلى بلا مستخدمين = طمس شبه مؤكّد
+  try {
+    const hadUsers = /\"users\"\s*:\s*\[\s*\{/.test(String(existing));
+    const nowEmptyUsers = /\"users\"\s*:\s*\[\s*\]/.test(String(incoming));
+    if (hadUsers && nowEmptyUsers) return true;
+  } catch (e) {}
+  // انكماش حادّ (> 55%) في محتوى كان غنيّاً = مشبوه، نرفضه احتياطاً
+  if (newLen < oldLen * 0.45) return true;
+  return false;
+}
 async function restoreDataFromDb() {
   let conn;
   try {
@@ -167,6 +206,7 @@ const pool = mysql.createPool({
 // خريطة لتخفيف المزامنة عند القراءة (مرة كل 60ث لكل مستخدم)
 const _lastWalletSync = {};
 async function dbSyncWallets(userId, balances) {
+  if (PERSIST_RO) return; // المثيل للقراءة فقط لا يُصفّر/يغيّر wallets
   try {
     const uid = Number(userId);
     if (!Number.isFinite(uid)) return;
@@ -220,6 +260,8 @@ async function dbSyncWallets(userId, balances) {
 // تُحفظ خلال ثوانٍ من أي تغيير ثم تُستعاد بالكامل عند الإقلاع.
 async function snapshotDataToDb(force) {
   if (_restoreInProgress) return;
+  // المثيل للقراءة فقط لا يكتب أي لقطة (منع split-brain)
+  if (PERSIST_RO) return;
   try {
     for (const f of PERSIST_FILES) {
       const p = join(DATA_DIR, f);
@@ -229,6 +271,16 @@ async function snapshotDataToDb(force) {
       if (!content || content.trim() === '') continue;
       const h = _persistHash(content);
       if (!force && _lastSnapshotHash[f] === h) continue;
+      // حارس مانع للطمس: لا تستبدل صفّاً غنيّاً بمحتوى فارغ/أصغر بكثير
+      try {
+        const [er] = await pool.query('SELECT v FROM kv_store WHERE k = ?', [f]);
+        const existing = er && er.length ? er[0].v : null;
+        if (_snapshotWouldWipe(existing, content)) {
+          console.warn('[persist] رُفضت لقطة قد تطمس بيانات غنيّة:', f,
+            '(DB=' + (existing == null ? 0 : String(existing).length) + ' → جديد=' + content.length + ')');
+          continue;
+        }
+      } catch (e) { /* إن فشلت القراءة نتابع بحذر */ }
       await pool.query(
         'INSERT INTO kv_store (k, v, updated_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE v=VALUES(v), updated_at=VALUES(updated_at)',
         [f, content, Date.now()]);
@@ -242,7 +294,7 @@ setInterval(function () { snapshotDataToDb(false); }, 7000);
 let _persistFinalDone = false;
 async function _persistFinalSnapshot(sig) {
   if (_persistFinalDone) return; _persistFinalDone = true;
-  try { await snapshotDataToDb(true); } catch (e) {}
+  if (!PERSIST_RO) { try { await snapshotDataToDb(true); } catch (e) {} }
   console.log('[persist] لقطة نهائية عند', sig);
   process.exit(0);
 }
@@ -264,6 +316,7 @@ async function _ensureBackupTable() {
   _backupTableReady = true;
 }
 async function createBackup(label) {
+  if (PERSIST_RO) return null; // المثيل الاحتياطي لا ينشئ نسخاً
   await _ensureBackupTable();
   const files = {};
   for (const f of PERSIST_FILES) {
