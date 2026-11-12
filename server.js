@@ -369,7 +369,9 @@ async function recordBalanceCheck(reason) {
     let status = 'ok', note = '';
     if (prev && Number(prev.users) >= 2) {
       const prevU = Number(prev.users) || 0;
+      const prevT = Number(prev.total_balance) || 0;
       if (s.users < prevU) { status = 'DROP'; note = 'انخفاض عدد المستخدمين من ' + prevU + ' إلى ' + s.users; }
+      else if (prevT > 0 && s.total < prevT * 0.5) { status = 'DROP'; note = 'انهيار إجمالي الأرصدة من $' + prevT + ' إلى $' + s.total; }
     }
     await pool.query(
       'INSERT INTO balance_checks (at, reason, users, currencies, total_balance, zero_users, fingerprint, status, note) ' +
@@ -482,14 +484,22 @@ async function autoRecoverFromSafeguard() {
     let cur = '';
     try { if (existsSync(p)) cur = readFileSync(p, 'utf8'); } catch (e) {}
     const curUsers = _countUsersInJson(cur);
-    // إذا الحالي فارغ/أضعف بكثير من الحفظ → استعد الحفظ
-    if (curUsers < safeUsers && (curUsers === 0 || curUsers < safeUsers * 0.5)) {
+    const curTotal = _totalInJson(cur);
+    const safeTotal = Number(rows[0].total_balance) || 0;
+    // (أ) انهيار عدد المستخدمين (فارغ أو أقل من النصف)
+    const usersCollapsed = curUsers < safeUsers && (curUsers === 0 || curUsers < safeUsers * 0.5);
+    // (ب) انهيار الأرصدة: المستخدمون موجودون لكن الإجمالي صار صفراً أو أقل من نصف المحفوظ
+    //     هذا هو العطل الحقيقي: الحساب يبقى لكن رصيده يُصفَّر.
+    const balanceCollapsed = safeTotal > 0 && (curTotal === 0 || curTotal < safeTotal * 0.5);
+    if (usersCollapsed || balanceCollapsed) {
       writeFileSync(p, rows[0].v);
       _lastSnapshotHash[SAFEGUARD_KEY] = _persistHash(rows[0].v);
       await pool.query(
         'INSERT INTO kv_store (k, v, updated_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE v=VALUES(v), updated_at=VALUES(updated_at)',
         [SAFEGUARD_KEY, rows[0].v, Date.now()]);
-      console.warn('[safeguard] استعدنا تلقائياً دفتراً غنياً (' + safeUsers + ' مستخدم) بدلاً من الحالي (' + curUsers + ')');
+      // أعد تحميل المخزن بالذاكرة فوراً حتى يخدم الأرصدة المستعادة بلا انتظار إعادة تشغيل
+      try { if (typeof store !== 'undefined' && store && typeof store._load === 'function') store._load(); } catch (e) {}
+      console.warn('[safeguard] استعدنا تلقائياً دفتراً غنياً (' + safeUsers + ' مستخدم، إجمالي $' + safeTotal + ') بدلاً من الحالي (' + curUsers + ' مستخدم، إجمالي $' + curTotal + ')');
     }
   } catch (e) { console.warn('[safeguard] تعذّرت الاستعادة التلقائية:', e.message); }
 }
