@@ -209,6 +209,7 @@ const apx = new ApxStore(join(__dirname, 'data', 'apex-apx.json'), {
   btcKlines: (iv) => _apxBtcKl[iv] || null,
 });
 import mysql from 'mysql2/promise';
+import * as ledger from './lib/ledger.js';
 
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
@@ -271,6 +272,21 @@ async function dbSyncWallets(userId, balances) {
           if (su) {
             dbSyncWallets(args[0], su.balances || {});
             logBalanceDiff(args[0], before, su.balances || {}, m, su);
+          }
+        } catch (e) {}
+        // ═══ دفتر الأستاذ الدائم (ledger) ═══
+        // نكتب كل فرق رصيد كصفّ مستقل في MySQL فوراً. الصفوف الصغيرة
+        // لا تُطمس بالكتابة فوقها، وتُستعاد الأرصدة منها كاملة عند الإقلاع.
+        try {
+          const after = (r.balances && typeof r.balances === 'object') ? r.balances : {};
+          const keys = new Set([].concat(Object.keys(before || {}), Object.keys(after)));
+          for (const cur of keys) {
+            const b = Number((before || {})[cur]) || 0;
+            const a = Number(after[cur]) || 0;
+            const d = a - b;
+            if (Math.abs(d) > 1e-10) {
+              ledger.record(String(args[0]), cur, d, m, null, null).catch(function () {});
+            }
           }
         } catch (e) {}
         // حفظ فوري لمّي إلى قاعدة البيانات بعد كل تغير رصيد.
@@ -566,9 +582,51 @@ async function autoRecoverFromSafeguard() {
     }
   } catch (e) { console.warn('[safeguard] تعذّرت الاستعادة التلقائية:', e.message); }
 }
-// تسلسل الإقلاع: استعد إن لزم ← سجّل فحص رصيد 'boot' ← حدّث الحفظ
+// ═══ مزامنة دفتر الأستاذ عند الإقلاع (حماية قصوى) ═══
+// يقرأ الأرصدة الحقيقية من wx_balances (المبنية من كل حركة مسجّلة)
+// ويطبقها على دفتر الذاكرة، فيستعيد أي رصيد ضاع بسبب إعادة تشغيل مفاجئة.
+async function syncBalancesFromLedger(reason) {
+  if (PERSIST_RO) return { applied: 0 };
+  try {
+    const ok = await ledger.ensure();
+    if (!ok) return { applied: 0, error: 'ledger_unavailable' };
+    const dbBal = await ledger.allBalances();
+    if (!dbBal || !Object.keys(dbBal).length) return { applied: 0, empty: true };
+    let applied = 0, mismatched = 0;
+    for (const uid in dbBal) {
+      const su = store.findUserById(uid);
+      if (!su) continue;
+      const cur = su.balances || {};
+      const want = dbBal[uid];
+      // احسب الإجمالي في الاثنين للمقارنة
+      let sumCur = 0, sumWant = 0;
+      for (const k in cur) if (Number(cur[k]) > 0) sumCur += Number(cur[k]);
+      for (const k in want) if (Number(want[k]) > 0) sumWant += Number(want[k]);
+      // نطبّق فقط إذا الدفتر أغنى بوضوح (لتجنّب دهس تعديل جديد لم يُسجّل بعد)
+      if (sumWant > sumCur + 1e-8) {
+        su.balances = Object.assign({}, want);
+        applied++; mismatched++;
+        console.warn('[ledger] استُعيد رصيد المستخدم', uid, 'من الدفتر الدائم: $' + sumCur + ' → $' + sumWant);
+      }
+    }
+    if (mismatched > 0) {
+      try { store._save(); } catch (e) {}
+      console.warn('[ledger] مزامنة الإقلاع: أُصلح', mismatched, 'حساب/حسابات (السبب:', reason + ')');
+    } else {
+      console.log('[ledger] مزامنة الإقلاع: كل الأرصدة مطابقة للدفتر الدائم (' + Object.keys(dbBal).length + ' مستخدم)');
+    }
+    return { applied };
+  } catch (e) {
+    console.warn('[ledger] تعذّرت المزامنة:', e.message);
+    return { applied: 0, error: e.message };
+  }
+}
+
+// تسلسل الإقلاع: مزامنة الدفتر ← استعد من الحفظ ← سجّل فحص 'boot' ← حدّث الحفظ
 if (!PERSIST_RO) {
-  autoRecoverFromSafeguard()
+  syncBalancesFromLedger('boot')
+    .then(function () { return autoRecoverFromSafeguard(); })
+    .then(function () { return syncBalancesFromLedger('post-recover'); })
     .then(function () { return recordBalanceCheck('boot'); })
     .then(function () { return updateSafeguard(); })
     .catch(function (e) { console.warn('[boot] تعذّر تسلسل الإقلاع:', e && e.message); });
@@ -3966,6 +4024,69 @@ app.get('/api/admin/balance-audit', requireAdmin, (req, res) => {
     total: balAudit.entries.length,
     entries: entries.slice(0, limit),
   });
+});
+
+// ---- دفتر الأستاذ الدائم: عرض الحركات + إعادة البناء + ختم الأرصدة الحالية ----
+app.get('/api/admin/ledger', requireAdmin, async (req, res) => {
+  try {
+    await ledger.ensure();
+    const items = await ledger.recent(Math.min(Number(req.query.limit) || 100, 500));
+    const userId = req.query.userId ? String(req.query.userId) : '';
+    const list = userId ? await ledger.historyOf(userId, 200) : items;
+    const snapshot = await ledger.allBalances();
+    res.json({ ok: true, items: list, snapshot });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ختم الأرصدة الحالية في الدفتر الدائم (مرة واحدة/عند الحاجة)
+// يكتب فرقاً لكل رصيد حتى يصبح الدفتر مطابقاً للواقع الحالي، فتصبح
+// الأرصدة قابلة للاستعادة من الدفتر إلى الأبد.
+app.post('/api/admin/ledger/seal', requireAdmin, async (req, res) => {
+  try {
+    const ok = await ledger.ensure();
+    if (!ok) return res.status(503).json({ ok: false, error: 'ledger_unavailable' });
+    const want = await ledger.allBalances();
+    const users = (store.db && Array.isArray(store.db.users)) ? store.db.users : [];
+    let sealed = 0, written = 0;
+    for (const u of users) {
+      const uid = String(u.id);
+      const has = u.balances || {};
+      const w = (want && want[uid]) || {};
+      const keys = new Set([].concat(Object.keys(has), Object.keys(w)));
+      for (const cur of keys) {
+        const a = Number(has[cur]) || 0;
+        const b = Number(w[cur]) || 0;
+        const d = a - b;
+        if (Math.abs(d) > 1e-10) {
+          const okr = await ledger.record(uid, cur, d, 'seal', null, 'ختم أرصدة حالية');
+          if (okr) written++;
+        }
+      }
+      sealed++;
+    }
+    try { logSecurity(req, { kind: 'ledger_seal', severity: 'warning', detail: 'ختم أرصدة ' + sealed + ' مستخدم في الدفتر الدائم (' + written + ' حركة)', meta: { sealed, written } }); } catch (e) {}
+    res.json({ ok: true, users: sealed, written });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// إعادة بناء الأرصدة من الدفتر الدائم (إصلاح شامل)
+app.post('/api/admin/ledger/rebuild', requireAdmin, async (req, res) => {
+  try {
+    await ledger.ensure();
+    const r = await ledger.rebuildFromLedger();
+    const sync = await syncBalancesFromLedger('manual-rebuild');
+    try { logSecurity(req, { kind: 'ledger_rebuild', severity: 'critical', detail: 'إعادة بناء الأرصدة من الدفتر الدائم', meta: { r, sync } }); } catch (e) {}
+    res.json({ ok: true, rebuild: r, sync });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- دفتر الأستاذ: حركات المستخدم نفسه (شفافية) ----
+app.get('/api/wallet/ledger', requireUser, async (req, res) => {
+  try {
+    await ledger.ensure();
+    const items = await ledger.historyOf(req.user.id, Math.min(Number(req.query.limit) || 50, 200));
+    res.json({ ok: true, items });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 // ---- طوارئ: استعادة فورية من آخر نسخة احتياطية غنية ----
