@@ -588,32 +588,53 @@ async function autoRecoverFromSafeguard() {
 async function syncBalancesFromLedger(reason) {
   if (PERSIST_RO) return { applied: 0 };
   try {
-    const ok = await ledger.ensure();
-    if (!ok) return { applied: 0, error: 'ledger_unavailable' };
-    const dbBal = await ledger.allBalances();
-    if (!dbBal || !Object.keys(dbBal).length) return { applied: 0, empty: true };
-    let applied = 0, mismatched = 0;
-    for (const uid in dbBal) {
-      const su = store.findUserById(uid);
-      if (!su) continue;
-      const cur = su.balances || {};
-      const want = dbBal[uid];
-      // احسب الإجمالي في الاثنين للمقارنة
-      let sumCur = 0, sumWant = 0;
+    await ledger.ensure();
+    // اجمع كل مصادر الحقيقة: الدفتر الدائم + جدول wallets
+    const sources = [];
+    const lg = await ledger.allBalances();
+    if (lg && Object.keys(lg).length) sources.push({ name: 'ledger', data: lg });
+    try {
+      const [wr] = await pool.query('SELECT user_id, currency, balance FROM wallets WHERE balance > 0');
+      const wt = {};
+      for (const r of (wr || [])) {
+        const u = String(r.user_id);
+        wt[u] = wt[u] || {};
+        wt[u][r.currency] = Number(r.balance) || 0;
+      }
+      if (Object.keys(wt).length) sources.push({ name: 'wallets', data: wt });
+    } catch (e) {}
+    if (!sources.length) return { applied: 0, empty: true };
+
+    let applied = 0;
+    for (const u of ((store.db && store.db.users) || [])) {
+      const uid = String(u.id);
+      const cur = u.balances || {};
+      let sumCur = 0;
       for (const k in cur) if (Number(cur[k]) > 0) sumCur += Number(cur[k]);
-      for (const k in want) if (Number(want[k]) > 0) sumWant += Number(want[k]);
-      // نطبّق فقط إذا الدفتر أغنى بوضوح (لتجنّب دهس تعديل جديد لم يُسجّل بعد)
-      if (sumWant > sumCur + 1e-8) {
-        su.balances = Object.assign({}, want);
-        applied++; mismatched++;
-        console.warn('[ledger] استُعيد رصيد المستخدم', uid, 'من الدفتر الدائم: $' + sumCur + ' → $' + sumWant);
+      // اختر أغنى مصدر لهذا المستخدم
+      let best = null, bestTotal = 0, bestName = '';
+      for (const s of sources) {
+        const d = s.data[uid];
+        if (!d) continue;
+        let t = 0;
+        for (const k in d) t += Number(d[k]) || 0;
+        if (t > bestTotal) { bestTotal = t; best = d; bestName = s.name; }
+      }
+      if (!best) continue;
+      // طبّق فقط إذا المصدر أغنى بوضوح من الدفتر الحالي (لا ندهس تعديلاً أحدث)
+      if (bestTotal > sumCur + 1e-6) {
+        u.balances = Object.assign({}, best);
+        applied++;
+        console.warn('[ledger] استُعيد رصيد المستخدم', uid, 'من ' + bestName + ': $' + sumCur.toFixed(2) + ' → $' + bestTotal.toFixed(2));
+        // أعِد مزامنة الجدول بالذاكرة إلى القاعدة حتى يتوحّد الجميع
+        try { dbSyncWallets(uid, u.balances); } catch (e) {}
       }
     }
-    if (mismatched > 0) {
+    if (applied > 0) {
       try { store._save(); } catch (e) {}
-      console.warn('[ledger] مزامنة الإقلاع: أُصلح', mismatched, 'حساب/حسابات (السبب:', reason + ')');
+      console.warn('[ledger] مزامنة الإقلاع: أُصلح', applied, 'حساب/حسابات (السبب:', reason + ')');
     } else {
-      console.log('[ledger] مزامنة الإقلاع: كل الأرصدة مطابقة للدفتر الدائم (' + Object.keys(dbBal).length + ' مستخدم)');
+      console.log('[ledger] مزامنة الإقلاع: كل الأرصدة مطابقة (' + sources.map(s => s.name).join('+') + ')');
     }
     return { applied };
   } catch (e) {
@@ -4024,6 +4045,61 @@ app.get('/api/admin/balance-audit', requireAdmin, (req, res) => {
     total: balAudit.entries.length,
     entries: entries.slice(0, limit),
   });
+});
+
+// ---- تشخيص شامل: أين توجد الأموال فعلاً؟ (مقارنة كل المخازن) ----
+// يقارن لكل مستخدم: دفتر الذاكرة (store) / جدول wallets / دفتر الأستاذ /
+// محفظة العقود (futures). يكشف فوراً أي تعارض بين واجهة الموقع والقاعدة.
+app.get('/api/admin/balance-doctor', requireAdmin, async (req, res) => {
+  try {
+    const out = { ok: true, users: [], mismatch: false, walletsTable: {}, ledger: {}, futures: {} };
+    // 1) جدول wallets
+    try {
+      const [w] = await pool.query('SELECT user_id, currency, balance FROM wallets WHERE balance > 0');
+      for (const r of (w || [])) {
+        const u = String(r.user_id);
+        out.walletsTable[u] = out.walletsTable[u] || {};
+        out.walletsTable[u][r.currency] = Number(r.balance) || 0;
+      }
+    } catch (e) { out.walletsError = e.message; }
+    // 2) دفتر الأستاذ الدائم
+    try {
+      await ledger.ensure();
+      const lb = await ledger.allBalances();
+      out.ledger = lb || {};
+    } catch (e) { out.ledgerError = e.message; }
+    // 3) محفظة العقود
+    try { out.futures = futuresWallets || {}; } catch (e) {}
+    // 4) دفتر الذاكرة + المقارنة
+    const list = (store && store.db && Array.isArray(store.db.users)) ? store.db.users : [];
+    for (const u of list) {
+      const uid = String(u.id);
+      const mem = {};
+      for (const k in (u.balances || {})) {
+        const n = Number(u.balances[k]) || 0;
+        if (n > 0) mem[k] = n;
+      }
+      const wt = out.walletsTable[uid] || {};
+      const lg = out.ledger[uid] || {};
+      const fu = out.futures[uid] || {};
+      const sumOf = (o) => { let t = 0; for (const k in o) t += Number(o[k]) || 0; return +t.toFixed(8); };
+      const row = {
+        userId: uid, name: u.name || '', email: u.email || '',
+        store: mem, storeTotal: sumOf(mem),
+        wallets: wt, walletsTotal: sumOf(wt),
+        ledger: lg, ledgerTotal: sumOf(lg),
+        futures: fu, futuresTotal: sumOf(fu),
+      };
+      // تعارض؟ أي مصدر فيه أموال والدفتر في الذاكرة صفر
+      if (row.storeTotal === 0 && (row.walletsTotal > 0 || row.ledgerTotal > 0 || row.futuresTotal > 0)) {
+        row.mismatch = true; out.mismatch = true;
+      }
+      out.users.push(row);
+    }
+    const s = balanceSummary();
+    out.summary = s;
+    res.json(out);
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 // ---- دفتر الأستاذ الدائم: عرض الحركات + إعادة البناء + ختم الأرصدة الحالية ----
