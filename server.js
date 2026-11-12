@@ -86,8 +86,13 @@ const PERSIST_FILES = [
   'apex-sessions.json', 'apex-balance-audit.json', 'apex-adminalerts.json',
   'apex-recovery-audit.json',
 ];
-// ملفات "سوقية" تتغيّر باستمرار: لا تُحفظ دورياً حتى لا تستهلك مساحة القاعدة
-const MARKET_VOLATILE_FILES = ['apex-apx.json'];
+// ملفات "سوقية" بحجم كبير تتغير باستمرار. المستخدم يُدير السوق من سيرفره
+// الخاص (apes لا يأتي من Binance)، فهذا الملف ضروري ولا يجوز فقدانه —
+// لكن لا نحفظه كل 30ث حتى لا نستهلك مساحة القاعدة:
+// يُحفظ عند أي تغيير حقيقي فقط، وليس أكثر من مرة كل 5 دقائق.
+const MARKET_VOLATILE_FILES = []; // لا نستثني أي ملف من الأمان
+const MARKET_THROTTLE_MS = 5 * 60 * 1000;
+const _marketLastSave = {};
 function _persistHash(s) {
   let h = 2166136261 >>> 0; s = String(s);
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
@@ -268,6 +273,24 @@ async function dbSyncWallets(userId, balances) {
             logBalanceDiff(args[0], before, su.balances || {}, m, su);
           }
         } catch (e) {}
+        // حفظ فوري لمّي إلى قاعدة البيانات بعد كل تغير رصيد.
+        // ضروري: Render يقتل العملية (SIGKILL) خلال ثوانٍ عند إعادة النشر
+        // ولا ينطر الحفظ الدوري (30ث) ولا يضمن SIGTERM — فبدونه يضيع
+        // آخر رصيد شُحن. هنا نكتب فوراً حتى لو نام السيرفر بعد ثانية.
+        try {
+          if (!PERSIST_RO) {
+            const pData = join(DATA_DIR, 'apex-data.json');
+            const cData = readFileSync(pData, 'utf8');
+            if (cData && cData.trim()) {
+              pool.query(
+                'INSERT INTO kv_store (k, v, updated_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE v=VALUES(v), updated_at=VALUES(updated_at)',
+                ['apex-data.json', cData, Date.now()]
+              ).then(function () {
+                _lastSnapshotHash['apex-data.json'] = _persistHash(cData);
+              }).catch(function () {});
+            }
+          }
+        } catch (e) {}
       }
       return r;
     };
@@ -288,10 +311,12 @@ async function snapshotDataToDb(force) {
       let content = '';
       try { content = readFileSync(p, 'utf8'); } catch (e) { continue; }
       if (!content || content.trim() === '') continue;
-      // ملف أسعار السوق (apex-apx) يتغيّر كل ثانية وحجمه كبير جداً.
-      // لا نكتبه دورياً (يُستهلك كامل مساحة الخطة المجانية)؛ يُحفظ فقط
-      // عند الإطفاء/الإقلاع (force) أو عبر saveRemote للأدمن.
-      if (!force && MARKET_VOLATILE_FILES.indexOf(f) >= 0) continue;
+      // ملف السوق الضخم: لا يُكتب أكثر من مرة كل 5 دقائق (توفير المساحة)
+      // لكن يُحفظ فوراً عند force (الإطفاء/النشر).
+      if (!force && MARKET_THROTTLE_MS && _marketLastSave[f]) {
+        const since = Date.now() - _marketLastSave[f];
+        if (since < MARKET_THROTTLE_MS) continue;
+      }
       const h = _persistHash(content);
       if (!force && _lastSnapshotHash[f] === h) continue;
       // حارس مانع للطمس: لا تستبدل صفّاً غنيّاً بمحتوى فارغ/أصغر بكثير
@@ -308,19 +333,27 @@ async function snapshotDataToDb(force) {
         'INSERT INTO kv_store (k, v, updated_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE v=VALUES(v), updated_at=VALUES(updated_at)',
         [f, content, Date.now()]);
       _lastSnapshotHash[f] = h;
+      if (f === 'apex-apx.json') _marketLastSave[f] = Date.now();
       // سطر مختصر: اسم الملف فقط (بدون بايتات) لتوفير مساحة السجلات على الخطة المجانية
       console.log('[persist] ~', f);
     }
   } catch (e) { console.warn('[persist] تعذّر حفظ اللقطة:', e.message); }
 }
-// لقطة دورية كل 30 ثانية (تكفي: أي تغيير ينحفظ خلال نصف دقيقة كحد أقصى)
-// مع مقارنة البصمة: لا كتابة إذا لم يتغيّر المحتوى أصلاً — فالسكون = صفر كتابات.
+// لقطة دورية كل 30 ثانية (الحفظ الفوري عند تغير الرصيد يغطي اللحظات الحرجة)
 setInterval(function () { snapshotDataToDb(false); }, 30000);
 // لقطة نهائية عند إيقاف الخادم (Render يرسل SIGTERM قبل إعادة النشر)
+// ننتظر الحفظ فعلياً قبل الخروج، مع مهلة قصيرة حتى لا يعلّق الإطفاء.
 let _persistFinalDone = false;
 async function _persistFinalSnapshot(sig) {
   if (_persistFinalDone) return; _persistFinalDone = true;
-  if (!PERSIST_RO) { try { await snapshotDataToDb(true); } catch (e) {} }
+  if (!PERSIST_RO) {
+    try {
+      await Promise.race([
+        snapshotDataToDb(true),
+        new Promise(function (r) { setTimeout(r, 6000); }),
+      ]);
+    } catch (e) {}
+  }
   console.log('[persist] لقطة نهائية عند', sig);
   process.exit(0);
 }
