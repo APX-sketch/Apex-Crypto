@@ -86,6 +86,8 @@ const PERSIST_FILES = [
   'apex-sessions.json', 'apex-balance-audit.json', 'apex-adminalerts.json',
   'apex-recovery-audit.json',
 ];
+// ملفات "سوقية" تتغيّر باستمرار: لا تُحفظ دورياً حتى لا تستهلك مساحة القاعدة
+const MARKET_VOLATILE_FILES = ['apex-apx.json'];
 function _persistHash(s) {
   let h = 2166136261 >>> 0; s = String(s);
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
@@ -138,6 +140,12 @@ function _snapshotWouldWipe(existing, incoming) {
   } catch (e) {}
   // انكماش حادّ (> 55%) في محتوى كان غنيّاً = مشبوه، نرفضه احتياطاً
   if (newLen < oldLen * 0.45) return true;
+  // فحص الأرصدة: نفس الحجم والبنية لكن كل الأرصدة صارت صفراً = طمس
+  try {
+    const oldTotal = _totalInJson(String(existing));
+    const newTotal = _totalInJson(String(incoming));
+    if (oldTotal > 0 && newTotal < oldTotal * 0.5) return true;
+  } catch (e) {}
   return false;
 }
 async function restoreDataFromDb() {
@@ -154,11 +162,21 @@ async function restoreDataFromDb() {
       const incoming = String(r.v == null ? '' : r.v);
       let cur = '';
       try { if (existsSync(p)) cur = readFileSync(p, 'utf8'); } catch (e) {}
-      // استعد من القاعدة فقط عندما يكون الملف مفقوداً/فارغاً (بعد إعادة نشر)
-      if ((!cur || cur.trim() === '') && incoming) {
-        try { writeFileSync(p, incoming); restored++; } catch (e) {}
+      // استعادة ذكية: لا نكتفي بحالة "الملف مفقود/فارغ".
+      // Render يحتفظ بالملفات على القرص، فقد يجد ملفاً موجوداً لكنه
+      // صفري/قديم (السناريو الذي يسبب فقدان الأرصدة). فنستعيد من القاعدة
+      // عندما: (أ) الملف مفقود/فارغ، أو (ب) نسخة القاعدة أغنى والأفضل.
+      const curIsEmpty = (!cur || cur.trim() === '');
+      const dbWouldWipe = _snapshotWouldWipe(cur, incoming); // incoming أفقر من الملف → لا تستعد
+      const fileIsPoorer = _snapshotWouldWipe(incoming, cur); // الملف أفقر من القاعدة → استعد
+      const shouldRestore = incoming && !dbWouldWipe && (curIsEmpty || fileIsPoorer);
+      if (shouldRestore) {
+        try {
+          writeFileSync(p, incoming); restored++;
+          if (!curIsEmpty) console.warn('[persist] استُعيدت نسخة أغنى من القاعدة بدل الملف الفقير:', r.k);
+        } catch (e) {}
       }
-      _lastSnapshotHash[r.k] = _persistHash(incoming);
+      _lastSnapshotHash[r.k] = _persistHash(shouldRestore ? incoming : (cur || incoming));
     }
     console.log('[persist] استُعيد من قاعدة البيانات:', restored, 'ملف');
   } catch (e) {
@@ -270,6 +288,10 @@ async function snapshotDataToDb(force) {
       let content = '';
       try { content = readFileSync(p, 'utf8'); } catch (e) { continue; }
       if (!content || content.trim() === '') continue;
+      // ملف أسعار السوق (apex-apx) يتغيّر كل ثانية وحجمه كبير جداً.
+      // لا نكتبه دورياً (يُستهلك كامل مساحة الخطة المجانية)؛ يُحفظ فقط
+      // عند الإطفاء/الإقلاع (force) أو عبر saveRemote للأدمن.
+      if (!force && MARKET_VOLATILE_FILES.indexOf(f) >= 0) continue;
       const h = _persistHash(content);
       if (!force && _lastSnapshotHash[f] === h) continue;
       // حارس مانع للطمس: لا تستبدل صفّاً غنيّاً بمحتوى فارغ/أصغر بكثير
@@ -286,12 +308,14 @@ async function snapshotDataToDb(force) {
         'INSERT INTO kv_store (k, v, updated_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE v=VALUES(v), updated_at=VALUES(updated_at)',
         [f, content, Date.now()]);
       _lastSnapshotHash[f] = h;
-      console.log('[persist] حُفظت لقطة إلى قاعدة البيانات:', f, '(' + content.length + ' بايت)');
+      // سطر مختصر: اسم الملف فقط (بدون بايتات) لتوفير مساحة السجلات على الخطة المجانية
+      console.log('[persist] ~', f);
     }
   } catch (e) { console.warn('[persist] تعذّر حفظ اللقطة:', e.message); }
 }
-// لقطة دورية كل 7 ثوانٍ (تغطي الأعطال المفاجئة)
-setInterval(function () { snapshotDataToDb(false); }, 7000);
+// لقطة دورية كل 30 ثانية (تكفي: أي تغيير ينحفظ خلال نصف دقيقة كحد أقصى)
+// مع مقارنة البصمة: لا كتابة إذا لم يتغيّر المحتوى أصلاً — فالسكون = صفر كتابات.
+setInterval(function () { snapshotDataToDb(false); }, 30000);
 // لقطة نهائية عند إيقاف الخادم (Render يرسل SIGTERM قبل إعادة النشر)
 let _persistFinalDone = false;
 async function _persistFinalSnapshot(sig) {
@@ -309,8 +333,8 @@ process.on('SIGINT', function () { _persistFinalSnapshot('SIGINT'); });
 //  كاملة لكل البيانات في جدول kv_backups، تلقائياً كل 6 ساعات
 //  + نسخة يدوية من لوحة الإدارة، مع إمكانية الاستعادة إلى أي نقطة.
 // ============================================================
-const BACKUP_KEEP = 30;         // أقصى عدد نسخ محفوظة
-const BACKUP_EVERY_MS = 6 * 60 * 60 * 1000; // كل 6 ساعات
+const BACKUP_KEEP = 7;          // أقصى عدد نسخ محفوظة (توفير مساحة على الخطة المجانية)
+const BACKUP_EVERY_MS = 12 * 60 * 60 * 1000; // كل 12 ساعة
 let _backupTableReady = false;
 
 // ============================================================
@@ -386,8 +410,14 @@ async function recordBalanceCheck(reason) {
     return s;
   } catch (e) { console.warn('[balance-check] تعذّر التسجيل:', e.message); return null; }
 }
-// كل 10 دقائق نقطة مراقبة (إضافةً إلى نقطة عند كل إقلاع).
-setInterval(function () { recordBalanceCheck('periodic').catch(function () {}); }, 10 * 60 * 1000);
+// كل 30 دقيقة نقطة مراقبة (تخفيف الضغط على قاعدة البيانات على الخطة المجانية)
+setInterval(function () { recordBalanceCheck('periodic').catch(function () {}); }, 30 * 60 * 1000);
+// تنظيف أسبوعي: نبقي آخر 500 فحص فقط حتى لا يتضخم الجدول على الخطة المجانية
+setInterval(function () {
+  if (PERSIST_RO) return;
+  pool.query('DELETE FROM balance_checks WHERE id NOT IN (SELECT id FROM (SELECT id FROM balance_checks ORDER BY id DESC LIMIT 500) t)')
+    .catch(function () {});
+}, 24 * 60 * 60 * 1000);
 
 async function _ensureBackupTable() {
   if (_backupTableReady) return;
@@ -3903,6 +3933,52 @@ app.get('/api/admin/balance-audit', requireAdmin, (req, res) => {
     total: balAudit.entries.length,
     entries: entries.slice(0, limit),
   });
+});
+
+// ---- طوارئ: استعادة فورية من آخر نسخة احتياطية غنية ----
+// يُستخدم عندما يكتشف الأدمن أن الأرصدة صفر بعد إعادة تشغيل، فيرجّع
+// أفضل نسخة من kv_backups فوراً (آخر نسخة تحتوي أرصدة فعلية) ويعيد
+// تحميل المخزن بالذاكرة بلا حاجة لإعادة النشر.
+app.post('/api/admin/emergency-restore', requireAdmin, async (req, res) => {
+  try {
+    await _ensureBackupTable();
+    const [rows] = await pool.query('SELECT id, created_at, label, payload FROM kv_backups ORDER BY id DESC LIMIT 200');
+    if (!rows || !rows.length) return res.status(404).json({ ok: false, error: 'لا توجد نسخ احتياطية' });
+    let best = null, bestTotal = 0;
+    for (const r of rows) {
+      try {
+        const p = JSON.parse(r.payload);
+        const d = p && p.files && p.files['apex-data.json'];
+        if (!d) continue;
+        const t = _totalInJson(d);
+        if (t > bestTotal) { bestTotal = t; best = { id: r.id, at: Number(r.created_at) || 0, files: p.files }; }
+      } catch (e) {}
+    }
+    if (!best || !best.files) return res.status(404).json({ ok: false, error: 'لم نجد نسخة تحتوي أرصدة' });
+    const written = [];
+    for (const k in best.files) {
+      if (PERSIST_FILES.indexOf(k) < 0) continue;
+      try {
+        writeFileSync(join(DATA_DIR, k), best.files[k]);
+        _lastSnapshotHash[k] = _persistHash(best.files[k]);
+        written.push(k);
+      } catch (e) {}
+    }
+    // أعد رفعها إلى kv_store كي تثبت في القاعدة
+    for (const k of written) {
+      try {
+        await pool.query(
+          'INSERT INTO kv_store (k, v, updated_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE v=VALUES(v), updated_at=VALUES(updated_at)',
+          [k, best.files[k], Date.now()]);
+      } catch (e) {}
+    }
+    // أعد تحميل المخزن بالذاكرة فوراً
+    try { if (typeof store !== 'undefined' && store && typeof store._load === 'function') store._load(); } catch (e) {}
+    try { await updateSafeguard(); } catch (e) {}
+    try { await recordBalanceCheck('emergency-restore'); } catch (e) {}
+    try { logSecurity(req, { kind: 'emergency_restore', severity: 'critical', detail: 'استعادة طارئة من النسخة #' + best.id + ' (إجمالي $' + bestTotal + ')', meta: { id: best.id, total: bestTotal } }); } catch (e) {}
+    res.json({ ok: true, backupId: best.id, total: bestTotal, files: written });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 // ---- Admin: مراقبة الأرصدة بعد كل إعادة تشغيل (balance_checks) ----
