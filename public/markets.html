@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
+<script src="apx-ico.js"></script>
 <script>
 (function(){
   try{
@@ -229,24 +230,12 @@ function fmtPx(p){p=+p;if(!isFinite(p)||p<=0)return null;if(p>=1)return p.toLoca
 function fmtVol(v){v=+v;if(!isFinite(v)||v<=0)return '-';if(v>=1e9)return (v/1e9).toFixed(2)+'B';if(v>=1e6)return (v/1e6).toFixed(2)+'M';if(v>=1e3)return (v/1e3).toFixed(1)+'K';return v.toFixed(0);}
 function icoUrl(b){return 'https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/128/color/'+String(b||'').toLowerCase()+'.png';}
 function icoUrl2(b){return 'https://assets.coincap.io/assets/icons/'+String(b||'').toLowerCase()+'@2x.png';}
-// ذاكرة شعارات: نعرف أي رمز تصويره ناجح وأي رمز لا يوجد له شعار،
-// فلا نعيد تحميل الصورة ولا نعيد محاولة الفاشلة عند كل تحديث.
-var ICO_BAD={};        // رموز فشل تحميلها نهائياً
-var ICO_GOOD={};       // رموز تم تحميلها بنجاح (تُخزَّن بالمتصفح أسبوعاً)
+// == أيقونة العملة: تعتمد الحلّ المشترك الثابت (لا تختفي أبداً) ==
+// المنطق كامل في apx-ico.js: دائرة حرف ملونة تحمل الصورة فوقها.
 function icoImg(base){
+  if(window.APXICO) return APXICO.html(base,30);
   var b=String(base||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6);
-  var letter=b.slice(0,1)||'?';
-  if(ICO_BAD[b]){
-    // لا نضع img أبداً: دائرة بحرف العملة مباشرة (بلا طلب شبكة)
-    return '<span class="cico" style="width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex:0 0 auto">'+letter+'</span>';
-  }
-  return '<span class="icoWrap" style="position:relative;width:30px;height:30px;flex:0 0 auto">'+
-    '<img class="cio" data-sym="'+b+'" src="'+icoUrl(b)+'" alt="'+letter+'" loading="eager" decoding="async" '+
-    'style="width:30px;height:30px;border-radius:50%;object-fit:cover;background:#1b2430" '+
-    'onload="this.style.visibility=&#39;visible&#39;;this.dataset.ok=1;" '+
-    'onerror="if(!this.dataset.alt){this.dataset.alt=1;this.src=icoUrl2(this.dataset.sym);}else{ICO_BAD[this.dataset.sym]=1;this.style.display=&#39;none&#39;;var n=this.nextElementSibling;if(n)n.style.display=&#39;flex&#39;;}">'+
-    '<span class="cico" style="display:none;position:absolute;inset:0">'+letter+'</span>'+
-    '</span>';
+  return '<span class="cico" style="width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex:0 0 auto">'+(b.slice(0,1)||'?')+'</span>';
 }
 const QUOTES=['USDT','USDC','FDUSD','BUSD','TUSD','BTC','ETH','BNB'];
 const STABLE=['USDT','USDC','FDUSD','BUSD','TUSD'];

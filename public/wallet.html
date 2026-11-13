@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
+<script src="apx-ico.js"></script>
 <script>
 (function(){
   try{
@@ -456,7 +457,9 @@ window.actMsg=actMsg;window.toggleEye=toggleEye;window.pickTab=pickTab;window.as
 <script>
 function priceOf(coin){if(coin==='USDT'||coin==='USDC'||coin==='BUSD'||coin==='FDUSD')return 1;if(window.APX&&coin===APX.BASE)return APX.live();const p=PRICES[coin+'USDT'];return p?p.price:0;}
 /* أيقونة العملة: شعار A الذهبي لـAPX */
-function coinIcon(c){return (window.APX&&c===APX.BASE)?'<span class="apxlogo">A</span>':'<img src="'+icoUrl(c)+'" onerror="this.style.visibility=\'hidden\'">';}
+/* أيقونة العملة: الحلّ المشترك الثابت — دائرة ملونة بالحرف وتحتها الصورة،
+   فلا يوجد أي لحظة فراغ حتى لو فشل تحميل الصورة أو انقطع الإنترنت. */
+function coinIcon(c,size){return (window.APX&&c===APX.BASE)?'<span class="apxlogo">A</span>':((window.APXICO)?APXICO.html(c,size||30):'<span style="width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#2a3441;color:#fff;font-weight:900">'+String(c||'?').slice(0,1)+'</span>');}
 /* حقن عملة APX ضمن المحفظة (الرصيد محفوظ لكل حساب) + سعرها الحيّ */
 function injectApx(){
   if(!window.APX)return;
@@ -479,20 +482,56 @@ function renderBalances(){
   const hp=$('heroPnl');hp.className='pnl '+(up?'up':'dn');
   $('pnlVal').textContent=(up?'+':'')+fmt(pnlUsd,2)+' ('+(up?'+':'')+pnlPct.toFixed(2)+'%)';
   const body=$('balList');
-  if(!rows.length){body.innerHTML='<div class="empty">'+T('wNoAssets')+'</div>';return;}
+  if(!rows.length){
+    if(body.dataset.sig!=='empty'){body.dataset.sig='empty';body.innerHTML='<div class="empty">'+T('wNoAssets')+'</div>';}
+    return;
+  }
+  /* بناء مرة واحدة ثم تحديث الأرقام فقط — كان إعادة البناء كل ثانية
+     تحذف أيقونة العملة فتُطلب من جديد وتختفي لحظياً (الوميض). */
+  const sig=rows.map(r=>r.c).join(',');
+  if(body.dataset.sig===sig && body.querySelector('.row[data-c]')){
+    updateBalanceRows(body,rows);
+    return;
+  }
+  body.dataset.sig=sig;
   body.innerHTML=rows.map(r=>{
     const pm=PRICES[r.c+'USDT'];const price=pm?pm.price:(r.c==='USDT'?1:null);const pct=pm?pm.pct:null;const u=pct>=0;
     const pxLine='$'+(price!=null?fmt(price,pdec(price)):'--')+(pct!=null?'<span class="pc '+(u?'up':'dn')+'">'+(u?'+':'')+pct.toFixed(2)+'%</span>':'');
-    return '<div class="row">'+
+    return '<div class="row" data-c="'+esc(r.c)+'">'+
      coinIcon(r.c)+
      '<div class="nm"><b>'+esc(r.c)+'</b><span class="px">'+pxLine+'</span></div>'+
      '<div class="rt"><div class="qty">'+mask(fmt(r.amt,r.c==='USDT'?2:6))+'</div><div class="val">≈ '+mask(fmt(r.val,2)+' USDT')+'</div></div>'+
     '</div>';
   }).join('');
 }
+
+/* تحديث أرقام صفوف المحفظة الموجودة (الأيقونة لا تُلمس) */
+function updateBalanceRows(body,rows){
+  for(let i=0;i<rows.length;i++){
+    const r=rows[i];
+    const el=body.querySelector('.row[data-c="'+r.c+'"]');
+    if(!el)continue;
+    const pm=PRICES[r.c+'USDT'], price=pm?pm.price:(r.c==='USDT'?1:null), pct=pm?pm.pct:null;
+    const pxEl=el.querySelector('.px');
+    if(pxEl){
+      const html='$'+(price!=null?fmt(price,pdec(price)):'--')+(pct!=null?'<span class="pc '+((pct>=0)?'up':'dn')+'">'+((pct>=0)?'+':'')+pct.toFixed(2)+'%</span>':'');
+      if(pxEl.innerHTML!==html)pxEl.innerHTML=html;
+    }
+    const qEl=el.querySelector('.qty');
+    if(qEl){const t=mask(fmt(r.amt,r.c==='USDT'?2:6));if(qEl.textContent!==t)qEl.textContent=t;}
+    const vEl=el.querySelector('.val');
+    if(vEl){const t='≈ '+mask(fmt(r.val,2)+' USDT');if(vEl.textContent!==t)vEl.textContent=t;}
+  }
+}
 function renderFavs(){
   const body=$('favList');
-  if(!FAVS.length){body.innerHTML='<div class="empty">'+T('wNoAssets')+' — ⭐ '+T('mFav')+'</div>';return;}
+  if(!FAVS.length){
+    if(body.dataset.sig!=='empty'){body.dataset.sig='empty';body.innerHTML='<div class="empty">'+T('wNoAssets')+' — ⭐ '+T('mFav')+'</div>';}
+    return;
+  }
+  const _fsig=FAVS.join(',');
+  if(body.dataset.sig===_fsig && body.querySelector('.favrow[data-sym]')){updateFavRows(body);return;}
+  body.dataset.sig=_fsig;
   body.innerHTML=FAVS.map(sym=>{
     const sp=splitSym(sym);const pm=PRICES[sym];const price=pm?pm.price:null;const pct=pm?pm.pct:null;
     const prev=pxPrev[sym];let dir='eq';if(price!=null&&prev!=null){if(price>prev)dir='up';else if(price<prev)dir='dn';}if(price!=null)pxPrev[sym]=price;
@@ -500,16 +539,44 @@ function renderFavs(){
     if(al&&al.triggered){alertHtml='<span class="alerttag done">✓ تحقق '+(al.dir==='up'?'≥':'≤')+' '+fmt(al.target,pdec(al.target))+'</span>'+'<button class="setbtn" onclick="rearm(\''+sym+'\')">إعادة تفعيل</button>'+'<button class="clrbtn" onclick="clearAlert(\''+sym+'\')">حذف</button>';}
     else if(al){alertHtml='<span class="alerttag">🔔 عند '+(al.dir==='up'?'≥':'≤')+' '+fmt(al.target,pdec(al.target))+' '+esc(sp.quote)+'</span>'+'<button class="clrbtn" onclick="clearAlert(\''+sym+'\')">إلغاء</button>';}
     else{alertHtml='<div class="seg"><button class="on" data-d="up" onclick="segPick(this)">≥</button><button data-d="down" onclick="segPick(this)">≤</button></div>'+'<input id="al_'+sym+'" type="number" step="any" inputmode="decimal" placeholder="السعر المستهدف">'+'<button class="setbtn" onclick="setAlert(\''+sym+'\')">تفعيل التنبيه</button>';}
-    return '<div class="favrow">'+
+    return '<div class="favrow" data-sym="'+sym+'">'+
       '<div class="favtop">'+
         '<span class="star" onclick="toggleFav(\''+sym+'\')">'+STAR+'</span>'+
-        '<img src="'+icoUrl(sp.base)+'" onerror="this.style.visibility=\'hidden\'" style="width:30px;height:30px;border-radius:50%">'+
+        coinIcon(sp.base,30)+
         '<div class="nm" style="cursor:pointer" onclick="location.href=\'trading.html?symbol='+sym.toLowerCase()+'\'"><b>'+esc(sp.base)+'</b><span>'+esc(sp.base)+'/'+esc(sp.quote)+'</span></div>'+
         '<div class="rt"><div class="fpx '+dir+'">'+(price!=null?fmt(price,pdec(price)):'--')+'</div>'+(pct!=null?'<span class="tagpc '+(up?'up':'dn')+'">'+(up?'+':'')+pct.toFixed(2)+'%</span>':'')+'</div>'+
       '</div>'+
       '<div class="alertbox" data-sym="'+sym+'">'+alertHtml+'</div>'+
     '</div>';
   }).join('');
+}
+/* تحديث أرقام صفوف المفضلة فقط (الأيقونة والتنبيهات لا تُلمس) */
+function updateFavRows(body){
+  for(let i=0;i<FAVS.length;i++){
+    const sym=FAVS[i];
+    const el=body.querySelector('.favrow[data-sym="'+sym+'"]');
+    if(!el)continue;
+    const pm=PRICES[sym]; if(!pm)continue;
+    const price=pm.price, pct=pm.pct;
+    const pxEl=el.querySelector('.fpx');
+    if(pxEl){
+      const prev=pxPrev[sym];
+      if(price!=null&&prev!==price){
+        pxEl.textContent=price!=null?fmt(price,pdec(price)):'--';
+        pxEl.classList.remove('up','dn','eq');
+        if(prev!=null){void pxEl.offsetWidth;pxEl.classList.add(price>prev?'up':'dn');}
+        pxPrev[sym]=price;
+      }
+    }
+    const pcEl=el.querySelector('.tagpc');
+    if(pcEl&&pct!=null){
+      const up=pct>=0;
+      const t=(up?'+':'')+pct.toFixed(2)+'%';
+      if(pcEl.textContent!==t)pcEl.textContent=t;
+      pcEl.classList.toggle('up',up);
+      pcEl.classList.toggle('dn',!up);
+    }
+  }
 }
 function segPick(btn){const seg=btn.parentElement;[...seg.children].forEach(b=>b.classList.remove('on'));btn.classList.add('on');}
 function setAlert(sym){const inp=$('al_'+sym);const v=parseFloat(inp.value);if(!isFinite(v)||v<=0){toast('أدخل سعراً صالحاً');return;}
@@ -617,7 +684,9 @@ function closeNotif(){var s=document.getElementById('notifSheet');if(s)s.style.d
 if(TOK){for(var _k in wallet)wallet[_k]=0;}
 injectApx();renderBalances();renderFavs();poll();setInterval(poll,5000);
 /* تحديث APX لحظياً مع حركة الشارت + أي تغيير من الإدارة */
-if(window.APX){APX.onChange&&APX.onChange(function(){injectApx();renderBalances();});setInterval(function(){injectApx();renderBalances();},1000);}
+/* تحديث حيّ للسعر كل 3 ثوان (بدل ثانية) — renderBalances أصبحت تحدّث
+   الأرقام فقط لا تبني الصفوف، فالأيقونات ثابتة ولا ترمش. */
+if(window.APX){APX.onChange&&APX.onChange(function(){injectApx();renderBalances();});setInterval(function(){injectApx();renderBalances();},3000);}
 if(TOK){pullWallet();setInterval(pullWallet,8000);syncSeen();setInterval(syncSeen,20000);pullNotif();setInterval(pullNotif,12000);}
 </script>
 <script>
@@ -699,14 +768,21 @@ function renderOverview(){
       leg.innerHTML=segs.map(function(x){return '<span class="lg"><i style="background:'+x.col+'"></i>'+esc(x.c)+' '+(x.val/total*100).toFixed(1)+'%</span>';}).join('');
     }
   }
-  // combined asset list
+  // combined asset list — يُبنى مرة ثم تُحدَّث أرقامه فقط (بلا وميض أيقونات)
   var body=$('ovList');
   if(body){
-    if(!rows.length){body.innerHTML='<div class="empty">لا توجد أصول بعد</div>';}
-    else{body.innerHTML=rows.map(function(r){
+    var _osig=rows.map(function(r){return r.c;}).join(',');
+    if(!rows.length){
+      if(body.dataset.sig!=='empty'){body.dataset.sig='empty';body.innerHTML='<div class="empty">لا توجد أصول بعد</div>';}
+    }
+    else if(body.dataset.sig===_osig && body.querySelector('.row[data-c]')){
+      updateBalanceRows(body,rows);
+    }
+    else{body.dataset.sig=_osig;
+    body.innerHTML=rows.map(function(r){
       var pm=PRICES[r.c+'USDT'];var price=pm?pm.price:(r.c==='USDT'?1:null);var pct=pm?pm.pct:null;var u=pct>=0;
       var pxLine='$'+(price!=null?fmt(price,pdec(price)):'--')+(pct!=null?'<span class="pc '+(u?'up':'dn')+'">'+(u?'+':'')+pct.toFixed(2)+'%</span>':'');
-      return '<div class="row">'+coinIcon(r.c)+
+      return '<div class="row" data-c="'+esc(r.c)+'">'+coinIcon(r.c)+
        '<div class="nm"><b>'+esc(r.c)+'</b><span class="px">'+pxLine+'</span></div>'+
        '<div class="rt"><div class="qty">'+mask(fmt(r.amt,r.c==='USDT'?2:6))+'</div><div class="val">≈ '+mask(fmt(r.val,2)+' USDT')+'</div></div>'+'</div>';
     }).join('');}

@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
+<script src="apx-ico.js"></script>
 <script>
 (function(){
   try{
@@ -1074,7 +1075,9 @@ const mktMap={};
 let activeCat='trending';
 const pxPrev={};/* آخر سعر لكل رمز لتلوين التحديث */
 function pdec(p){return p>=1000?2:p>=1?2:p>=0.1?4:6;}
-function icoUrl(b){return 'https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/128/color/'+b.toLowerCase()+'.png';}
+function icoUrl(b){return 'https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/128/color/'+String(b||'').toLowerCase()+'.png';}
+/* أيقونة العملة عبر الحلّ المشترك الثابت (لا فراغ ولا وميض) */
+function icoEl(base){return (window.APXICO)?APXICO.html(base,26):'<span class="ax-ico" style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#2a3441;color:#fff;font-weight:900;font-size:11px">'+String(base||'?').slice(0,1)+'</span>';}
 function favArr(){try{return JSON.parse(localStorage.getItem('apex_favs_'+UID)||'[]')||[];}catch(e){return [];}}
 function catSyms(cat){
   if(cat==='fav')return favArr();
@@ -1088,24 +1091,68 @@ function rowHtml(sym){
   const d=mktMap[sym]; if(!d)return '';
   const b=sym.replace('USDT','');
   const price=parseFloat(d.c),chg=parseFloat(d.P),up=chg>=0;
-  const logo=(window.APX&&b===APX.BASE)?'<span class="apxlogo">A</span>':'<img src="'+icoUrl(b)+'" onerror="this.style.visibility=\'hidden\'">';
+  const logo=(window.APX&&b===APX.BASE)?'<span class="apxlogo">A</span>':icoEl(b);
   const nm=(window.APX&&b===APX.BASE)?'Apex Coin':b;
   const prev=pxPrev[sym];let dir='eq';if(prev!=null){if(price>prev)dir='up';else if(price<prev)dir='dn';}pxPrev[sym]=price;
-  return '<tr onclick="location.href=\'trading.html?symbol='+sym.toLowerCase()+'\'" style="cursor:pointer">'+
+  return '<tr data-sym="'+sym+'" onclick="location.href=\'trading.html?symbol='+sym.toLowerCase()+'\'" style="cursor:pointer">'+
     '<td><div class="coin">'+logo+'<div><b>'+nm+'</b><br><span>'+b+'/USDT</span></div></div></td>'+
     '<td style="text-align:end"><span class="px '+dir+'">$'+fmt(price,pdec(price))+'</span></td>'+
     '<td style="text-align:end"><span class="pc '+(up?'up':'dn')+'">'+(up?'+':'')+chg.toFixed(2)+'%</span></td>'+
   '</tr>';
 }
+/* ===== جدول الأسواق: يُبنى مرة واحدة ثم تُحدَّث الأرقام فقط =====
+   السبب: body.innerHTML كانت تُعيد بناء كل الصفوف مع كل تحديث سعر (كل 6ث)
+   فتُحذف الصور وتُطلب من جديد → تختفي وترجع. الآن الصف والصورة يبقيان
+   في مكانهما، ونتغيّر النص الرقمي وحده. */
 function renderMarkets(){
   const body=$('cmpBody'); if(!body)return;
   const syms=catSyms(activeCat).filter(s=>mktMap[s]);
   if(!syms.length){
     const msg=activeCat==='fav'?'ما في عملات بالمفضلة بعد — ضيفها من صفحة الأسواق ★':'جارٍ تحميل الأسعار…';
-    body.innerHTML='<tr><td colspan="3" style="padding:26px;text-align:center;color:var(--muted);font-size:13px">'+msg+'</td></tr>';
+    const key='empty|'+activeCat;
+    if(body.dataset.sig!==key){
+      body.dataset.sig=key;
+      body.innerHTML='<tr><td colspan="3" style="padding:26px;text-align:center;color:var(--muted);font-size:13px">'+msg+'</td></tr>';
+    }
     return;
   }
+  const sig=activeCat+'|'+syms.join(',');
+  if(body.dataset.sig===sig && body.querySelector('tr[data-sym]')){
+    updateMarketRows(body,syms);
+    return;
+  }
+  body.dataset.sig=sig;
   body.innerHTML=syms.map(rowHtml).join('');
+}
+
+/* تحديث سعر/نسبة صفوف موجودة (بلا لمس الأيقونة إطلاقاً) */
+function updateMarketRows(body,syms){
+  for(let i=0;i<syms.length;i++){
+    const sym=syms[i];
+    const d=mktMap[sym]; if(!d)continue;
+    const tr=body.querySelector('tr[data-sym="'+sym+'"]');
+    if(!tr)continue;
+    const price=parseFloat(d.c), chg=parseFloat(d.P), up=chg>=0;
+    const pxEl=tr.querySelector('.px');
+    if(pxEl){
+      const prev=pxPrev[sym];
+      if(prev==null){pxPrev[sym]=price;}
+      else if(prev!==price){
+        pxEl.textContent='$'+fmt(price,pdec(price));
+        pxEl.classList.remove('up','dn','eq');
+        void pxEl.offsetWidth;
+        pxEl.classList.add(price>prev?'up':'dn');
+        pxPrev[sym]=price;
+      }
+    }
+    const pcEl=tr.querySelector('.pc');
+    if(pcEl){
+      const txt=(up?'+':'')+chg.toFixed(2)+'%';
+      if(pcEl.textContent!==txt)pcEl.textContent=txt;
+      pcEl.classList.toggle('up',up);
+      pcEl.classList.toggle('dn',!up);
+    }
+  }
 }
 function setCat(cat){activeCat=cat;document.querySelectorAll('.mcat').forEach(el=>el.classList.toggle('on',el.dataset.cat===cat));renderMarkets();}
 async function poll(){
