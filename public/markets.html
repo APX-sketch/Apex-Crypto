@@ -321,7 +321,6 @@ function render(){
     '</div>';
   }).join('');
 }
-
 /* ===== نسخ التداول (شريط) ===== */
 function copyBanner(){
   return '<div class="copy-ico" onclick="location.href=\'copy.html\'" title="نسخ التداول" aria-label="نسخ التداول"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></div>';
@@ -494,77 +493,39 @@ function closeMdl(){$('mdl').classList.remove('on');MDL=null;}
 function toast(m){var e=$('toast');if(!e)return;e.textContent=m;e.style.opacity='1';e.style.transform='translate(-50%,0)';clearTimeout(window._tt);window._tt=setTimeout(function(){e.style.opacity='0';e.style.transform='translate(-50%,20px)';},2400);}
 window.openTf=openTf;window.openBet=openBet;window.openOpt=openOpt;window.optAsset=optAsset;window.optExp=optExp;window.mdlSet=mdlSet;window.mdlCalc=mdlCalc;window.mdlConfirm=mdlConfirm;window.closeMdl=closeMdl;
 /* ===== جلب البيانات من سيرفرك (وكيل Binance + كاش) ===== */
-/* ===== تحديث الأسعار بمرونة فردية ودون إعادة بناء القائمة ===== */
-let isFirstLoad = true;
-
-async function poll() {
-  try {
-    const r = await fetch(API_BASE+'/api/markets', {headers:{'Accept':'application/json'}});
-    if (!r.ok) throw new Error('HTTP '+r.status);
-    const raw = await r.json();
-    const arr = Array.isArray(raw) ? raw : (Array.isArray(raw.data) ? raw.data : Object.values(raw));
-    
-    ROWS = arr.map(d => {
-      const sym = d.symbol || d.s; if (!sym) return null;
-      const last = d.lastPrice != null ? d.lastPrice : (d.c != null ? d.c : (d.price != null ? d.price : d.p));
-      const pct = d.priceChangePercent != null ? d.priceChangePercent : (d.P != null ? d.P : (d.changePct24h != null ? d.changePct24h : 0));
-      const vol = d.quoteVolume != null ? d.quoteVolume : (d.q != null ? d.q : (d.volume != null ? d.volume : 0));
-      const {base, quote} = splitSym(sym);
-      return {sym, base, quote, price: parseFloat(last), pct: parseFloat(pct)||0, vol: parseFloat(vol)||0};
-    }).filter(Boolean).filter(r => isFinite(r.price) && r.price > 0);
-
-    if (window.APX && APX.cfg().enabled) {
-      var _t = APX.ticker();
-      var _row = {sym: APX.SYM, base: APX.BASE, quote: 'USDT', price: APX.live(), pct: parseFloat(_t.priceChangePercent)||0, vol: parseFloat(_t.quoteVolume)||0};
-      var _i = ROWS.findIndex(function(x){ return x.sym === APX.SYM; });
-      if (_i >= 0) ROWS[_i] = _row; else ROWS.unshift(_row);
-    }
-
+async function poll(){
+  try{
+    const r=await fetch(API_BASE+'/api/markets',{headers:{'Accept':'application/json'}});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const raw=await r.json();
+    const arr=Array.isArray(raw)?raw:(Array.isArray(raw.data)?raw.data:Object.values(raw));
+    ROWS=arr.map(d=>{
+      const sym=d.symbol||d.s;if(!sym)return null;
+      const last=d.lastPrice!=null?d.lastPrice:(d.c!=null?d.c:(d.price!=null?d.price:d.p));
+      const pct=d.priceChangePercent!=null?d.priceChangePercent:(d.P!=null?d.P:(d.changePct24h!=null?d.changePct24h:0));
+      const vol=d.quoteVolume!=null?d.quoteVolume:(d.q!=null?d.q:(d.volume!=null?d.volume:0));
+      const{base,quote}=splitSym(sym);
+      return{sym,base,quote,price:parseFloat(last),pct:parseFloat(pct)||0,vol:parseFloat(vol)||0};
+    }).filter(Boolean).filter(r=>isFinite(r.price)&&r.price>0);
+    if(window.APX&&APX.cfg().enabled){var _t=APX.ticker();var _row={sym:APX.SYM,base:APX.BASE,quote:'USDT',price:APX.live(),pct:parseFloat(_t.priceChangePercent)||0,vol:parseFloat(_t.quoteVolume)||0};var _i=ROWS.findIndex(function(x){return x.sym===APX.SYM;});if(_i>=0)ROWS[_i]=_row;else ROWS.unshift(_row);}
     checkAlerts();
-
-    // في المرة الأولى نبني القائمة، وفي المرات اللاحقة نحدث السعر لكل صف على حدة دون إعادة بناء
-    if (isFirstLoad) {
-      render();
-      isFirstLoad = false;
-    } else {
-      updateRowsInPlace();
-    }
-  } catch (e) {}
+    render();
+  }catch(e){}
 }
-
-/* تحديث العناصر الموجودة حالياً في DOM مباشرة بسلاسة تامة */
-function updateRowsInPlace() {
-  let list = catList();
-  if (QSTR) { const s = QSTR.toUpperCase(); list = list.filter(r => r.sym.includes(s) || r.base.includes(s)); }
-  list = sortList(list);
-
-  list.forEach(r => {
-    // البحث عن صف العملة الحالي في القائمة المعروضة
-    const rowEl = document.querySelector(`.mrow[data-sym="${r.sym}"]`);
-    if (!rowEl) return;
-
-    const pxEl = rowEl.querySelector('.mpx');
-    const pcEl = rowEl.querySelector('.mpc');
-    
-    if (pxEl && pcEl) {
-      const prev = pxPrev[r.sym];
-      let dir = 'eq';
-      if (prev != null) {
-        if (r.price > prev) dir = 'up';
-        else if (r.price < prev) dir = 'dn';
-      }
-      pxPrev[r.sym] = r.price;
-
-      // تحديث السعر واللون بحركة تدريجية مستقلة
-      pxEl.className = 'mpx px ' + dir;
-      pxEl.textContent = '$' + fmtPx(r.price);
-
-      const up = r.pct >= 0;
-      pcEl.className = 'mpc pc ' + (up ? 'up' : 'dn');
-      pcEl.textContent = (up ? '+' : '') + r.pct.toFixed(2) + '%';
-    }
-  });
+/* ===== الأحداث ===== */
+function syncBars(){
+  $('subs').style.display=(CAT==='crypto')?'flex':'none';
+  var showSort=(CAT==='fav')||(CAT==='crypto'&&SUB!=='options');
+  $('sortbar').style.display=showSort?'flex':'none';
 }
+$('cats').addEventListener('click',e=>{
+  const b=e.target.closest('.cat');if(!b)return;
+  if(b.dataset.c==='copy'){location.href='copy.html';return;}
+  document.querySelectorAll('.cat').forEach(c=>c.classList.remove('active'));
+  b.classList.add('active');CAT=b.dataset.c;
+  syncBars();
+  render();
+});
 $('subs').addEventListener('click',e=>{
   const b=e.target.closest('.sub');if(!b)return;
   document.querySelectorAll('.sub').forEach(c=>c.classList.remove('active'));
