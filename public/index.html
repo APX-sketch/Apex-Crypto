@@ -979,7 +979,7 @@ async function openSupport(){
   $('supPanel').classList.add('show');$('supDot').classList.remove('on');var _st=$('supDotTop');if(_st)_st.classList.remove('on');
   renderSup(await supFetch());
   if(supPoll)clearInterval(supPoll);
-  supPoll=setInterval(async()=>{const m=await supFetch();if(m)renderSup(m);},4000);
+  supPoll=setInterval(async()=>{if(document.hidden)return;const m=await supFetch();if(m)renderSup(m);},8000);
 }
 function closeSupport(){$('supPanel').classList.remove('show');if(supPoll){clearInterval(supPoll);supPoll=null;}localStorage.setItem('apex_sup_seen',Date.now());}
 async function sendSupport(){
@@ -988,7 +988,7 @@ async function sendSupport(){
 }
 if($('supInput'))$('supInput').addEventListener('keydown',e=>{if(e.key==='Enter')sendSupport();});
 async function supUnread(){const m=await supFetch();if(!m)return;const la=[...m].reverse().find(x=>x.from==='admin');const seen=+(localStorage.getItem('apex_sup_seen')||0);if(la&&la.at>seen&&!$('supPanel').classList.contains('show')){$('supDot').classList.add('on');var _st=$('supDotTop');if(_st)_st.classList.add('on');}}
-if(SUP_TOKEN){supUnread();setInterval(supUnread,15000);}
+if(SUP_TOKEN){supUnread();setInterval(function(){if(!document.hidden)supUnread();},60000);}
 
 /* ===== مزامنة الرصيد الحي مع الإدارة ===== */
 /* ===== الرصيد يُقرأ من السيرفر (المصدر الموثوق) ===== */
@@ -1026,7 +1026,25 @@ async function refreshNotifBadge(){
     else{b.style.display='none';}
   }catch(e){}
 }
-if(SUP_TOKEN){setTimeout(refreshWallet,0);setTimeout(refreshFutures,0);setTimeout(refreshNotifBadge,0);setInterval(refreshWallet,8000);setInterval(refreshFutures,8000);setInterval(refreshNotifBadge,15000);setTimeout(watchDeposits,1200);setInterval(watchDeposits,6000);}
+/* مؤقتات الحساب: تُبطأ وتتوقف عند إخفاء التبويب (كانت 8ث/6ث دائماً) */
+if(SUP_TOKEN){
+  setTimeout(refreshWallet,0);setTimeout(refreshFutures,0);setTimeout(refreshNotifBadge,0);
+  setTimeout(watchDeposits,1200);
+  var _acct=[];
+  function _startAcct(){
+    if(_acct.length)return;
+    _acct.push(setInterval(function(){if(!document.hidden)refreshWallet();},30000));
+    _acct.push(setInterval(function(){if(!document.hidden)refreshFutures();},30000));
+    _acct.push(setInterval(function(){if(!document.hidden)refreshNotifBadge();},45000));
+    _acct.push(setInterval(function(){if(!document.hidden)watchDeposits();},20000));
+  }
+  function _stopAcct(){_acct.forEach(clearInterval);_acct=[];}
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden)_stopAcct();
+    else{_startAcct();refreshWallet();refreshFutures();}
+  });
+  _startAcct();
+}
 
 /* ===== الرصيد والمحفظة ===== */
 function loadWallet(){const k=walletKey();const w=localStorage.getItem(k);if(w){try{return JSON.parse(w);}catch(e){}}
@@ -1182,7 +1200,11 @@ async function poll(){
     renderMarkets(); renderBalance();
   }catch(e){/* تجاهل مؤقت وأعد المحاولة في الدورة القادمة */}
 }
-renderBalance(); renderMarkets(); poll(); setInterval(poll,6000);
+/* ===== توفير باندويث: توقف كامل عند إخفاء التبويب (15ث أثناء العرض) ===== */
+var POLL_MS=15000,_pollTimer=null;
+function _startPoll(){if(_pollTimer)return;_pollTimer=setInterval(function(){if(!document.hidden)poll();},POLL_MS);}
+function _stopPoll(){if(_pollTimer){clearInterval(_pollTimer);_pollTimer=null;}}
+renderBalance(); renderMarkets(); poll(); _startPoll();
 /* تحديث فوري عند تغيّر سعر APX من لوحة الأدمن */
 if(window.APX&&APX.onChange){APX.onChange(function(){try{poll();}catch(e){}});}
 
@@ -1408,7 +1430,7 @@ function initKycStatus(){
   if(cached)applyKycStatus(cached);
   fetchKyc();
   if(KYC_POLL)clearInterval(KYC_POLL);
-  KYC_POLL=setInterval(fetchKyc,15000);
+  KYC_POLL=setInterval(function(){if(!document.hidden)fetchKyc();},60000);
 }
 window.onApexLang=function(){if(KYC_CUR)applyKycStatus(KYC_CUR);};
 

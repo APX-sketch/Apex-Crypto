@@ -1781,6 +1781,19 @@ prices.start();
 
 // ---- Full market cache: the ONLY thing that pulls the full Binance list ----
 const markets = new MarketCache({ refreshMs: REFRESH_MS });
+/* أي عملة/زوج يملكه مستخدم فتعني أن المنصّة تعرضه: نُبقيه في القائمة
+   حتى لو أُضيف بعد النشر. هذا يمنع اختفاء عملة جديدة بسبب الفلترة. */
+try {
+  markets.setHoldingsSource(() => {
+    const out = {};
+    for (const u of ((store.db && Array.isArray(store.db.users)) ? store.db.users : [])) {
+      const b = u && u.balances;
+      if (!b) continue;
+      for (const k in b) { if (+b[k] > 0) out[String(k).toUpperCase()] = 1; }
+    }
+    return out;
+  });
+} catch (e) {}
 markets.start();
 
 // ---- Connection watchdog: auto-recover, and let the process manager restart
@@ -1935,7 +1948,26 @@ app.get('/api/prices/:symbol', (req, res) => {
 
 // Full market list (all pairs), served from OUR cache. Same shape as Binance's
 // /api/v3/ticker/24hr so the frontend needs only a URL change.
+/* =====================================================================
+ *  /api/markets — أكبر مستهلك للباندويث على الخطة المجانية.
+ *  ثلاثة تحسينات:
+ *   1) نرسل الأزواج المعروضة فقط (فلترة في marketCache) لا كل السوق.
+ *   2) نسخة gzip محسوبة مرة واحدة لكل دورة تحديث (لا لكل طلب).
+ *   3) ETag + 304: إن لم يتغيّر شيء، المتصفح لا يستقبل بايتات إطلاقاً.
+ * ===================================================================== */
 app.get('/api/markets', (req, res) => {
+  const { gz } = markets.getPayload(zlib);
+  const etag = 'W/"mk-' + (markets.updatedAt || 0) + '"';
+  res.setHeader('ETag', etag);
+  res.setHeader('Cache-Control', 'no-cache');   // يتحقق دائماً، لكن 304 بلا جسم
+  if (req.headers['if-none-match'] === etag) return res.status(304).end();
+
+  if (gz && /\bgzip\b/.test(req.headers['accept-encoding'] || '')) {
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Encoding', 'gzip');
+    res.setHeader('Vary', 'Accept-Encoding');
+    return res.end(gz);
+  }
   res.json(markets.getAll());
 });
 

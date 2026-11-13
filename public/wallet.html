@@ -682,12 +682,39 @@ function closeNotif(){var s=document.getElementById('notifSheet');if(s)s.style.d
 /* للمستخدم المُسجّل: السيرفر هو المصدر الوحيد للرصيد، لذا لا نعرض أي رصيد مخزّن
    محلياً قديم (لتجنّب ظهوره ثم اختفائه)؛ ننتظر ردّ السيرفر. */
 if(TOK){for(var _k in wallet)wallet[_k]=0;}
-injectApx();renderBalances();renderFavs();poll();setInterval(poll,5000);
+injectApx();renderBalances();renderFavs();poll();
+/* ===== توفير باندويث (خطة Render المجانية) =====
+   كانت الصفحة تطلب 12 مرة/دقيقة لكل زائر مفتوح.
+   الآن 15 ثانية أثناء العرض، وتوقف تام عند إخفاء التبويب. */
+var POLL_MS=15000,_pollTimer=null;
+function _startPoll(){if(_pollTimer)return;_pollTimer=setInterval(function(){if(!document.hidden)poll();},POLL_MS);}
+function _stopPoll(){if(_pollTimer){clearInterval(_pollTimer);_pollTimer=null;}}
+document.addEventListener('visibilitychange',function(){
+  if(document.hidden){_stopPoll();}else{_startPoll();try{poll();}catch(e){}}
+});
+window.addEventListener('pagehide',_stopPoll);
+_startPoll();
 /* تحديث APX لحظياً مع حركة الشارت + أي تغيير من الإدارة */
 /* تحديث حيّ للسعر كل 3 ثوان (بدل ثانية) — renderBalances أصبحت تحدّث
    الأرقام فقط لا تبني الصفوف، فالأيقونات ثابتة ولا ترمش. */
-if(window.APX){APX.onChange&&APX.onChange(function(){injectApx();renderBalances();});setInterval(function(){injectApx();renderBalances();},3000);}
-if(TOK){pullWallet();setInterval(pullWallet,8000);syncSeen();setInterval(syncSeen,20000);pullNotif();setInterval(pullNotif,12000);}
+/* APX محلي بالكامل (بلا شبكة) — تحديث العرض فقط عند حركته فعلياً */
+if(window.APX){APX.onChange&&APX.onChange(function(){injectApx();renderBalances();});setInterval(function(){if(!document.hidden){injectApx();renderBalances();}},10000);}
+/* مزامنة الحساب: أبطأ + تتوقف عند إخفاء التبويب (كانت 8ث/12ث دائماً) */
+if(TOK){
+  pullWallet();syncSeen();pullNotif();
+  var _wt=[];
+  function _startWt(){
+    if(_wt.length)return;
+    _wt.push(setInterval(function(){if(!document.hidden)pullWallet();},30000));
+    _wt.push(setInterval(function(){if(!document.hidden)syncSeen();},60000));
+    _wt.push(setInterval(function(){if(!document.hidden)pullNotif();},45000));
+  }
+  function _stopWt(){_wt.forEach(clearInterval);_wt=[];}
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden)_stopWt();else{_startWt();pullWallet();}
+  });
+  _startWt();
+}
 </script>
 <script>
 /* ===== محفظة العقود الآجلة (منفصلة عن الفوري) + التحويل الداخلي ===== */
@@ -851,9 +878,10 @@ window.doTransfer=doTransfer;
 /* دمج إخفاء الرصيد مع العروض الجديدة */
 var _origToggleEye=toggleEye;
 window.toggleEye=toggleEye=function(){_origToggleEye();renderOverview();renderFutures();};
-if(TOK){fetchFutures();setInterval(fetchFutures,8000);}
-if(TOK){loadFrozen();setInterval(loadFrozen,15000);}
-setInterval(function(){renderOverview();if($('view-futures').classList.contains('on'))renderFutures();},5000);
+if(TOK){fetchFutures();setInterval(function(){if(!document.hidden)fetchFutures();},30000);}
+if(TOK){loadFrozen();setInterval(function(){if(!document.hidden)loadFrozen();},45000);}
+/* رسم الواجهة محلي 100% (بلا شبكة) — أبطأ قليلاً لتوفير المعالج */
+setInterval(function(){if(document.hidden)return;renderOverview();if($('view-futures').classList.contains('on'))renderFutures();},15000);
 try{var _av=new URLSearchParams(location.search).get('acc')||(location.hash||'').replace('#','');
   if(_av==='futures'||_av==='spot'||_av==='funding'||_av==='overview')switchAccView(_av);}catch(e){}
 renderOverview();
