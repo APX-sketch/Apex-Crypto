@@ -13,6 +13,7 @@
 (function(){try{var s=JSON.parse(localStorage.getItem('skygo_session')||'null')||{};var tok=(s&&s.token)||localStorage.getItem('apex_token')||'';var owner=(((s&&s.email)||'')+'').toLowerCase()||tok||'';if(!owner)return;var prev=localStorage.getItem('apex_acct_owner')||'';if(prev!==owner){var KEEP={'apex_lang':1,'apex_acct_owner':1,'apex_admin_token':1,'skygo_session':1,'apex_token':1,'apex_2fa':1,'apex_bio':1,'apex_hidebal':1,'apex_anti':1};var PFX=['skygo_wallet_','skygo_futures_','apex_apx','apex_fees_collected','apex_kyc_status','apex_favs_','apex_alerts_','apex_scan_addr','apex_sup_','apex_square_'];var kill=[];for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(!k||KEEP[k])continue;for(var j=0;j<PFX.length;j++){if(k.indexOf(PFX[j])===0){kill.push(k);break;}}}kill.forEach(function(k){try{localStorage.removeItem(k);}catch(e){}});localStorage.setItem('apex_acct_owner',owner);}}catch(e){}})();
 </script>
 <meta charset="UTF-8">
+<script src="api-config.js"></script>
 <script src="i18n.js"></script>
 <script src="apx-coin.js"></script>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
@@ -77,6 +78,7 @@ html[data-theme=light] .hdr{background:linear-gradient(135deg,#ffffff,#eef1f6)}
 .mrow .fav.on svg{stroke:var(--gold2);fill:var(--gold2)}
 .mrow img{width:30px;height:30px;border-radius:50%;flex:0 0 auto;background:var(--panel2)}
 .mrow .apxlogo{width:30px;height:30px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:16px;color:#231a02;background:linear-gradient(135deg,var(--gold1),var(--gold2))}
+.mrow .cico{width:30px;height:30px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px;color:#0b1016;background:linear-gradient(135deg,#3a4b5f,#5a708c);overflow:hidden}
 .mrow .nm{flex:0 1 auto;min-width:0;max-width:44%}
 .mrow .nm b{font-size:14px;font-weight:800;display:block;white-space:nowrap}
 .mrow .nm b .tag{font-size:10px;color:var(--muted);font-weight:700;margin-right:3px}
@@ -225,7 +227,17 @@ const $=id=>document.getElementById(id);
 const fmt=(n,d=2)=>Number(n).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
 function fmtPx(p){p=+p;if(!isFinite(p)||p<=0)return null;if(p>=1)return p.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});if(p>=0.1)return p.toFixed(4);if(p>=0.001)return p.toFixed(6);return p.toFixed(10).replace(/0+$/,'');}
 function fmtVol(v){v=+v;if(!isFinite(v)||v<=0)return '-';if(v>=1e9)return (v/1e9).toFixed(2)+'B';if(v>=1e6)return (v/1e6).toFixed(2)+'M';if(v>=1e3)return (v/1e3).toFixed(1)+'K';return v.toFixed(0);}
-function icoUrl(b){return 'https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/128/color/'+b.toLowerCase()+'.png';}
+function icoUrl(b){return 'https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/128/color/'+String(b||'').toLowerCase()+'.png';}
+function icoUrl2(b){return 'https://assets.coincap.io/assets/icons/'+String(b||'').toLowerCase()+'@2x.png';}
+function icoImg(base){
+  var b=String(base||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6);
+  var letter=b.slice(0,1)||'?';
+  return '<span class="icoWrap" style="position:relative;width:30px;height:30px;flex:0 0 auto">'+
+    '<img class="cio" data-sym="'+b+'" src="'+icoUrl(b)+'" alt="'+letter+'" style="width:30px;height:30px;border-radius:50%;object-fit:cover;background:#1b2430" '+
+    'onerror="if(!this.dataset.alt){this.dataset.alt=1;this.src=icoUrl2(this.dataset.sym);}else{this.style.display=&#39;none&#39;;var n=this.nextElementSibling;if(n)n.style.display=&#39;flex&#39;;}">'+
+    '<span class="cico" style="display:none;position:absolute;inset:0">'+letter+'</span>'+
+    '</span>';
+}
 const QUOTES=['USDT','USDC','FDUSD','BUSD','TUSD','BTC','ETH','BNB'];
 const STABLE=['USDT','USDC','FDUSD','BUSD','TUSD'];
 const MAJ=['BTC','ETH','BNB','SOL','XRP','DOGE','ADA','LTC','LINK','AVAX','DOT','TRX','BCH'];
@@ -296,7 +308,7 @@ function render(){
     const up=r.pct>=0;
     const prev=pxPrev[r.sym];let dir='eq';if(prev!=null){if(r.price>prev)dir='up';else if(r.price<prev)dir='dn';}pxPrev[r.sym]=r.price;
     const isApx=(window.APX&&r.base===APX.BASE);
-    const logo=isApx?'<span class="apxlogo">A</span>':'<img src="'+icoUrl(r.base)+'" onerror="this.style.visibility=\'hidden\'">';
+    const logo=isApx?'<span class="apxlogo">A</span>':icoImg(r.base);
     const tag=r.mkt?'<span class="tag">'+r.mkt+'</span>':'';
     const sub='حجم '+fmtVol(r.vol)+' • '+esc(r.base)+'/'+esc(r.quote||'');
     const href=routeFut?('futures.html?symbol='+r.sym.toLowerCase()):('trading.html?symbol='+r.sym.toLowerCase());

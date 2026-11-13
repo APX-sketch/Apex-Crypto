@@ -2143,6 +2143,30 @@ function bearer(req) {
   return h.startsWith('Bearer ') ? h.slice(7).trim() : '';
 }
 
+// اضبط كوكي الجلسة ليتمكّن حارس الصفحات من معرفة المستخدم عند فتح صفحة HTML
+// مباشرة (بدون هيدر Authorization). الكوكي httpOnly + Secure + SameSite=Lax
+// بمدة 7 أيام؛ لا تُخزَّن فيها بيانات حسّاسة، فقط التوكين الموقّع.
+const SESSION_COOKIE = 'apex_token';
+const SESSION_COOKIE_MAX_AGE = 7 * 24 * 60 * 60;
+function setSessionCookie(res, token) {
+  try {
+    const secure = String(process.env.RENDER || process.env.NODE_ENV || '').length > 0
+      || String(process.env.COOKIE_SECURE || '') === '1';
+    const parts = [
+      SESSION_COOKIE + '=' + encodeURIComponent(String(token || '')),
+      'Path=/',
+      'HttpOnly',
+      'SameSite=Lax',
+      'Max-Age=' + SESSION_COOKIE_MAX_AGE,
+    ];
+    if (secure) parts.push('Secure');
+    res.append('Set-Cookie', parts.join('; '));
+  } catch (e) {}
+}
+function clearSessionCookie(res) {
+  try { res.append('Set-Cookie', SESSION_COOKIE + '=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0'); } catch (e) {}
+}
+
 // User auth guard — verifies the signed session token and loads the user
 // from MySQL (source of truth for identity + status). Balances / deposits are
 // merged from the JSON store ledger, keyed by the SAME user id (as a string).
@@ -2293,7 +2317,7 @@ app.post('/api/auth/login', strictLimiter, async (req, res) => {
       if (!force2fa && deviceId && trustToken && DEVICE_ID_RE.test(deviceId) && verifyDeviceToken(trustToken, user.id, deviceId)) {
         try { await pool.query('UPDATE users SET last_seen = ? WHERE id = ?', [Date.now(), user.id]); } catch (e) {}
         const token = signUserToken(user.id);
-        return res.json({ ok: true, token, status: user.status || 'pending', user: dbPublicUser(user), trusted: true });
+        return setSessionCookie(res, token); res.json({ ok: true, token, status: user.status || 'pending', user: dbPublicUser(user), trusted: true });
       }
 
       const emailNorm = String(user.email || '').trim().toLowerCase();
@@ -2307,7 +2331,7 @@ app.post('/api/auth/login', strictLimiter, async (req, res) => {
     // 5. (بدون OTP) نجاح الدخول: أصدر توكناً موقّعاً
     try { await pool.query('UPDATE users SET last_seen = ? WHERE id = ?', [Date.now(), user.id]); } catch (e) {}
     const token = signUserToken(user.id);
-    res.json({ ok: true, token, status: user.status || 'pending', user: dbPublicUser(user) });
+    setSessionCookie(res, token); res.json({ ok: true, token, status: user.status || 'pending', user: dbPublicUser(user) });
   } catch (err) {
     console.error('Login Error:', err);
     res.status(500).json({ error: 'Login failed' });
@@ -2332,6 +2356,7 @@ app.post('/api/auth/login/verify-otp', strictLimiter, async (req, res) => {
 
     try { await pool.query('UPDATE users SET last_seen = ? WHERE id = ?', [Date.now(), user.id]); } catch (e) {}
     const token = signUserToken(user.id);
+    setSessionCookie(res, token);
     const resp = { ok: true, token, status: user.status || 'pending', user: dbPublicUser(user) };
     // تذكّر الجهاز: إن طلب العميل ذلك وأرسل deviceId صالحاً
     // نُصدِر trustToken يخزنه العميل لتجاوز OTP في المرات القادمة.
@@ -2346,6 +2371,18 @@ app.post('/api/auth/login/verify-otp', strictLimiter, async (req, res) => {
     console.error('Login OTP verify error:', err);
     res.status(500).json({ error: 'otp_verify_failed' });
   }
+});
+
+// ---- تسجيل الخروج: يبطل الجلسة النشطة ويمسح الكوكي ----
+app.post('/api/auth/logout', async (req, res) => {
+  try {
+    const tok = verifyUserToken(bearer(req) || tokenFromRequest(req));
+    if (tok && tok.id) {
+      try { activeSessions[String(tok.id)] = ''; saveSessions(); } catch (e) {}
+    }
+  } catch (e) {}
+  clearSessionCookie(res);
+  res.json({ ok: true });
 });
 
 // ---- إعادة إرسال رمز دخول جديد ----
@@ -2398,7 +2435,7 @@ app.post('/api/auth/biometric/login', strictLimiter, async (req, res) => {
     if (user.status === 'banned') return res.status(403).json({ error: 'banned' });
     try { await pool.query('UPDATE users SET last_seen = ? WHERE id = ?', [Date.now(), user.id]); } catch (e) {}
     const token = signUserToken(user.id);
-    res.json({ ok: true, token, status: user.status || 'pending', user: dbPublicUser(user), biometric: true });
+    setSessionCookie(res, token); res.json({ ok: true, token, status: user.status || 'pending', user: dbPublicUser(user), biometric: true });
   } catch (err) {
     console.error('Biometric login error:', err);
     res.status(500).json({ error: 'bio_login_failed' });
@@ -5427,6 +5464,71 @@ app.delete('/api/square/posts/:id', requireUser, async (req, res) => {
 // تخزين المتصفّح: الأصول الثابتة (صور/CSS/JS/خطوط) تُخزّن أسبوعاً فيالمتصفّح
 // فلا يُعاد تحميلها عند الزيارة العائدة (أكبر توفير لأن الصور كثيرة وثقيلة).
 // صفحات HTML تبقى «no-cache» (تُراجَع دائماً وتردّ 304 إن لم تتغيّر) لتظلّ محدّثة بعد النشر.
+
+// ================= حماية صفحات الموقع (Page Guard) =================
+// قبل تقديم أي ملف من public نتحقّق: هل الطالب مسجّل دخول فعلاً؟
+// كان المجلد كلّه مكشوفاً عبر express.static، فأي شخص يكتب /wallet.html
+// أو /admin.html في شريط العنوان يفتح الصفحة بلا تسجيل دخول.
+// الحل: قائمة صفحات عامة مسموحة صراحةً، وكل ما عداها يتطلّب توكناً موقّعاً صالحاً.
+const PUBLIC_PAGES = new Set([
+  'index.html', 'login.html', 'register.html', 'landing.html', 'Landing.html',
+  'guide.html', 'quick-start.html', 'markets.html', 'square-guide.html',
+  'square-stats.html', 'reset-password.html', 'verify.html', 'terms.html',
+  'privacy.html', '404.html', 'offline.html', 'trast.html', 'favicon.ico', 'robots.txt',
+]);
+// تنبيه: أي صفحة جديدة تُضاف لاحقاً تُعتبر محمية تلقائياً إلا إذا أُدرجت هنا.
+// الصفحات المحمية الحالية: wallet, trading, futures, admin, settings, profile,
+// deposit, withdraw, transfer, copy, square, assets, convert, notifications ...
+
+// اقبل التوكن من هيدر Authorization أو من الكوكي (cookie) — الصفحات تُفتح
+// في المتصفّح فلا تحمل هيدر، لكن قد يحمل المتصفّح كوكي apex_token.
+function tokenFromRequest(req) {
+  const h = String(req.headers.authorization || '');
+  let tok = h.startsWith('Bearer ') ? h.slice(7).trim() : '';
+  if (!tok) {
+    const raw = String(req.headers.cookie || '');
+    for (const part of raw.split(';')) {
+      const i = part.indexOf('=');
+      if (i < 0) continue;
+      const k = part.slice(0, i).trim();
+      if (k === 'apex_token' || k === 'apex_session') {
+        try { tok = decodeURIComponent(part.slice(i + 1).trim()); } catch (e) { tok = part.slice(i + 1).trim(); }
+        break;
+      }
+    }
+  }
+  // بعض الصفحات ترسل التوكن كبارامتر عند الانتقال (window.location + '?t=' )
+  if (!tok && req.query && req.query.t) tok = String(req.query.t);
+  return tok;
+}
+
+function pageIsAuthed(req) {
+  const tok = verifyUserToken(tokenFromRequest(req));
+  if (!tok) return false;
+  const activeSid = getActiveSid(tok.id);
+  if (activeSid && tok.sid !== activeSid) return false;   // جهاز آخر سجّل دخوله
+  return true;
+}
+
+app.use((req, res, next) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+  const rawPath = String(req.path || '/');
+  if (rawPath.startsWith('/api/')) return next();          // الـAPI يحمي نفسه بـrequireUser
+
+  // هل المطلوب ملف HTML؟ (الصفحة الجذرية تُعامَل كـ index.html)
+  let name = rawPath === '/' ? 'index.html' : rawPath.replace(/^\/+/, '');
+  if (!/\.html?$/i.test(name)) return next();              // أصول ثابتة (css/js/صور) تمرّ
+
+  const leaf = name.split('/').pop().toLowerCase();
+  if (PUBLIC_PAGES.has(leaf)) return next();               // صفحات عامة لا تحتاج دخولاً
+  if (pageIsAuthed(req)) return next();                    // مسجّل دخول → اسمح
+
+  // غير مسجّل حاول فتح صفحة محمية: أعِده لتسجيل الدخول مع وجهته
+  const nxt = encodeURIComponent('/' + name);
+  res.setHeader('Cache-Control', 'no-store');
+  return res.redirect(302, 'login.html?next=' + nxt);
+});
+
 app.use(express.static(join(__dirname, 'public'), {
   etag: true,
   lastModified: true,
