@@ -229,12 +229,22 @@ function fmtPx(p){p=+p;if(!isFinite(p)||p<=0)return null;if(p>=1)return p.toLoca
 function fmtVol(v){v=+v;if(!isFinite(v)||v<=0)return '-';if(v>=1e9)return (v/1e9).toFixed(2)+'B';if(v>=1e6)return (v/1e6).toFixed(2)+'M';if(v>=1e3)return (v/1e3).toFixed(1)+'K';return v.toFixed(0);}
 function icoUrl(b){return 'https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/128/color/'+String(b||'').toLowerCase()+'.png';}
 function icoUrl2(b){return 'https://assets.coincap.io/assets/icons/'+String(b||'').toLowerCase()+'@2x.png';}
+// ذاكرة شعارات: نعرف أي رمز تصويره ناجح وأي رمز لا يوجد له شعار،
+// فلا نعيد تحميل الصورة ولا نعيد محاولة الفاشلة عند كل تحديث.
+var ICO_BAD={};        // رموز فشل تحميلها نهائياً
+var ICO_GOOD={};       // رموز تم تحميلها بنجاح (تُخزَّن بالمتصفح أسبوعاً)
 function icoImg(base){
   var b=String(base||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6);
   var letter=b.slice(0,1)||'?';
+  if(ICO_BAD[b]){
+    // لا نضع img أبداً: دائرة بحرف العملة مباشرة (بلا طلب شبكة)
+    return '<span class="cico" style="width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex:0 0 auto">'+letter+'</span>';
+  }
   return '<span class="icoWrap" style="position:relative;width:30px;height:30px;flex:0 0 auto">'+
-    '<img class="cio" data-sym="'+b+'" src="'+icoUrl(b)+'" alt="'+letter+'" style="width:30px;height:30px;border-radius:50%;object-fit:cover;background:#1b2430" '+
-    'onerror="if(!this.dataset.alt){this.dataset.alt=1;this.src=icoUrl2(this.dataset.sym);}else{this.style.display=&#39;none&#39;;var n=this.nextElementSibling;if(n)n.style.display=&#39;flex&#39;;}">'+
+    '<img class="cio" data-sym="'+b+'" src="'+icoUrl(b)+'" alt="'+letter+'" loading="eager" decoding="async" '+
+    'style="width:30px;height:30px;border-radius:50%;object-fit:cover;background:#1b2430" '+
+    'onload="this.style.visibility=&#39;visible&#39;;this.dataset.ok=1;" '+
+    'onerror="if(!this.dataset.alt){this.dataset.alt=1;this.src=icoUrl2(this.dataset.sym);}else{ICO_BAD[this.dataset.sym]=1;this.style.display=&#39;none&#39;;var n=this.nextElementSibling;if(n)n.style.display=&#39;flex&#39;;}">'+
     '<span class="cico" style="display:none;position:absolute;inset:0">'+letter+'</span>'+
     '</span>';
 }
@@ -303,7 +313,17 @@ function render(){
   list=sortList(list);
   if(!list.length){body.innerHTML=emptyState();return;}
   const routeFut=(CAT==='crypto'&&(SUB==='usdm'||SUB==='coinm'));
+  // ===== تحديث ذكي: لا نعيد بناء الصفوف (كان يُعيد تحميل الشعارات فتُختفي
+  // لحظة كل تحديث سعر). نبني الهيكل مرة واحدة، وبعدها نُحدّث الأرقام فقط.
   const banner=(CAT==='crypto')?copyBanner():'';
+  const sig=banner+'|'+list.map(r=>r.sym).join(',');
+  if(body.dataset.sig===sig && body.querySelector('.mrow')){
+    updateRows(body,list);
+    return;
+  }
+  // نفس المجموعة لكن تغيّر الترتيب؟ نعيد الترتيب فقط عند طلب المستخدم للفرز
+  // أو عند تغيّر مجموعة الرموز — وليس مع كل تغيّر سعر (لتفادي «قفز» الصفوف).
+  body.dataset.sig=sig;
   body.innerHTML=banner+list.map(r=>{
     const up=r.pct>=0;
     const prev=pxPrev[r.sym];let dir='eq';if(prev!=null){if(r.price>prev)dir='up';else if(r.price<prev)dir='dn';}pxPrev[r.sym]=r.price;
@@ -312,14 +332,56 @@ function render(){
     const tag=r.mkt?'<span class="tag">'+r.mkt+'</span>':'';
     const sub='حجم '+fmtVol(r.vol)+' • '+esc(r.base)+'/'+esc(r.quote||'');
     const href=routeFut?('futures.html?symbol='+r.sym.toLowerCase()):('trading.html?symbol='+r.sym.toLowerCase());
-    return '<div class="mrow" onclick="location.href=\''+href+'\'">'+
+    return '<div class="mrow" data-sym="'+esc(r.sym)+'" onclick="location.href=\''+href+'\'">'+
       '<span class="fav'+(FAVS.includes(r.sym)?' on':'')+'" onclick="toggleFav(event,\''+r.sym+'\')">'+STAR+'</span>'+
       logo+
-      '<div class="nm"><b>'+esc(r.base)+tag+'</b><span>'+sub+'</span></div>'+
+      '<div class="nm"><b>'+esc(r.base)+tag+'</b><span class="hsub">'+sub+'</span></div>'+
       '<span class="mpx px '+dir+'">$'+fmtPx(r.price)+'</span>'+
       '<span class="mpc pc '+(up?'up':'dn')+'">'+(up?'+':'')+r.pct.toFixed(2)+'%</span>'+
     '</div>';
   }).join('');
+}
+/* ===== تحديث الأرقام داخل الصفوف الموجودة (بلا لمس الصورة) ===== */
+function updateRows(body,list){
+  const map={};list.forEach(r=>{map[r.sym]=r;});
+  const rows=body.querySelectorAll('.mrow[data-sym]');
+  for(let i=0;i<rows.length;i++){
+    const el=rows[i];
+    const r=map[el.dataset.sym];
+    if(!r)continue;
+    // السعر
+    const pEl=el.querySelector('.mpx');
+    if(pEl){
+      const prev=pxPrev[r.sym];
+      if(prev==null){
+        pxPrev[r.sym]=r.price;                    // أول قيمة: بلا وميض
+      } else if(prev!==r.price){
+        pEl.textContent='$'+fmtPx(r.price);
+        pEl.classList.remove('up','dn','eq');
+        void pEl.offsetWidth;                     // إعادة تشغيل الأنيميشن
+        pEl.classList.add(r.price>prev?'up':'dn');
+        pxPrev[r.sym]=r.price;
+      }
+    }
+    // النسبة
+    const cEl=el.querySelector('.mpc');
+    if(cEl){
+      const up=r.pct>=0;
+      const txt=(up?'+':'')+r.pct.toFixed(2)+'%';
+      if(cEl.textContent!==txt)cEl.textContent=txt;
+      cEl.classList.toggle('up',up);
+      cEl.classList.toggle('dn',!up);
+    }
+    // الحجم (يتغيّر ببطء — نحدّثه فقط إذا تغيّر ظاهرياً)
+    const sEl=el.querySelector('.hsub');
+    if(sEl){
+      const t='حجم '+fmtVol(r.vol)+' • '+esc(r.base)+'/'+esc(r.quote||'');
+      if(sEl.textContent!==t)sEl.textContent=t;
+    }
+    // النجمة (تفضيلات)
+    const fEl=el.querySelector('.fav');
+    if(fEl)fEl.classList.toggle('on',FAVS.includes(r.sym));
+  }
 }
 /* ===== نسخ التداول (شريط) ===== */
 function copyBanner(){

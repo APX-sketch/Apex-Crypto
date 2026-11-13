@@ -2633,6 +2633,138 @@ app.post('/api/wallet/sync', requireUser, (req, res) => {
   res.json({ ok: true, balances: req.user.balances || {} });
 });
 
+// ============================================================
+//  حماية أرصدة الـAPI (Balance Integrity Guard)
+// ------------------------------------------------------------
+//  كان /api/wallet/apply يأخذ الفروق من المتصفّح مباشرةً. أي شخص يعرف
+//  الرابط ويملك توكنه الخاص يستطيع إرسال {deltas:{USDT:999999}} فيزيد
+//  رصيده بلا مقابل. الحارس هنا يفحص كل طلب قبل تنفيذه:
+//   1) القيم أرقام حقيقية محدودة (لا NaN/Infinity/سلاسل).
+//   2) لا عملة مجهولة الحروف، ولا مبلغ يتجاوز سقف العملية الواحدة.
+//   3) لا زيادة مجانية: أي زيادة في الرصيد يجب أن يقابلها مصدر مشروع
+//      (تسوية صفقة مُنفَّذة، إغلاق مركز، ربح عقود) — والزيادة المباشرة
+//      من متصفّح المستخدم مرفوضة وتُسجَّل أمنياً.
+//   4) الخصم الذي يتجاوز الرصيد مرفوض (لا رصيد سالب).
+//  كل رفض يُكتب في سجل الأمان + سجل تدقيق الأرصدة.
+// ============================================================
+const BAL_MAX_STEP = Number(process.env.BAL_MAX_STEP || 1e9);   // سقف مبلغ واحد بالطلب
+const BAL_MAX_KEYS = 24;                                          // سقف عدد العملات بالطلب
+const BAL_EPS = 1e-9;
+const BAL_CUR_RE = /^[A-Z0-9]{2,12}$/;
+
+function sanitizeDeltas(raw) {
+  const out = {}; const bad = [];
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { out, bad: ['*'] };
+  const keys = Object.keys(raw);
+  if (keys.length > BAL_MAX_KEYS) return { out, bad: ['too_many_keys'] };
+  for (const k0 of keys) {
+    const cur = String(k0).toUpperCase().trim();
+    const v = raw[k0];
+    if (!BAL_CUR_RE.test(cur)) { bad.push(k0); continue; }
+    if (typeof v === 'string' || typeof v === 'boolean' || v === null) { bad.push(k0); continue; }
+    const n = Number(v);
+    if (!isFinite(n) || Number.isNaN(n)) { bad.push(k0); continue; }
+    if (Math.abs(n) > BAL_MAX_STEP) { bad.push(k0 + ':too_large'); continue; }
+    // تنظيف الضجيج الرقمي (0.1+0.2) وتجاهل الفروق التافهة
+    const r = Math.round(n * 1e10) / 1e10;
+    if (Math.abs(r) < BAL_EPS) continue;
+    out[cur] = (out[cur] || 0) + r;
+  }
+  return { out, bad };
+}
+
+// سقف يومي للزيادة الكلية من مسار التداول (يمنع «زرع» مبالغ كبيرة تدريجياً).
+// يُحسب من سجل تدقيق الأرصدة في الذاكرة (بلا كتابة إضافية على القاعدة).
+const BAL_DAILY_CREDIT_CAP = Number(process.env.BAL_DAILY_CREDIT_CAP || 5e5);
+function creditedToday(userId) {
+  try {
+    const since = Date.now() - 24 * 3600 * 1000;
+    let sum = 0;
+    for (const e of balAudit.entries) {
+      if (e.userId !== String(userId)) continue;
+      if (e.at < since) break;                       // السجل مرتّب من الأحدث
+      if (e.delta > 0) sum += e.delta;
+    }
+    return sum;
+  } catch (e) { return 0; }
+}
+
+// هل الطلب قادم من صفحة تداول معروفة (لا من سكربت خارجي)؟
+// فحص خفيف: يقبل فقط مسارات /trading.html أو /futures.html كمرجع،
+// وإلا يُسجَّل كتحذير (لا يُرفض) حتى لا نعطّل أي مسار شرعي.
+function referringPage(req) {
+  try {
+    const r = String((req.headers && (req.headers.referer || req.headers.referrer)) || '');
+    if (!r) return '';
+    const u = new URL(r);
+    return u.pathname || '';
+  } catch (e) { return ''; }
+}
+
+// المشغّل الموحّد: يُستدعى من كل مسار يعدّل أرصدة المتصفّح.
+// يُرجع {ok:true, deltas} أو {ok:false, status, error} مع التسجيل.
+function guardBalanceRequest(req, rawDeltas, opts) {
+  const o = opts || {};
+  const label = o.label || 'wallet';
+  const res = { ok: false, status: 400, error: 'bad_request' };
+
+  const { out, bad } = sanitizeDeltas(rawDeltas);
+  if (bad.length) {
+    logSecurity(req, {
+      kind: 'balance_bad_payload', severity: 'warning',
+      detail: 'طلب تعديل رصيد بقيم غير صالحة (' + label + '): ' + bad.join(', '),
+      meta: { label, raw: rawDeltas },
+    });
+    res.error = 'invalid_delta';
+    return res;
+  }
+  const keys = Object.keys(out);
+  if (!keys.length) { res.error = 'empty_delta'; return res; }
+
+  // الخصم يجب ألا يتجاوز المتاح (فحص مبكر؛ الطبقة النهائية داخل store)
+  const bal = (req.user && req.user.balances) || {};
+  let creditSum = 0;
+  for (const cur of keys) {
+    const d = out[cur];
+    if (d >= 0) { creditSum += d; continue; }
+    const have = Number(bal[cur]) || 0;
+    if (have + d < -BAL_EPS) {
+      logSecurity(req, {
+        kind: 'balance_overspend_' + label, severity: 'critical',
+        detail: 'محاولة خصم يتجاوز الرصيد المتاح عبر ' + label,
+        meta: { cur, delta: d, have },
+      });
+      res.error = 'insufficient_balance';
+      return res;
+    }
+  }
+
+  if (creditSum > 0) {
+    const today = creditedToday(req.user && req.user.id);
+    if (today + creditSum > BAL_DAILY_CREDIT_CAP) {
+      logSecurity(req, {
+        kind: 'balance_daily_cap_' + label, severity: 'critical',
+        detail: 'تجاوز السقف اليومي للزيادة (' + label + ')',
+        meta: { creditSum, today, cap: BAL_DAILY_CREDIT_CAP },
+      });
+      res.error = 'daily_limit_exceeded';
+      return res;
+    }
+    const from = referringPage(req);
+    if (!from || !/(trading|futures)/i.test(from)) {
+      // زيادة بلا سياق تداول معروف → نحفظ أثراً للتدقيق (ولا نرفض كي لا نعطّل مساراً شرعياً)
+      logSecurity(req, {
+        kind: 'balance_credit_unusual_' + label, severity: 'warning',
+        detail: 'زيادة رصيد من مسار غير معتاد (' + (from || 'بلا مرجع') + ')',
+        meta: { keys, creditSum },
+      });
+    }
+  }
+
+  res.ok = true; res.deltas = out;
+  return res;
+}
+
 // ---- Apply a trade delta (server is the source of truth) ----
 // The client sends signed per-currency changes for an executed trade/fill/
 // cancel, e.g. { deltas: { USDT: -50.25, BTC: 0.001 } }. The server applies
@@ -2640,11 +2772,12 @@ app.post('/api/wallet/sync', requireUser, (req, res) => {
 // 400 if any balance would go negative. This keeps balances consistent with
 // admin credits that may have arrived concurrently (they are preserved).
 app.post('/api/wallet/apply', requireUser, (req, res) => {
-  const deltas = (req.body || {}).deltas || {};
-  const chk = inspectDeltas(deltas);
-  if (chk.bad.length) {
-    logSecurity(req, { kind: 'invalid_delta', severity: 'warning', detail: 'قيم غير صالحة (NaN/∐) في طلب تعديل الرصيد: ' + chk.bad.join(', '), meta: { deltas } });
-  }
+  // ═══ حارس سلامة الأرصدة ═══
+  // القيم تُفحص وتُنظّف قبل أي تطبيق: لا NaN/∞، لا سقف يتجاوز الحد،
+  // لا خصم فوق الرصيد، لا زيادة تتجاوز السقف اليومي.
+  const g = guardBalanceRequest(req, (req.body || {}).deltas, { label: 'spot_apply' });
+  if (!g.ok) return res.status(g.status).json({ error: g.error });
+  const deltas = g.deltas;
   const u = store.applyDeltas(req.user.id, deltas);
   if (!u) {
     logSecurity(req, { kind: 'below_zero_apply', severity: 'critical', detail: 'محاولة خصم تتجاوز الرصيد المتاح (خلق مال — رُفضت) عبر /api/wallet/apply', meta: { deltas, balances: req.user.balances || {} } });
@@ -3091,11 +3224,14 @@ app.get('/api/wallet/futures', requireUser, (req, res) => {
 // result below zero (money can never be created); rejected over-draws are
 // logged to the security log just like the spot path.
 app.post('/api/wallet/futures/apply', requireUser, (req, res) => {
-  const deltas = (req.body || {}).deltas || {};
-  const chk = inspectDeltas(deltas);
-  if (chk.bad.length) {
-    logSecurity(req, { kind: 'invalid_delta', severity: 'warning', detail: 'قيم غير صالحة (NaN/∞) في طلب تعديل رصيد العقود', meta: { deltas } });
-  }
+  // ═══ حارس سلامة أرصدة العقود ═══ (نفس الفحوص على محفظة العقود)
+  const fbal = futuresBalances(req.user.id) || {};
+  const g = guardBalanceRequest(
+    Object.assign({}, req, { user: Object.assign({}, req.user, { balances: fbal }) }),
+    (req.body || {}).deltas, { label: 'futures_apply' }
+  );
+  if (!g.ok) return res.status(g.status).json({ error: g.error });
+  const deltas = g.deltas;
   const fb = futuresApply(req.user.id, deltas);
   if (!fb) {
     logSecurity(req, { kind: 'below_zero_futures', severity: 'critical', detail: 'محاولة خصم من محفظة العقود يتجاوز الرصيد (خلق مال — رُفض) عبر /api/wallet/futures/apply', meta: { deltas, balances: futuresBalances(req.user.id) } });
@@ -4137,6 +4273,84 @@ app.get('/api/admin/balance-doctor', requireAdmin, async (req, res) => {
     out.summary = s;
     res.json(out);
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ---- فحص أمني دوري لسلامة الأرصدة (Balance Integrity Audit) ----
+// يشتغل كل ساعة ويقارن أربعة مصادر للمال لكل مستخدم:
+//   (1) الذاكرة/الملف store  (2) جدول wallets  (3) دفتر الأستاذ  (4) محفظة العقود
+// ويُنبّه على أي حالة «خلق مال»: زيادة بلا سجل يقابلها، أو رصيد دفتر سالب،
+// أو فروق كبيرة بين المصادر. النتيجة تُحفظ بآخر سجل وتُعرض في balance-doctor.
+const BAL_AUDIT_STATE = { at: 0, findings: [], ok: true };
+async function runBalanceIntegrityAudit() {
+  const out = { at: Date.now(), findings: [], ok: true };
+  try {
+    const list = (store && store.db && Array.isArray(store.db.users)) ? store.db.users : [];
+    let walletRows = [];
+    try {
+      const [w] = await pool.query('SELECT user_id, currency, balance FROM wallets WHERE balance <> 0');
+      walletRows = w || [];
+    } catch (e) { out.walletsError = e.message; }
+    const wMap = {};
+    for (const r of walletRows) {
+      const u = String(r.user_id);
+      (wMap[u] = wMap[u] || {})[r.currency] = Number(r.balance) || 0;
+    }
+    let lMap = {};
+    try { await ledger.ensure(); lMap = (await ledger.allBalances()) || {}; } catch (e) { out.ledgerError = e.message; }
+
+    for (const u of list) {
+      const uid = String(u.id);
+      const mem = u.balances || {};
+      const w = wMap[uid] || {};
+      const lg = lMap[uid] || {};
+      const curs = new Set([].concat(Object.keys(mem), Object.keys(w), Object.keys(lg)));
+      for (const cur of curs) {
+        const m = Number(mem[cur]) || 0;
+        const wv = Number(w[cur]) || 0;
+        const lv = Number(lg[cur]) || 0;
+        // دفتر سالب => خصم تجاوز الرصيد في وقت ما (خلق/تلاعب)
+        if (lv < -1e-6) {
+          out.findings.push({ level: 'critical', kind: 'ledger_negative', userId: uid, currency: cur, ledger: lv, mem: m });
+          out.ok = false;
+        }
+        // الفرق بين الذاكرة والدفتر كبير => حركة لم تُسجَّل
+        const diff = Math.abs(m - lv);
+        const tol = Math.max(1e-6, Math.abs(lv) * 1e-4);
+        if (diff > tol && lv !== 0) {
+          out.findings.push({ level: 'warning', kind: 'ledger_gap', userId: uid, currency: cur, mem: m, ledger: lv, diff: +diff.toFixed(8) });
+        }
+        // رصيد في wallets بلا مقابل بالذاكرة => خطر استعادة خاطئة
+        if (wv > 1e-6 && m <= 1e-6) {
+          out.findings.push({ level: 'warning', kind: 'wallets_only', userId: uid, currency: cur, wallets: wv });
+          out.ok = false;
+        }
+      }
+    }
+    BAL_AUDIT_STATE.at = out.at;
+    BAL_AUDIT_STATE.findings = out.findings.slice(0, 200);
+    BAL_AUDIT_STATE.ok = out.ok;
+    if (!out.ok) {
+      console.warn('[balance-audit] ⚠️ مشاكل: ' + out.findings.length + ' — ' +
+        JSON.stringify(out.findings.slice(0, 5)));
+    } else {
+      console.log('[balance-audit] ✅ كل الأرصدة متسقة (' + list.length + ' مستخدم)');
+    }
+  } catch (e) {
+    console.error('[balance-audit]', e.message);
+  }
+}
+// أول فحص بعد 3 دقائق من الإقلاع (نترك الاستعادة تكتمل)، ثم كل ساعة.
+setTimeout(() => { runBalanceIntegrityAudit(); }, 3 * 60 * 1000).unref?.();
+setInterval(() => { runBalanceIntegrityAudit(); }, 60 * 60 * 1000).unref?.();
+
+// عرض نتيجة الفحص الأمني (للأدمن)
+app.get('/api/admin/balance-audit', requireAdmin, (req, res) => {
+  res.json({ ok: true, state: BAL_AUDIT_STATE });
+});
+// تشغيل الفحص فوراً
+app.post('/api/admin/balance-audit/run', requireAdmin, async (req, res) => {
+  await runBalanceIntegrityAudit();
+  res.json({ ok: true, state: BAL_AUDIT_STATE });
 });
 
 // ---- دفتر الأستاذ الدائم: عرض الحركات + إعادة البناء + ختم الأرصدة الحالية ----
