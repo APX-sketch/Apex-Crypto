@@ -10,7 +10,7 @@ import rateLimit from 'express-rate-limit';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
-import { createHmac, randomBytes, timingSafeEqual, scryptSync } from 'node:crypto';
+import { createHmac, createHash, createSign, randomBytes, timingSafeEqual, scryptSync } from 'node:crypto';
 import zlib from 'node:zlib';
 
 import { PriceCache } from './lib/priceCache.js';
@@ -2318,6 +2318,175 @@ function validIdImage(v) {
 // approved / rejected) is returned so the app can show the right state
 // ("under review" banner, verified badge, or a re-verify prompt). Only
 // BANNED accounts are refused entry.
+// ==================== فحص وجود البريد (الخطوة الأولى في الدخول) ====================
+// الواجهة تسأل: هل هذا البريد مسجّل؟ ثم تُظهر كلمة المرور فقط إن وُجد.
+// (بطلبك الصريح: نكشف صراحةً عدم وجود الحساب — كما في forgot-password.)
+app.get('/api/auth/check-email', strictLimiter, async (req, res) => {
+  try {
+    const email = String((req.query || {}).email || '').trim().toLowerCase();
+    if (!email || !EMAIL_RE.test(email) || email.length > 160) return res.status(400).json({ error: 'bad_email' });
+    const user = await dbGetUserByEmail(email);
+    if (!user) return res.json({ ok: true, exists: false });
+    await maybeExpireTempBan(user);
+    return res.json({
+      ok: true, exists: true,
+      social: { google: !!user.oauth_google_id, apple: !!user.oauth_apple_id },
+      banned: user.status === 'banned',
+      pending: user.status === 'pending',
+    });
+  } catch (e) { console.error('[auth/check-email]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+// ==================== الدخول عبر Google / Apple (OAuth) ====================
+// يعمل فقط عند ضبط متغيّرات البيئة على Render:
+//   GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET  → Redirect URI: {PUBLIC_BASE_URL}/api/auth/oauth/google/callback
+//   APPLE_CLIENT_ID (Service ID) / APPLE_TEAM_ID / APPLE_KEY_ID / APPLE_PRIVATE_KEY (.p8)
+//   PUBLIC_BASE_URL  (مثال: https://apex-crypto-1.onrender.com)
+// بدون الضبط: /api/auth/oauth/config يعيد false والواجهة تخبر المستخدم أن المزوّد غير مفعّل.
+const OAUTH_PKCE = new Map();       // state → { verifier, provider, next, exp }
+const OAUTH_STATE_TTL = 10 * 60 * 1000;
+function oauthBase() {
+  return String(process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL || 'https://apex-crypto-1.onrender.com').replace(/\/+$/, '');
+}
+function oauthRedirect(provider) { return oauthBase() + '/api/auth/oauth/' + provider + '/callback'; }
+function oauthCfg(provider) {
+  if (provider === 'google') {
+    const id = String(process.env.GOOGLE_CLIENT_ID || '');
+    const secret = String(process.env.GOOGLE_CLIENT_SECRET || '');
+    return { ok: !!(id && secret), id, secret };
+  }
+  if (provider === 'apple') {
+    const id = String(process.env.APPLE_CLIENT_ID || '');
+    const team = String(process.env.APPLE_TEAM_ID || '');
+    const keyId = String(process.env.APPLE_KEY_ID || '');
+    const key = String(process.env.APPLE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
+    return { ok: !!(id && team && keyId && key), id, team, keyId, key };
+  }
+  return { ok: false };
+}
+app.get('/api/auth/oauth/config', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ ok: true, google: oauthCfg('google').ok, apple: oauthCfg('apple').ok, base: oauthBase() });
+});
+function _cleanNext(n) {
+  n = String(n || '').replace(/^\/+/, '');
+  return /^[a-zA-Z0-9_\-]+\.html([?#].*)?$/.test(n) ? n : 'index.html';
+}
+app.get('/api/auth/oauth/:provider/start', (req, res) => {
+  const provider = String(req.params.provider || '');
+  const cfg = oauthCfg(provider);
+  if (!cfg.ok) return res.status(400).send('OAuth provider not configured');
+  const state = b64url(randomBytes(16));
+  const verifier = b64url(randomBytes(32));
+  const challenge = b64url(createHash('sha256').update(verifier).digest());
+  const next = _cleanNext(req.query.next);
+  OAUTH_PKCE.set(state, { verifier, provider, next, exp: Date.now() + OAUTH_STATE_TTL });
+  for (const [k, v] of OAUTH_PKCE) if (v.exp < Date.now()) OAUTH_PKCE.delete(k);
+  const redirectUri = oauthRedirect(provider);
+  let url;
+  if (provider === 'google') {
+    url = 'https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=' + encodeURIComponent(cfg.id) +
+      '&redirect_uri=' + encodeURIComponent(redirectUri) + '&scope=' + encodeURIComponent('openid email profile') +
+      '&state=' + state + '&code_challenge=' + challenge + '&code_challenge_method=S256&prompt=select_account';
+  } else {
+    url = 'https://appleid.apple.com/auth/authorize?response_type=code&client_id=' + encodeURIComponent(cfg.id) +
+      '&redirect_uri=' + encodeURIComponent(redirectUri) + '&scope=' + encodeURIComponent('name email') +
+      '&response_mode=form_post&state=' + state;
+  }
+  res.redirect(302, url);
+});
+// إصدار جلسة لِحساب OAuth: إن وُجد الحساب بالبريد ندخل عليه، وإلا ننشئ حساباً موافَقاً
+// تلقائياً (بلا كلمة مرور محلية — الدخول بالمزوّد فقط) ونُعلمه بذلك.
+async function oauthLoginOrCreate(provider, profile) {
+  const emailNorm = String(profile.email || '').trim().toLowerCase();
+  if (!EMAIL_RE.test(emailNorm)) return { error: 'bad_email' };
+  let user = await dbGetUserByEmail(emailNorm);
+  if (!user) {
+    const name = String(profile.name || emailNorm.split('@')[0]).trim().slice(0, 120) || 'مستخدم';
+    const status = 'approved';
+    const [r] = await pool.query(
+      'INSERT INTO users (name, username, email, password, status, country) VALUES (?, ?, ?, ?, ?, ?)',
+      [name, name, emailNorm, hashPassword(b64url(randomBytes(24))), status, '']);
+    const uid = r.insertId;
+    await ensureColumn('users', 'oauth_google_id', '`oauth_google_id` VARCHAR(64) NULL');
+    await ensureColumn('users', 'oauth_apple_id', '`oauth_apple_id` VARCHAR(64) NULL');
+    try {
+      await pool.query('UPDATE users SET ' + (provider === 'google' ? 'oauth_google_id' : 'oauth_apple_id') + ' = ? WHERE id = ?', [String(profile.sub || '').slice(0, 64), uid]);
+    } catch (e) { console.warn('[oauth] provider id save failed', e.message); }
+    try {
+      await pool.query('INSERT INTO wallets (user_id, currency, balance, locked_balance) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE balance = balance', [uid, 'USDT', 0, 0]);
+    } catch (e) {}
+    try { store.ensureUser(String(uid), { uid, name, email: emailNorm, country: '', status }); } catch (e) {}
+    try { logOps(null, { user: { id: String(uid), uid, name, email: emailNorm }, category: 'kyc', kind: 'account_created', status: 'ok', detail: 'تسجيل حساب جديد عبر ' + provider, meta: { provider } }); } catch (e) {}
+    user = await dbGetUserByEmail(emailNorm);
+    if (!user) return { error: 'create_failed' };
+  } else {
+    await maybeExpireTempBan(user);
+    if (user.status === 'banned') return { error: 'banned' };
+    try { await pool.query('UPDATE users SET last_seen = ? WHERE id = ?', [Date.now(), user.id]); } catch (e) {}
+  }
+  const token = signUserToken(user.id);
+  return { token, user };
+}
+function oauthFinish(res, result, next) {
+  if (result.error) return res.redirect(302, 'login.html?oauth_error=' + encodeURIComponent(result.error));
+  setSessionCookie(res, result.token);
+  // نمرّر التوكن للواجهة عبر بارامتر لمرّة واحدة (الصفحة تخزّنه ثم يُمحى من العنوان)
+  return res.redirect(302, _cleanNext(next) + '#oauth_token=' + encodeURIComponent(result.token));
+}
+async function oauthExchange(provider, code, verifier) {
+  const cfg = oauthCfg(provider);
+  const redirectUri = oauthRedirect(provider);
+  const body = new URLSearchParams({ grant_type: 'authorization_code', code: String(code || ''), redirect_uri: redirectUri });
+  if (provider === 'google') {
+    body.set('client_id', cfg.id); body.set('client_secret', cfg.secret); body.set('code_verifier', verifier);
+  } else {
+    body.set('client_id', cfg.id); body.set('client_secret', makeAppleClientSecret(cfg)); body.set('code_verifier', verifier);
+  }
+  const r = await fetch(provider === 'google'
+    ? 'https://oauth2.googleapis.com/token'
+    : 'https://appleid.apple.com/auth/token',
+    { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.id_token) throw new Error('token_exchange_failed');
+  const claims = JSON.parse(Buffer.from(String(j.id_token).split('.')[1], 'base64').toString('utf8'));
+  return claims;
+}
+function makeAppleClientSecret(cfg) {
+  const now = Math.floor(Date.now() / 1000);
+  const header = b64url(JSON.stringify({ alg: 'ES256', kid: cfg.keyId }));
+  const payload = b64url(JSON.stringify({ iss: cfg.team, iat: now, exp: now + 3600, aud: 'https://appleid.apple.com', sub: cfg.id }));
+  const sig = createSign('SHA256').update(header + '.' + payload).sign({ key: cfg.key, dsaEncoding: 'ieee-p1363' });
+  return header + '.' + payload + '.' + b64url(sig);
+}
+// Google: callback GET
+app.get('/api/auth/oauth/google/callback', async (req, res) => {
+  try {
+    const st = OAUTH_PKCE.get(String(req.query.state || ''));
+    if (!st || st.provider !== 'google' || st.exp < Date.now()) return res.redirect(302, 'login.html?oauth_error=state');
+    OAUTH_PKCE.delete(String(req.query.state || ''));
+    if (!req.query.code) return res.redirect(302, 'login.html?oauth_error=denied');
+    const claims = await oauthExchange('google', req.query.code, st.verifier);
+    const result = await oauthLoginOrCreate('google', { email: claims.email, name: claims.name, sub: claims.sub });
+    return oauthFinish(res, result, st.next);
+  } catch (e) { console.error('[oauth/google]', e.message); res.redirect(302, 'login.html?oauth_error=failed'); }
+});
+// Apple: callback POST (response_mode=form_post)
+app.post('/api/auth/oauth/apple/callback', express.urlencoded({ extended: false }), async (req, res) => {
+  try {
+    const b = req.body || {};
+    const st = OAUTH_PKCE.get(String(b.state || ''));
+    if (!st || st.provider !== 'apple' || st.exp < Date.now()) return res.redirect(302, 'login.html?oauth_error=state');
+    OAUTH_PKCE.delete(String(b.state || ''));
+    if (!b.code) return res.redirect(302, 'login.html?oauth_error=denied');
+    const claims = await oauthExchange('apple', b.code, st.verifier);
+    let name = '';
+    try { if (b.user) { const u = JSON.parse(b.user); name = [u.name && u.name.firstName, u.name && u.name.lastName].filter(Boolean).join(' '); } } catch (e) {}
+    const result = await oauthLoginOrCreate('apple', { email: claims.email, name, sub: claims.sub });
+    return oauthFinish(res, result, st.next);
+  } catch (e) { console.error('[oauth/apple]', e.message); res.redirect(302, 'login.html?oauth_error=failed'); }
+});
+
 app.post('/api/auth/login', strictLimiter, async (req, res) => {
   try {
     const { email, password } = req.body || {};
@@ -6063,10 +6232,16 @@ app.use((req, res, next) => {
 
   // هل المطلوب ملف HTML؟ (الصفحة الجذرية تُعامَل كـ index.html)
   let name = rawPath === '/' ? 'index.html' : rawPath.replace(/^\/+/, '');
+  // صفحة الهبوط العامة: فتح المنصة بلا حساب (تُطلب إضافة ?guest=1 من الواجهة)
+  const isGuestHome = /^index\.html$/i.test(name) && String(req.query.guest || '') === '1';
   if (!/\.html?$/i.test(name)) return next();              // أصول ثابتة (css/js/صور) تمرّ
 
   const leaf = name.split('/').pop().toLowerCase();
   if (PUBLIC_PAGES.has(leaf)) return next();               // صفحات عامة لا تحتاج دخولاً
+  if (isGuestHome) {                                        // الرئيسية للزائر (بلا بيانات حساب)
+    res.setHeader('Cache-Control', 'no-store');
+    return next();
+  }
   if (pageIsAuthed(req)) return next();                    // مسجّل دخول → اسمح
 
   // غير مسجّل حاول فتح صفحة محمية: أعِده لتسجيل الدخول مع وجهته

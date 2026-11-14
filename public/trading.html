@@ -2,6 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
+<script src="api-config.js"></script>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Apex — التداول</title>
 <script>
@@ -657,8 +658,14 @@ html,body{margin:0;background:#05070a;color:var(--txt);font-family:'Segoe UI',Ta
         <span class="actlbl">فوري</span>
       </button>
     </div>
-    <button class="bigbtn buy" onclick="openSheet('buy')" data-i18n="buy">شراء</button>
-    <button class="bigbtn sell" onclick="openSheet('sell')" data-i18n="sell">بيع</button>
+    <div id="buySellRow" style="display:flex;gap:10px;flex:1">
+      <button class="bigbtn buy" onclick="openSheet('buy')" data-i18n="buy">شراء</button>
+      <button class="bigbtn sell" onclick="openSheet('sell')" data-i18n="sell">بيع</button>
+    </div>
+    <!-- وضع الزائر: زر واحد مكان الشراء/البيع يوجّه لتسجيل الدخول أو إنشاء حساب -->
+    <button class="bigbtn" id="guestTradeBtn" onclick="guestGo('login.html')" style="display:none;background:linear-gradient(135deg,var(--gold1,#f8d979),var(--gold2,#e0a615));color:#231a02;font-size:15px;display:none">
+      تسجيل / تسجيل دخول
+    </button>
   </div>
   <div class="feebar">
     <span>رصيد <span id="qccy">USDT</span>: <b id="usdtBal">--</b></span>
@@ -924,6 +931,23 @@ let cur=SYMBOLS[0], iv='15m', mark=0, side='buy', otype='limit';
 let chartFit=true;   /* true = اضبط العرض تلقائياً مرة واحدة (أول تحميل/تبديل زوج أو مدة)؛ غير ذلك نحافظ على تكبير المستخدم */
 
 /* ===== المحفظة (السيرفر هو المصدر الموثوق، مع نسخة محلية لكل حساب) ===== */
+/* ===== وضع الزائر: التداول يُعرض كاملاً، لكن الشراء/البيع يطلب تسجيل الدخول ===== */
+var GUEST_MODE=(function(){try{var x=JSON.parse(localStorage.getItem('skygo_session')||'null');return !(x&&x.email);}catch(e){return true;}})();
+function guestGo(to){location.href=(to||'login.html')+'?next='+encodeURIComponent('trading.html');}
+function needLogin(){guestGo('login.html');}
+(function(){
+  if(!GUEST_MODE)return;
+  document.addEventListener('DOMContentLoaded',function(){
+    var row=document.getElementById('buySellRow');if(row)row.style.display='none';
+    var g=document.getElementById('guestTradeBtn');if(g)g.style.display='block';
+    // أي زر شراء/بيع آخر في الصفحة (الشبكة/الأوامر) يوجّه لتسجيل الدخول
+    document.querySelectorAll('[onclick*="openSheet(\'buy\')"],[onclick*="openSheet(\'sell\')"]').forEach(function(b){
+      b.setAttribute('onclick','needLogin()');
+    });
+    var ub=document.getElementById('usdtBal');if(ub)ub.textContent='—';
+  });
+})();
+window.needLogin=needLogin;window.guestGo=guestGo;
 var TSESS=JSON.parse(localStorage.getItem('skygo_session')||'{}');
 var TOK=TSESS.token||localStorage.getItem('apex_token')||'';
 function _uid(e){var h=0;e=(e||'').toLowerCase();for(var i=0;i<e.length;i++){h=(h*31+e.charCodeAt(i))>>>0;}return (100000000+(h%900000000));}

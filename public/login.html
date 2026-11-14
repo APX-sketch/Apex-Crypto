@@ -30,6 +30,27 @@ h1{font-size:20px;margin:0 0 4px}
 .msg.warn{display:block;background:rgba(224,166,21,.12);color:var(--gold1);border:1px solid rgba(224,166,21,.3)}
 .msg.ok{display:block;background:rgba(14,203,129,.12);color:#5be0a8;border:1px solid rgba(14,203,129,.3)}
 .adminlink{text-align:center;margin-top:22px;font-size:12px}
+.fld .errtx{display:none;color:#ff6b7d;font-size:12px;font-weight:800;margin-top:7px}
+.fld.bad input{border-color:rgba(246,70,93,.85);background:rgba(246,70,93,.07)}
+.fld.bad .errtx{display:block}
+.fld.good input{border-color:rgba(14,203,129,.7)}
+.step2{display:none}
+.step2.on{display:block}
+.emailpill{display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--border);border-radius:12px;padding:10px 12px;font-size:13px;margin-bottom:14px}
+.emailpill b{color:var(--txt);direction:ltr;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700}
+.emailpill button{background:none;border:0;color:var(--gold2);font-family:inherit;font-size:12px;font-weight:800;cursor:pointer;padding:2px 6px}
+.emailpill .okdot{color:var(--green);font-size:14px}
+.sep{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px;margin:18px 0 14px}
+.sep:before,.sep:after{content:'';flex:1;height:1px;background:var(--border)}
+.social{display:flex;flex-direction:column;gap:10px}
+.sbtn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:12px;border-radius:12px;border:1px solid var(--border);background:var(--panel2);color:var(--txt);font-family:inherit;font-size:14px;font-weight:800;cursor:pointer;transition:transform .12s,background .15s}
+.sbtn:hover{background:#222a34}.sbtn:active{transform:scale(.985)}
+.sbtn svg{width:19px;height:19px}
+.sbtn.apple{background:#f5f5f7;color:#0b0e11;border-color:#f5f5f7}
+.sbtn.apple:hover{background:#fff}
+.sbtn svg.appleic{fill:#0b0e11;stroke:none}
+@media(prefers-color-scheme:dark){.sbtn.apple{background:#f5f5f7;color:#0b0e11}}
+.legal{text-align:center;color:var(--muted);font-size:11px;line-height:1.7;margin-top:16px}
 .adminlink a{color:var(--muted);text-decoration:none}
 </style>
 </head>
@@ -41,12 +62,44 @@ h1{font-size:20px;margin:0 0 4px}
     <div class="sub" data-i18n="loginSub">أدخل بيانات حسابك للمتابعة</div>
     <div class="msg" id="msg"></div>
     <div id="credBox">
-      <div class="fld"><label data-i18n="email">البريد الإلكتروني</label><input id="email" type="email" autocomplete="email" placeholder="name@email.com" dir="ltr" style="text-align:right"></div>
-      <div class="fld"><label data-i18n="password">كلمة المرور</label><input id="pass" type="password" autocomplete="current-password" placeholder="••••••••"></div>
-      <div style="text-align:left;margin:-6px 0 2px"><a href="reset-password.html" style="color:var(--gold2);font-size:12.5px;font-weight:700;text-decoration:none">هل نسيت كلمة المرور؟</a></div>
-      <button class="btn" id="submitBtn" onclick="doLogin()">دخول</button>
-      <button class="btn" id="bioBtn" onclick="doBioLogin()" style="display:none;background:var(--panel2,#1a1f2b);color:var(--gold2,#f0b90b);border:1px solid var(--border,#2a3140);margin-top:10px">🔑 الدخول بالبصمة / الوجه</button>
-      <div class="alt">ليس لديك حساب؟ <a href="register.html">إنشاء حساب</a></div>
+      <!-- المرحلة 1: البريد الإلكتروني فقط -->
+      <div class="step1" id="step1">
+        <div class="fld" id="fldEmail">
+          <label data-i18n="email">البريد الإلكتروني</label>
+          <input id="email" type="email" autocomplete="email" placeholder="name@email.com" dir="ltr" style="text-align:right">
+          <div class="errtx" id="emailErr">لا يوجد حساب بهذا البريد</div>
+        </div>
+        <button class="btn" id="nextBtn" onclick="checkEmail()">متابعة</button>
+        <div class="sep">أو تابع بواسطة</div>
+        <div class="social">
+          <button class="sbtn" type="button" onclick="socialLogin('google')">
+            <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#4285F4" d="M45.1 24.5c0-1.6-.1-2.7-.4-3.9H24v7.4h12c-.2 2-1.5 5-4.4 7l-.1.3 6.4 4.9.4.1c4-3.7 6.8-9.1 6.8-15.8z"/><path fill="#34A853" d="M24 46c5.8 0 10.6-1.9 14.2-5.2l-6.8-5.2c-1.8 1.2-4.2 2.1-7.4 2.1-5.7 0-10.5-3.7-12.2-8.8l-.3.1-6.6 5-.1.3C8.4 41.1 15.6 46 24 46z"/><path fill="#FBBC05" d="M11.8 28.9c-.5-1.4-.7-2.8-.7-4.3s.3-3 .7-4.3l-.1-.3-6.7-5.2-.2.1C3.1 18.2 2.4 21 2.4 24s.7 5.8 2.2 8.4l7.2-5.4z"/><path fill="#EA4335" d="M24 9.6c4 0 6.7 1.7 8.2 3.2l6-5.9C34.6 3.6 29.8 2 24 2 15.6 2 8.4 6.9 5.2 14.5l7.1 5.5C15.6 14.9 20.3 9.6 24 9.6z"/></svg>
+            المتابعة بحساب Google
+          </button>
+          <button class="sbtn apple" type="button" onclick="socialLogin('apple')">
+            <svg class="appleic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16.4 12.7c0-2.4 2-3.6 2.1-3.6-1.1-1.7-2.9-1.9-3.5-1.9-1.5-.2-2.9.9-3.7.9-.8 0-1.9-.9-3.2-.8-1.6.02-3.1 1-4 2.4-1.7 2.9-.4 7.2 1.2 9.6.8 1.2 1.8 2.5 3.1 2.4 1.2-.05 1.7-.8 3.2-.8 1.5 0 1.9.8 3.2.8 1.3-.02 2.2-1.2 3-2.4.9-1.4 1.3-2.7 1.3-2.8-.03-.01-2.5-1-2.7-3.8zM14 5.5c.7-.8 1.1-2 1-3.1-1 .04-2.2.7-2.9 1.5-.6.7-1.2 1.9-1 3 1.1.08 2.2-.6 2.9-1.4z"/></svg>
+            المتابعة بحساب Apple
+          </button>
+        </div>
+        <div class="alt">ليس لديك حساب؟ <a href="#" onclick="goRegister();return false;">إنشاء حساب</a></div>
+      </div>
+
+      <!-- المرحلة 2: كلمة المرور -->
+      <div class="step2" id="step2">
+        <div class="emailpill">
+          <span class="okdot">✓</span>
+          <b id="emailShown">name@email.com</b>
+          <button type="button" onclick="backToEmail()">تغيير</button>
+        </div>
+        <div class="fld" id="fldPass">
+          <label data-i18n="password">كلمة المرور</label>
+          <input id="pass" type="password" autocomplete="current-password" placeholder="••••••••">
+          <div class="errtx" id="passErr">كلمة المرور غير صحيحة</div>
+        </div>
+        <div style="text-align:left;margin:-6px 0 2px"><a href="reset-password.html" style="color:var(--gold2);font-size:12.5px;font-weight:700;text-decoration:none">هل نسيت كلمة المرور؟</a></div>
+        <button class="btn" id="submitBtn" onclick="doLogin()">دخول</button>
+        <button class="btn" id="bioBtn" onclick="doBioLogin()" style="display:none;background:var(--panel2,#1a1f2b);color:var(--gold2,#f0b90b);border:1px solid var(--border,#2a3140);margin-top:10px">🔑 الدخول بالبصمة / الوجه</button>
+      </div>
     </div>
     <div id="otpBox" style="display:none">
       <div class="sub" id="otpHint" style="margin-bottom:14px">أدخل رمز التحقق المرسل إلى بريدك.</div>
@@ -55,9 +108,11 @@ h1{font-size:20px;margin:0 0 4px}
       <div class="alt"><a href="#" id="resendLink" onclick="doResend();return false;">إعادة إرسال الرمز</a> · <a href="#" onclick="otpBack();return false;">رجوع</a></div>
     </div>
   </div>
+  <div class="legal">بالمتابعة أنت توافق على شروط الاستخدام وسياسة الخصوصية الخاصة بـ Apex.</div>
 </div>
 <script>
 const $=id=>document.getElementById(id);
+(function(){try{var q=new URLSearchParams(location.search).get('email');if(q){$('email').value=decodeURIComponent(q);setTimeout(function(){checkEmail();},200);}}catch(e){}})();
 function getNext(){
   var p=new URLSearchParams(location.search);
   var n=p.get('next')||'index.html';
@@ -67,8 +122,67 @@ function getNext(){
   return /^[a-zA-Z0-9_\-]+\.html([?#].*)?$/.test(n) ? n : 'index.html';
 }
 function showMsg(t,cls){const m=$('msg');m.textContent=t;m.className='msg '+(cls||'err');}
+var EMAIL_OK='';
+function setFieldErr(fldId,txId,msg){
+  var f=$(fldId);if(!f)return;
+  if(msg){f.classList.add('bad');f.classList.remove('good');var t=$(txId);if(t)t.textContent=msg;var i=f.querySelector('input');if(i)i.focus();}
+  else{f.classList.remove('bad');f.classList.remove('good');}
+}
+function emailValid(v){return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(v||''));}
+/* المرحلة 1 — نتحقق من وجود البريد في قاعدة البيانات قبل طلب كلمة المرور */
+async function checkEmail(){
+  var email=($('email').value||'').trim().toLowerCase();
+  clearMsgSoft();setFieldErr('fldEmail','emailErr','');
+  if(!email||!emailValid(email)){return setFieldErr('fldEmail','emailErr','أدخل بريداً إلكترونياً صحيحاً');}
+  var btn=$('nextBtn');btn.disabled=true;var old=btn.textContent;btn.textContent='جارٍ التحقق...';
+  try{
+    var r=await fetch('/api/auth/check-email?email='+encodeURIComponent(email));
+    var d=await r.json().catch(function(){return{};});
+    if(d&&d.exists===false){
+      btn.disabled=false;btn.textContent=old;
+      setFieldErr('fldEmail','emailErr','لا يوجد حساب بهذا البريد — أنشئ حساباً جديداً الآن');
+      var al=document.querySelector('#step1 .alt');
+      if(al)al.style.opacity='1';
+      return;
+    }
+    EMAIL_OK=email;btn.disabled=false;btn.textContent=old;
+    $('fldEmail').classList.add('good');
+    $('emailShown').textContent=email;
+    $('step1').style.display='none';$('step2').classList.add('on');
+    setTimeout(function(){try{$('pass').focus();}catch(e){}},80);
+  }catch(e){btn.disabled=false;btn.textContent=old;showMsg('تعذّر الاتصال بالخادم، حاول مجدداً','err');}
+}
+function backToEmail(){
+  $('step2').classList.remove('on');$('step1').style.display='block';
+  setFieldErr('fldPass','passErr','');clearMsgSoft();
+  try{$('pass').value='';}catch(e){}
+  setTimeout(function(){try{$('email').focus();}catch(e){}},60);
+}
+function goRegister(){
+  var em=($('email').value||'').trim();
+  location.href='Landing.html'+(em?('?email='+encodeURIComponent(em)):'');
+}
+/* دخول Google / Apple — يحتاج إعداد المزوّد على السيرفر (راجع رسالة النشر) */
+async function socialLogin(provider){
+  clearMsgSoft();
+  var btn=null;
+  try{btn=event&&event.currentTarget;}catch(e){}
+  try{
+    var r=await fetch('/api/auth/oauth/config');
+    var d=await r.json().catch(function(){return{};});
+    var ok=(provider==='google')?!!(d&&d.google):!!(d&&d.apple);
+    if(!ok){
+      showMsg(provider==='google'
+        ? 'تسجيل الدخول عبر Google غير مُفعّل بعد — يحتاج إعداد GOOGLE_CLIENT_ID على السيرفر. استخدم البريد وكلمة المرور.'
+        : 'تسجيل الدخول عبر Apple غير مُفعّل بعد — يحتاج إعداد بيانات Apple على السيرفر. استخدم البريد وكلمة المرور.','warn');
+      return;
+    }
+    location.href='/api/auth/oauth/'+provider+'/start?next='+encodeURIComponent(getNext());
+  }catch(e){showMsg('تعذّر الاتصال بالخادم','err');}
+}
+window.checkEmail=checkEmail;window.backToEmail=backToEmail;window.goRegister=goRegister;window.socialLogin=socialLogin;
 async function doLogin(){
-  const email=$('email').value.trim(),pass=$('pass').value;
+  const email=EMAIL_OK||$('email').value.trim(),pass=$('pass').value;
   if(!email||!pass)return showMsg('الرجاء إدخال البريد وكلمة المرور');
   const btn=$('submitBtn');btn.disabled=true;btn.textContent='جارٍ الدخول...';
   try{
@@ -78,7 +192,7 @@ async function doLogin(){
       if(d.error==='pending')showMsg('حسابك قيد المراجعة من الإدارة. الرجاء الانتظار حتى الموافقة.','warn');
       else if(d.error==='rejected')showMsg('تم رفض طلبك'+(d.reason?(': '+d.reason):'.'),'err');
       else if(d.error==='banned')showMsg('تم حظر هذا الحساب. تواصل مع الدعم.','err');
-      else showMsg('البريد أو كلمة المرور غير صحيحة','err');
+      else{showMsg('البريد أو كلمة المرور غير صحيحة','err');var pe=$('passErr');if(pe)pe.textContent='كلمة المرور غير صحيحة';$('fldPass').classList.add('bad');}
       btn.disabled=false;btn.textContent='دخول';return;
     }
     // خطوة التحقق بخطوتين: الخادم يطلب رمز بريدي قبل إصدار التوكن
@@ -153,6 +267,8 @@ function finishLogin(d){
 }
 var OTP_EMAIL='';
 $('pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+$('email').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();checkEmail();}});
+$('email').addEventListener('input',function(){setFieldErr('fldEmail','emailErr','');clearMsgSoft();});
 $('otpCode').addEventListener('keydown',e=>{if(e.key==='Enter')doVerify();});
 
 /* ===== الدخول السريع بالبصمة/الوجه (WebAuthn) =====
@@ -195,6 +311,15 @@ async function doBioLogin(){
     btn.disabled=false;btn.textContent=old;
   }
 }
+/* رسالة فشل الدخول عبر Google/Apple */
+(function(){
+  try{
+    var p=new URLSearchParams(location.search);
+    var e=p.get('oauth_error');if(!e)return;
+    var m={denied:'تم إلغاء الدخول عبر المزوّد.',state:'انتهت صلاحية الجلسة، حاول مجدداً.',failed:'تعذّر الدخول عبر المزوّد، حاول مجدداً أو استخدم البريد وكلمة المرور.',banned:'تم حظر هذا الحساب. تواصل مع الدعم.',bad_email:'لم يرسل المزوّد بريداً إلكترونياً موثّقاً — استخدم البريد وكلمة المرور.'};
+    showMsg(m[e]||('تعذّر الدخول ('+e+')'),'err');
+  }catch(err){}
+})();
 /* رسالة الجلسة الواحدة: إن تمّ فصل الجهاز لأنّ الحساب فُتح على جهاز آخر */
 (function(){
   try{

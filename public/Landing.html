@@ -298,6 +298,20 @@
             margin-bottom: 20px;
         }
 
+        .form-msg {
+            display: none;
+            font-size: 13.5px;
+            line-height: 1.6;
+            padding: 10px 12px;
+            border-radius: 8px;
+            margin-bottom: 14px;
+            border: 1px solid transparent;
+        }
+        .form-msg.show { display: block; }
+        .form-msg.err { color: #ff6b6b; background: rgba(255, 107, 107, 0.08); border-color: rgba(255, 107, 107, 0.35); }
+        .form-msg.ok { color: #3ddc97; background: rgba(61, 220, 151, 0.08); border-color: rgba(61, 220, 151, 0.35); }
+        .btn-submit[disabled] { opacity: .6; cursor: not-allowed; }
+
         .btn-submit:hover {
             background-color: var(--primary-hover);
             transform: translateY(-1px);
@@ -467,45 +481,46 @@
         <div class="form-card">
             <h2>إنشاء حساب مجاني</h2>
             <p class="subtitle">أدخل بياناتك للبدء في التداول فوراً</p>
-            
-            <form action="#" method="POST">
+
+            <form id="regForm" action="#" method="POST" novalidate>
                 <div class="input-group">
-                    <label>البريد الإلكتروني / رقم الهاتف</label>
-                    <input type="text" placeholder="name@example.com أو رقم الهاتف" required>
+                    <label>الاسم الكامل</label>
+                    <input type="text" id="regName" placeholder="الاسم كما في الهوية" autocomplete="name" required>
+                </div>
+
+                <div class="input-group">
+                    <label>البريد الإلكتروني</label>
+                    <input type="email" id="regEmail" placeholder="name@example.com" autocomplete="email" required>
                 </div>
 
                 <div class="input-group">
                     <label>كلمة المرور</label>
-                    <input type="password" placeholder="••••••••••••" required>
-                    <div class="password-strength">
-                        <div class="strength-bar" style="background: var(--primary);"></div>
-                        <div class="strength-bar"></div>
-                        <div class="strength-bar"></div>
-                        <div class="strength-bar"></div>
-                    </div>
+                    <input type="password" id="regPass" placeholder="8 أحرف على الأقل" autocomplete="new-password" required>
                 </div>
 
                 <div class="input-group">
-                    <label>معرف الإحالة (اختياري)</label>
-                    <input type="text" placeholder="APEX2026VIP">
+                    <label>تأكيد كلمة المرور</label>
+                    <input type="password" id="regPass2" placeholder="أعد كتابة كلمة المرور" autocomplete="new-password" required>
                 </div>
 
                 <label class="terms-check">
-                    <input type="checkbox" required>
-                    <span>أوافق على <a href="#">شروط الخدمة</a> و<a href="#">سياسة الخصوصية</a> الخاصة بمنصة Apex.</span>
+                    <input type="checkbox" id="regTerms">
+                    <span>أوافق على <a href="terms.html" target="_blank">شروط الخدمة</a> و<a href="privacy.html" target="_blank">سياسة الخصوصية</a> الخاصة بمنصة Apex.</span>
                 </label>
 
-                <button type="submit" class="btn-submit">إنشاء الحساب الشخصي</button>
+                <div id="regMsg" class="form-msg" role="alert"></div>
+
+                <button type="submit" id="regBtn" class="btn-submit">إنشاء الحساب الشخصي</button>
             </form>
 
             <div class="divider">أو المتابعة باستخدام</div>
 
             <div class="social-btns">
-                <a href="#" class="btn-social">
+                <a href="#" class="btn-social" data-provider="google">
                     <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.8 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.4l3.7 2.9C6.5 7.3 9 5 12 5z"/><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.8z"/><path fill="#FBBC05" d="M5.6 14.7c-.2-.7-.4-1.5-.4-2.7s.2-2 .4-2.7L1.9 6.4C.7 8.8 0 10.3 0 12s.7 3.2 1.9 5.6l3.7-2.9z"/><path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.3-6.4-5.2L1.9 16C3.7 19.8 7.5 23 12 23z"/></svg>
                     Google
                 </a>
-                <a href="#" class="btn-social">
+                <a href="#" class="btn-social" data-provider="apple">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.31c.64-.78 1.08-1.86.96-2.94-1 .04-2.14.67-2.83 1.45-.59.66-1.11 1.74-.97 2.81 1.12.09 2.2-.56 2.84-1.32z"/></svg>
                     Apple ID
                 </a>
@@ -528,5 +543,119 @@
         </div>
     </footer>
 
+<script>
+(function(){
+  var msgBox = document.getElementById('regMsg');
+  function showMsg(text, kind){
+    if(!msgBox) return;
+    msgBox.className = 'form-msg show ' + (kind || 'err');
+    msgBox.textContent = text;
+  }
+  function hideMsg(){ if(msgBox) msgBox.className = 'form-msg'; }
+
+  // وجهة ما بعد الدخول: الصفحة التي جاء منها الزائر أو الرئيسية
+  function getNext(){
+    try {
+      var p = new URLSearchParams(location.search);
+      var n = p.get('next');
+      if (n) return n.charAt(0) === '/' ? n : '/' + n;
+    } catch(e){}
+    return '/index.html';
+  }
+
+  // تعبئة البريد تلقائياً عند القدوم من صفحة الدخول
+  try {
+    var pre = new URLSearchParams(location.search).get('email');
+    var eEl = document.getElementById('regEmail');
+    if (pre && eEl && !eEl.value) eEl.value = pre;
+  } catch(e){}
+
+  // ---- تسجيل حساب جديد ----
+  var form = document.getElementById('regForm');
+  if (form) form.addEventListener('submit', async function(ev){
+    ev.preventDefault();
+    hideMsg();
+    var name  = (document.getElementById('regName').value || '').trim();
+    var email = (document.getElementById('regEmail').value || '').trim().toLowerCase();
+    var pass  = document.getElementById('regPass').value || '';
+    var pass2 = document.getElementById('regPass2').value || '';
+    var terms = document.getElementById('regTerms');
+
+    if (name.length < 2) return showMsg('اكتب اسمك الكامل (حرفان على الأقل).');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return showMsg('صيغة البريد الإلكتروني غير صحيحة.');
+    if (pass.length < 8) return showMsg('كلمة المرور يجب أن تكون 8 أحرف على الأقل.');
+    if (pass !== pass2) return showMsg('كلمتا المرور غير متطابقتين.');
+    if (terms && !terms.checked) return showMsg('يجب الموافقة على شروط الخدمة وسياسة الخصوصية.');
+
+    var btn = document.getElementById('regBtn');
+    var old = btn.textContent;
+    btn.disabled = true; btn.textContent = 'جارٍ إنشاء الحساب...';
+
+    try {
+      var r = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name, email: email, password: pass })
+      });
+      var d = await r.json().catch(function(){ return {}; });
+
+      if (r.status === 409 || d.error === 'email_exists') {
+        showMsg('هذا البريد مسجّل مسبقاً — انتقل لتسجيل الدخول.', 'err');
+        setTimeout(function(){ location.href = 'login.html?email=' + encodeURIComponent(email); }, 1600);
+        return;
+      }
+      if (!r.ok || !d.token) {
+        var m = {
+          bad_name: 'اكتب اسمك الكامل (حرفان على الأقل).',
+          bad_email: 'صيغة البريد الإلكتروني غير صحيحة.',
+          weak_password: 'كلمة المرور يجب أن تكون 8 أحرف على الأقل.'
+        };
+        showMsg(m[d.error] || 'تعذّر إنشاء الحساب، حاول مرة أخرى.', 'err');
+        return;
+      }
+
+      var u = d.user || {};
+      var sess = {
+        id: u.id, uid: u.id, username: u.username || u.name, name: u.name,
+        email: u.email, token: d.token
+      };
+      try {
+        localStorage.setItem('skygo_session', JSON.stringify(sess));
+        localStorage.setItem('apex_user', JSON.stringify(sess));
+        localStorage.setItem('apex_token', d.token);
+        localStorage.setItem('currentUser', JSON.stringify(sess));
+      } catch(e){}
+      // احتياط: كوكي الجلسة حتى تفتح الصفحات المحمية بعد التسجيل مباشرةً
+      try{document.cookie='apex_token='+encodeURIComponent(d.token)+'; Path=/; SameSite=Lax'+(location.protocol==='https:'?'; Secure':'')+'; Max-Age='+(7*24*3600);}catch(e){}
+
+      showMsg('تم إنشاء الحساب بنجاح ✓ جارٍ تحويلك...', 'ok');
+      setTimeout(function(){ location.href = getNext(); }, 900);
+    } catch(err) {
+      showMsg('تعذّر الاتصال بالخادم، تحقّق من الشبكة وحاول مرة أخرى.', 'err');
+    } finally {
+      btn.disabled = false; btn.textContent = old;
+    }
+  });
+
+  // ---- Google / Apple ----
+  var oauthCfg = null;
+  fetch('/api/auth/oauth/config').then(function(r){ return r.json(); })
+    .then(function(c){ oauthCfg = c || {}; })
+    .catch(function(){ oauthCfg = {}; });
+
+  Array.prototype.forEach.call(document.querySelectorAll('.btn-social[data-provider]'), function(a){
+    a.addEventListener('click', function(ev){
+      ev.preventDefault();
+      var p = a.getAttribute('data-provider');
+      var enabled = oauthCfg && (oauthCfg[p] === true || (oauthCfg[p] && oauthCfg[p].enabled === true));
+      if (!enabled) {
+        showMsg((p === 'google' ? 'الدخول بـ Google' : 'الدخول بـ Apple ID') + ' غير مفعّل حالياً — استخدم البريد وكلمة المرور، أو جرّب لاحقاً.', 'err');
+        return;
+      }
+      location.href = '/api/auth/oauth/' + p + '/start?next=' + encodeURIComponent(getNext());
+    });
+  });
+})();
+</script>
 </body>
 </html>

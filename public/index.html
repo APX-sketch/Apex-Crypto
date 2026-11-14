@@ -4,10 +4,17 @@
 <script src="apx-ico.js"></script>
 <script>
 (function(){
+  // وضع الزائر: الزائر يفتح المنصة ويشاهد الأسعار والتداول، لكن بلا أرصدة،
+  // وأي إجراء مالي (إيداع/سحب/تحويل/شراء/بيع/محفظة) يوجّهه لتسجيل الدخول.
   try{
     var s=JSON.parse(localStorage.getItem('skygo_session')||'null');
-    if(!s||!s.email){location.replace('login.html?next=index.html');}
-  }catch(e){location.replace('login.html');}
+    var p0=new URLSearchParams(location.search);
+    var GUEST=(p0.get('guest')==='1')||(!s||!s.email);
+    if(GUEST){
+      if(p0.get('guest')!=='1'){try{history.replaceState(null,'',location.pathname+'?guest=1');}catch(e){}}
+      document.documentElement.classList.add('guest-mode');
+    }
+  }catch(e){}
 })();
 </script>
 <script>
@@ -46,6 +53,14 @@ body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);col
   font-weight:900;font-size:16px;color:#231a02;cursor:pointer;background:linear-gradient(135deg,var(--gold1),var(--gold2));
   box-shadow:0 3px 10px rgba(224,166,21,.35)}
 
+/* ===== وضع الزائر (guest mode) ===== */
+html.guest-mode .avatar{font-size:15px;font-weight:900}
+html.guest-mode .bal .amt{filter:blur(7px);opacity:.45;user-select:none}
+html.guest-mode .bal .sub{filter:blur(5px);opacity:.4}
+html.guest-mode .qacts a,html.guest-mode .qacts .qact{cursor:pointer}
+.banner.guest{background:linear-gradient(135deg,rgba(224,166,21,.16),rgba(224,166,21,.05));border:1px solid rgba(224,166,21,.35)}
+.banner.guest .btx b{color:var(--gold1)}
+.banner.guest .bbtn{background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#231a02;border:0}
 /* balance */
 .bal{padding:22px 18px 6px}
 .bal .lbl{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;font-weight:700}
@@ -375,6 +390,12 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
   <div class="amt" id="balAmt">--</div>
   <div class="sub" id="balSub">≈ <span id="balUsd">--</span> USD</div>
   <div id="balFrozen" style="display:none;margin-top:10px;background:rgba(246,70,93,.14);border:1px solid rgba(246,70,93,.5);color:#f6465d;font-weight:900;font-size:13px;padding:8px 12px;border-radius:12px">⛔ الرصيد مجمّد</div>
+</div>
+
+<!-- ===== GUEST BANNER (يظهر للزائر فقط) ===== -->
+<div id="guestBanner" style="display:none;margin:6px 14px 0;padding:13px 14px;border-radius:14px;display:none;align-items:center;gap:10px;background:linear-gradient(135deg,rgba(224,166,21,.16),rgba(224,166,21,.05));border:1px solid rgba(224,166,21,.35)">
+  <span style="flex:1;font-size:12.5px;line-height:1.6;color:var(--muted)"><b style="display:block;color:var(--gold1);font-size:13px;margin-bottom:2px">أنت تتصفّح كزائر</b>سجّل الدخول لتشاهد أرصدتك وتتداول بأموال حقيقية</span>
+  <a href="login.html?next=index.html" style="background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#231a02;font-weight:800;font-size:12.5px;padding:9px 14px;border-radius:10px;text-decoration:none;white-space:nowrap">تسجيل الدخول</a>
 </div>
 
 <!-- ===== ACTIONS ===== -->
@@ -845,8 +866,65 @@ $('dAv').textContent=initial;
 $('dName').textContent=uname;
 $('dUid').textContent=UID;
 
+/* ===== وضع الزائر (المنصة تفتح بكل شيء ما عدا المحفظة) ===== */
+/* استلام التوكن بعد الدخول عبر Google/Apple: يصل في #oauth_token ثم يُمحى من العنوان */
+(function(){
+  try{
+    var h=String(location.hash||'');
+    var m=h.match(/oauth_token=([^&]+)/);
+    if(!m)return;
+    var tk=decodeURIComponent(m[1]);
+    fetch('/api/auth/me',{headers:{'Authorization':'Bearer '+tk}}).then(function(r){return r.json();}).then(function(d){
+      var u=(d&&d.user)||{};
+      var sess={id:u.id,uid:u.id,username:u.name,user:u.username||u.name,name:u.name,email:u.email,token:tk};
+      localStorage.setItem('skygo_session',JSON.stringify(sess));
+      localStorage.setItem('apex_user',JSON.stringify(sess));
+      localStorage.setItem('apex_token',tk);
+      localStorage.setItem('currentUser',JSON.stringify(sess));
+      try{history.replaceState(null,'',location.pathname+'?guest=0');}catch(e){}
+      location.replace('index.html');
+    }).catch(function(){location.replace('login.html?oauth_error=failed');});
+  }catch(e){}
+})();
+var GUEST_MODE=(function(){try{return document.documentElement.classList.contains('guest-mode')||(!sess||!sess.email);}catch(e){return false;}})();
+function needLogin(next){
+  var n=next||'index.html';
+  location.href='login.html?next='+encodeURIComponent(n);
+}
+function guard(fn,next){
+  if(GUEST_MODE){needLogin(next);return false;}
+  try{return fn&&fn();}catch(e){}
+}
+window.guard=guard;window.needLogin=needLogin;
+(function(){
+  if(!GUEST_MODE)return;
+  document.body.classList.add('guest-mode');
+  var gb=$('guestBanner');if(gb)gb.style.display='flex';
+  // كل إجراء مالي يوجّه الزائر لتسجيل الدخول (الشراء/البيع/الإيداع/السحب/التحويل)
+  var acts=document.querySelectorAll('.acts a.act');
+  Array.prototype.forEach.call(acts,function(a){
+    a.addEventListener('click',function(ev){
+      var href=a.getAttribute('href')||'';
+      if(!href||href.indexOf('markets.html')===0)return;
+      ev.preventDefault();needLogin(href||'index.html');
+    },true);
+  });
+  // المحفظة من الشريط السفلي
+  Array.prototype.forEach.call(document.querySelectorAll('a[href="wallet.html"]'),function(a){
+    a.addEventListener('click',function(ev){ev.preventDefault();needLogin('wallet.html');},true);
+  });
+  // تبويب «المحفظة» في الأعلى
+  Array.prototype.forEach.call(document.querySelectorAll('.segbar .seg'),function(b){
+    if(/wallet/.test(b.getAttribute('onclick')||'')){b.setAttribute('onclick',"needLogin('wallet.html')");}
+  });
+  // إظهار شريط الزائر في الهيدر: «تسجيل / تسجيل دخول»
+  var a=$('avatarBtn');if(a)a.textContent='؟';
+  var dn=$('dName');if(dn)dn.textContent='زائر';
+  var du=$('dUid');if(du)du.textContent='—';
+})();
 function _syncOvLock(){try{var open=document.querySelector('.drawer.show, .sheet.show');document.body.classList.toggle('ov-open',!!open);}catch(e){}}
-function openDrawer(){$('drawer').classList.add('show');$('scrim').classList.add('show');_syncOvLock();}
+function openDrawer(){
+  if(typeof GUEST_MODE!=='undefined'&&GUEST_MODE){needLogin('index.html');return;}$('drawer').classList.add('show');$('scrim').classList.add('show');_syncOvLock();}
 function closeDrawer(){$('drawer').classList.remove('show');$('scrim').classList.remove('show');_syncOvLock();}
 function copyUid(){navigator.clipboard&&navigator.clipboard.writeText(''+UID);toast('تم نسخ رقم المستخدم');}
 function doLogout(){
@@ -880,6 +958,7 @@ async function deleteAccount(){
 
 /* ===== الملف الشخصي (شاشة كاملة) + الإعدادات ===== */
 function openProfile(){
+  if(typeof GUEST_MODE!=='undefined'&&GUEST_MODE){needLogin('index.html');return;}
   var a=$('pfAv');if(a)a.textContent=initial;
   var n=$('pfName');if(n)n.textContent=uname;
   var u=$('pfUid');if(u)u.textContent=UID;
@@ -995,7 +1074,7 @@ if(SUP_TOKEN){supUnread();setInterval(function(){if(!document.hidden)supUnread()
 /* السيرفر يحفظ رصيد كل حساب على حدة؛ شحن الإدارة والتحويلات تُحدّث الرصيد هناك
    مباشرةً، والصفحة تعرض رصيد السيرفر فقط — لا خلط بين الحسابات على نفس المتصفح. */
 function walletKey(){return 'skygo_wallet_'+(UID||makeUid(sess.email));}
-async function refreshWallet(){
+async function refreshWallet(){if(typeof GUEST_MODE!=='undefined'&&GUEST_MODE)return;
   if(!SUP_TOKEN)return;
   try{const r=await fetch('/api/wallet/me',{headers:{'Authorization':'Bearer '+SUP_TOKEN}});
     if(!r.ok)return;
@@ -1008,7 +1087,7 @@ async function refreshWallet(){
   }catch(e){}
 }
 /* ===== رصيد محفظة العقود الآجلة (لدمجه ضمن نظرة عامة) ===== */
-async function refreshFutures(){
+async function refreshFutures(){if(typeof GUEST_MODE!=='undefined'&&GUEST_MODE)return;
   if(!SUP_TOKEN)return;
   try{const r=await fetch('/api/wallet/futures',{headers:{'Authorization':'Bearer '+SUP_TOKEN}});
     if(!r.ok)return;
