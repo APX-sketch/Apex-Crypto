@@ -254,7 +254,7 @@ function backToEmail(){
 }
 function goRegister(){
   var em=($('email').value||'').trim();
-  location.href='Landing.html'+(em?('?email='+encodeURIComponent(em)):'');
+  location.href='register.html'+(em?('?email='+encodeURIComponent(em)):'');
 }
 /* دخول Google / Apple — يحتاج إعداد المزوّد على السيرفر (راجع رسالة النشر) */
 async function socialLogin(provider){
