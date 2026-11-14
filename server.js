@@ -5661,17 +5661,72 @@ app.post('/api/square/posts/:id/comments', requireUser, async (req, res) => {
   } catch (e) { console.error('[square/comment]', e.message); res.status(500).json({ error: 'server_error' }); }
 });
 
-app.delete('/api/square/posts/:id', requireUser, async (req, res) => {
+// حذف منشور: صاحب المنشور يحذفه، والأدمن يحذفه من لوحة الإدارة (ويُسجّل سبب الإشراف).
+// الحذف يشمل كل ما يتعلّق بالمنشور (إعجابات/تعليقات/إعادة نشر/مشاهدات/وسوم)
+// حتى لا تتراكم صفوف يتيمة في القاعدة (مهم على الخطة المجانية المحدودة المساحة).
+async function purgeSquarePost(pid) {
+  await pool.query('DELETE FROM square_likes WHERE post_id = ?', [pid]);
+  await pool.query('DELETE FROM square_comments WHERE post_id = ?', [pid]);
+  await pool.query('DELETE FROM square_reposts WHERE post_id = ?', [pid]);
+  await pool.query('DELETE FROM square_views WHERE post_id = ?', [pid]);
+  await pool.query('DELETE FROM square_tags WHERE post_id = ?', [pid]);
+  await pool.query('DELETE FROM square_posts WHERE id = ?', [pid]);
+}
+function isAdminRequest(req) {
+  try { return !!(req.headers.authorization && store.isAdminToken(bearer(req))); } catch (e) { return false; }
+}
+// بوابة مزدوجة: توكن أدمن (من لوحة الإدارة) أو توكن مستخدم عادي (صاحب المنشور).
+// لا نضع requireUser أولاً لأن توكن الأدمن ليس توكن مستخدم فكان يفشل بـ401.
+function requireUserOrAdmin(req, res, next) {
+  if (isAdminRequest(req)) { req.isAdminCall = true; return next(); }
+  return requireUser(req, res, next);
+}
+app.delete('/api/square/posts/:id', requireUserOrAdmin, async (req, res) => {
   try {
     const pid = Number(req.params.id);
-    const [[p]] = await pool.query('SELECT user_id FROM square_posts WHERE id = ?', [pid]);
+    if (!pid || !isFinite(pid)) return res.status(400).json({ error: 'bad_id' });
+    const [[p]] = await pool.query('SELECT user_id, author, content FROM square_posts WHERE id = ?', [pid]);
     if (!p) return res.status(404).json({ error: 'not_found' });
-    if (Number(p.user_id) !== req.user.uid) return res.status(403).json({ error: 'forbidden' });
-    await pool.query('DELETE FROM square_posts WHERE id = ?', [pid]);
-    await pool.query('DELETE FROM square_likes WHERE post_id = ?', [pid]);
-    await pool.query('DELETE FROM square_comments WHERE post_id = ?', [pid]);
-    res.json({ ok: true });
+    const admin = !!req.isAdminCall;
+    if (!admin && Number(p.user_id) !== Number(req.user.uid)) return res.status(403).json({ error: 'forbidden' });
+    await purgeSquarePost(pid);
+    if (admin) {
+      console.log('[square/delete] admin removed post #' + pid + ' by ' + p.author);
+      try {
+        store.addNotification(String(p.user_id), {
+          title: '\u26a0\ufe0f حُذف منشورك',
+          kind: 'social',
+          body: 'تمّ حذف منشورك من قِبَل الإدارة لمخالفته سياسة المحتوى: ' + String(p.content || '').slice(0, 60),
+        });
+      } catch (e) { console.warn('[square/delete-notify]', e.message); }
+    }
+    res.json({ ok: true, admin: admin });
   } catch (e) { console.error('[square/delete]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+// ===== لوحة الإشراف: كل المنشورات مع عدّاداتها (للأدمن فقط) =====
+app.get('/api/admin/square/posts', requireAdmin, async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    const authorId = Number(req.query.user_id) || 0;
+    const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 200);
+    let where = '1=1';
+    const params = [];
+    if (q) { where += ' AND (p.content LIKE ? OR p.author LIKE ?)'; params.push('%' + q + '%', '%' + q + '%'); }
+    if (authorId) { where += ' AND p.user_id = ?'; params.push(authorId); }
+    const [rows] = await pool.query(
+      'SELECT p.id, p.user_id, p.author, p.content, p.tag, p.symbol, p.created_at, ' +
+      ' (p.image IS NOT NULL AND p.image <> \'\') AS has_image, ' +
+      ' (p.video IS NOT NULL AND p.video <> \'\') AS has_video, ' +
+      ' (SELECT COUNT(*) FROM square_likes l WHERE l.post_id = p.id) AS likes, ' +
+      ' (SELECT COUNT(*) FROM square_comments c WHERE c.post_id = p.id) AS comments, ' +
+      ' (SELECT COUNT(*) FROM square_views v WHERE v.post_id = p.id) AS views ' +
+      'FROM square_posts p WHERE ' + where + ' ORDER BY p.created_at DESC LIMIT ' + limit,
+      params);
+    const [[tot]] = await pool.query('SELECT COUNT(*) AS n FROM square_posts');
+    const [[today]] = await pool.query('SELECT COUNT(*) AS n FROM square_posts WHERE created_at >= ?', [Date.now() - 86400000]);
+    res.json({ ok: true, posts: rows, total: Number(tot && tot.n) || 0, today: Number(today && today.n) || 0 });
+  } catch (e) { console.error('[admin/square/posts]', e.message); res.status(500).json({ error: 'server_error' }); }
 });
 
 // ---- Static frontend ----

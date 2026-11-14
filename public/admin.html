@@ -224,6 +224,7 @@ tr:last-child td{border-bottom:0}
       <div class="navi" data-pg="moneyflow" onclick="nav('moneyflow')"><svg viewBox="0 0 24 24"><path d="M4 7h13l-3-3M20 17H7l3 3"/><circle cx="12" cy="12" r="2"/></svg><span>الإيداعات والسحوبات</span><span class="badge" id="badgeFlow"></span></div>
       <div class="navi" data-pg="commission" onclick="nav('commission')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15 9.5a2.5 2.5 0 00-2.5-1.5h-1a2 2 0 000 4h1a2 2 0 010 4h-1A2.5 2.5 0 019 15M12 6v12"/></svg><span>عمولات المنصة</span></div>
       <div class="navi" data-pg="apx" onclick="nav('apx')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 15l3-7 3 7M10 13h4"/></svg><span>عملة APX</span><span class="badge" id="badgeApx"></span></div>
+      <div class="navi" data-pg="square" onclick="nav('square')"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 13h5"/></svg><span>منشورات السكوير</span><span class="badge" id="badgeSq"></span></div>
       <div class="navi" data-pg="logs" onclick="nav('logs')"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><span>سجل الأدمن</span></div>
       <div class="navi" data-pg="backup" onclick="nav('backup')"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg><span>النسخ الاحتياطي</span></div>
       <div class="navi" data-pg="security" onclick="nav('security')"><svg viewBox="0 0 24 24"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z"/><path d="M12 8v4M12 16h.01"/></svg><span>سجل الأمان</span><span class="badge" id="badgeSec"></span></div>
@@ -480,6 +481,23 @@ tr:last-child td{border-bottom:0}
         </div>
       </div>
       <!-- ADMIN ACTIVITY LOG -->
+      <div class="page" id="pg-square">
+        <h2 class="tt">مراقبة منشورات السكوير</h2>
+        <div class="psub">راجع آخر المنشورات واحذف أي منشور مخالف. الحذف يزيل المنشور وكل تفاعلاته (إعجابات/تعليقات) نهائياً ويُبلِّغ صاحبه.</div>
+        <div class="stats">
+          <div class="stat"><div class="k">إجمالي المنشورات</div><div class="v" id="sqTotal">0</div></div>
+          <div class="stat y"><div class="k">آخر 24 ساعة</div><div class="v" id="sqToday">0</div></div>
+        </div>
+        <div class="card">
+          <div class="card-h">
+            <b>المنشورات</b>
+            <div class="sp"></div>
+            <input id="sqQ" placeholder="ابحث في النص أو الكاتب…" style="padding:8px 12px;border-radius:10px;border:1px solid var(--border);background:var(--panel2);color:var(--txt);font-family:inherit;font-size:12.5px;max-width:210px" onkeydown="if(event.key==='Enter')loadSquarePosts()">
+            <button class="btn ghost sm" onclick="loadSquarePosts()">تحديث ↻</button>
+          </div>
+          <div id="squareTable"></div>
+        </div>
+      </div>
       <div class="page" id="pg-logs">
         <h2 class="tt">سجل نشاط الأدمن</h2>
         <div class="psub">مراقبة عمليات شحن الأرصدة وتعديلها والإشعارات والحظر</div>
@@ -626,6 +644,7 @@ let TOKEN=localStorage.getItem('apex_admin_token')||'';
 let USERS=[],FILTER='',CHATS=[],CURCHAT=null,POLL=null;
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function toast(m){const t=$('toast');t.textContent=m;t.className='toast show';setTimeout(()=>t.className='toast',2200);}
+function fmtNum(n){n=+n||0;if(n>=1e6)return (n/1e6).toFixed(n>=1e7?0:1).replace(/\.0$/,'')+'M';if(n>=1e3)return (n/1e3).toFixed(n>=1e4?0:1).replace(/\.0$/,'')+'K';return ''+n;}
 function fmtTime(ms){const d=new Date(ms);return d.toLocaleString('ar',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}
 const DOC_LABELS={national_id:'بطاقة هوية وطنية',passport:'جواز سفر',driver_license:'رخصة قيادة'};
 function docLabel(t){return DOC_LABELS[t]||t||'—';}
@@ -1105,6 +1124,7 @@ function nav(pg){
   if(pg==='commission')loadCommission();
   if(pg==='finance')loadFinance();
   if(pg==='moneyflow')loadMoneyFlow();
+  if(pg==='square')loadSquarePosts();
   if(pg==='logs')loadLogs();
   if(pg==='backup')loadBackups();
   if(pg==='security')loadSecurity();
@@ -1701,6 +1721,46 @@ function renderMoneyFlow(){
 }
 /* ---- admin activity log ---- */
 function logLabel(a){return ({credit:'شحن رصيد',balance_adjust:'تعديل رصيد',notify:'إرسال إشعار',ban:'حظر حساب',unban:'رفع الحظر',ban_temp:'حظر مؤقّت',freeze:'تجميد رصيد',unfreeze:'فك تجميد'})[a]||a;}
+/* ===== إشراف منشورات السكوير ===== */
+async function loadSquarePosts(){
+  var box=$('squareTable'); if(!box)return;
+  var q=($('sqQ')&&$('sqQ').value||'').trim();
+  box.innerHTML='<div class="empty">…جارٍ التحميل</div>';
+  try{
+    var d=await api('/api/admin/square/posts?limit=100'+(q?('&q='+encodeURIComponent(q)):''));
+    var posts=d.posts||[];
+    if($('sqTotal'))$('sqTotal').textContent=fmtNum(d.total||0);
+    if($('sqToday'))$('sqToday').textContent=fmtNum(d.today||0);
+    if(!posts.length){box.innerHTML='<div class="empty">لا منشورات'+(q?' تطابق البحث':'')+'</div>';return;}
+    box.innerHTML='<table><thead><tr><th>الكاتب</th><th>المنشور</th><th>التفاعل</th><th>التاريخ</th><th></th></tr></thead><tbody>'+
+      posts.map(function(p){
+        var txt=String(p.content||'').slice(0,110);
+        if(String(p.content||'').length>110)txt+='…';
+        var media=(p.has_video?' 🎬':(p.has_image?' 🖼️':''));
+        return '<tr><td class="u-name">'+esc(p.author||'-')+'<div class="u-mail">UID '+esc(p.user_id)+'</div></td>'+
+          '<td style="max-width:420px"><div style="line-height:1.6">'+esc(txt)+media+'</div>'+
+            (p.tag?'<span class="pill approved" style="margin-top:5px">$'+esc(p.tag)+'</span>':'')+'</td>'+
+          '<td style="direction:ltr;text-align:right;color:var(--muted)">❤ '+fmtNum(p.likes||0)+' · 💬 '+fmtNum(p.comments||0)+' · 👁 '+fmtNum(p.views||0)+'</td>'+
+          '<td style="color:var(--muted);white-space:nowrap">'+fmtTime(p.created_at)+'</td>'+
+          '<td style="text-align:end"><button class="btn ghost sm" style="color:var(--red);border-color:rgba(246,70,93,.4)" onclick="adminDelPost('+p.id+',this)">حذف</button></td></tr>';
+      }).join('')+'</tbody></table>';
+  }catch(e){
+    box.innerHTML='<div class="empty">تعذّر تحميل المنشورات — تحقّق من الصلاحية أو أعد المحاولة</div>';
+  }
+}
+async function adminDelPost(id,btn){
+  if(!confirm('حذف المنشور #'+id+' نهائياً؟\nسيُزال مع كل إعجاباته وتعليقاته، ويُبلَّغ صاحبه بأن الإدارة حذفته.'))return;
+  if(btn){btn.disabled=true;btn.textContent='…';}
+  try{
+    await api('/api/square/posts/'+id,{method:'DELETE'});
+    toast('تم حذف المنشور');
+    loadSquarePosts();
+  }catch(e){
+    toast('تعذّر الحذف'+(e&&e.message==='not_found'?' — المنشور محذوف مسبقاً':''));
+    if(btn){btn.disabled=false;btn.textContent='حذف';}
+  }
+}
+window.adminDelPost=adminDelPost;
 async function loadLogs(){
   try{const d=await api('/api/admin/logs');const logs=d.logs||[];
     if(!logs.length){$('logsTable').innerHTML='<div class="empty">لا توجد عمليات مسجّلة</div>';return;}
