@@ -225,6 +225,7 @@ tr:last-child td{border-bottom:0}
       <div class="navi" data-pg="commission" onclick="nav('commission')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15 9.5a2.5 2.5 0 00-2.5-1.5h-1a2 2 0 000 4h1a2 2 0 010 4h-1A2.5 2.5 0 019 15M12 6v12"/></svg><span>عمولات المنصة</span></div>
       <div class="navi" data-pg="apx" onclick="nav('apx')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 15l3-7 3 7M10 13h4"/></svg><span>عملة APX</span><span class="badge" id="badgeApx"></span></div>
       <div class="navi" data-pg="square" onclick="nav('square')"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 13h5"/></svg><span>منشورات السكوير</span><span class="badge" id="badgeSq"></span></div>
+      <div class="navi" data-pg="reports" onclick="nav('reports')"><svg viewBox="0 0 24 24"><path d="M12 3l9 17H3z"/><path d="M12 9v5M12 17h.01"/></svg><span>بلاغات المنشورات</span><span class="badge" id="badgeRep"></span></div>
       <div class="navi" data-pg="logs" onclick="nav('logs')"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><span>سجل الأدمن</span></div>
       <div class="navi" data-pg="backup" onclick="nav('backup')"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg><span>النسخ الاحتياطي</span></div>
       <div class="navi" data-pg="security" onclick="nav('security')"><svg viewBox="0 0 24 24"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z"/><path d="M12 8v4M12 16h.01"/></svg><span>سجل الأمان</span><span class="badge" id="badgeSec"></span></div>
@@ -496,6 +497,21 @@ tr:last-child td{border-bottom:0}
             <button class="btn ghost sm" onclick="loadSquarePosts()">تحديث ↻</button>
           </div>
           <div id="squareTable"></div>
+        </div>
+      </div>
+      <div class="page" id="pg-reports">
+        <h2 class="tt">بلاغات المنشورات</h2>
+        <div class="psub">المنشورات الأكثر إبلاغاً من المستخدمين — راجعها ثم احذف المنشور، أو علّم البلاغات كمعالجة، أو احظر صاحبها حظراً نهائياً.</div>
+        <div class="stats">
+          <div class="stat"><div class="k">بلاغات مفتوحة</div><div class="v" id="repOpen">0</div></div>
+          <div class="stat y"><div class="k">منشورات مُبلَّغ عنها</div><div class="v" id="repPosts">0</div></div>
+        </div>
+        <div class="card">
+          <div class="card-h"><b>الأكثر إبلاغاً</b><div class="sp"></div>
+            <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px"><input type="checkbox" id="repAll" onchange="loadReports()"> إظهار المعالَجة أيضاً</label>
+            <button class="btn ghost sm" onclick="loadReports()">تحديث ↻</button>
+          </div>
+          <div id="reportsTable"><div class="empty">…جارٍ التحميل</div></div>
         </div>
       </div>
       <div class="page" id="pg-logs">
@@ -1125,6 +1141,7 @@ function nav(pg){
   if(pg==='finance')loadFinance();
   if(pg==='moneyflow')loadMoneyFlow();
   if(pg==='square')loadSquarePosts();
+  if(pg==='reports')loadReports();
   if(pg==='logs')loadLogs();
   if(pg==='backup')loadBackups();
   if(pg==='security')loadSecurity();
@@ -1410,11 +1427,13 @@ async function loadUsers(){
         else if(u.status==='banned')a+='<button class="btn green sm" onclick="unban(\''+u.id+'\')">رفع الحظر</button>';
         else if(u.status==='rejected')a+='<button class="btn green sm" onclick="approve(\''+u.id+'\')">موافقة</button>';
         if(u.status!=='rejected'&&!u.frozen){a+='<button class="btn ghost sm" onclick="freeze(\''+u.id+'\')">❄ تجميد الرصيد</button>';}
+        if(!u.banPermanent){a+='<button class="btn ghost sm" style="color:var(--red)" onclick="banPermanent(\''+u.id+'\',\''+nm+'\')">🚫 حظر نهائي</button>';}
         a+='<button class="btn ghost sm" onclick="openNotify(\''+u.id+'\',\''+nm+'\')">🔔 إشعار/رصيد</button>';
         a+='<button class="btn ghost sm" onclick="openBal(\''+u.id+'\',\''+nm+'\')">أرصدة وعملات</button>';
         a+='<button class="btn ghost sm" onclick="delUser(\''+u.id+'\')">حذف</button>';
         var badges='<span class="pill '+u.status+'">'+st[u.status]+'</span>';
         if(u.status==='banned'&&u.banUntil&&u.banUntil>Date.now())badges+=' <span class="pill pending" title="حظر مؤقّت">⏱ '+banLeft(u.banUntil)+'</span>';
+        if(u.banPermanent)badges+=' <span class="pill banned" title="حظر نهائي">🚫 نهائي</span>';
         if(u.frozen)badges+=' <span class="pill banned" title="الرصيد مجمّد">❄ '+((u.frozenUntil&&u.frozenUntil>Date.now())?('مجمّد · '+banLeft(u.frozenUntil)):'مجمّد')+'</span>';
         return '<tr><td class="u-name">'+esc(u.name)+'</td><td class="u-mail">'+esc(u.email)+'</td><td style="direction:ltr">'+u.uid+'</td>'+idCell(u)+'<td>'+badges+'</td><td class="acts">'+a+'</td></tr>';}).join('')+'</tbody></table>';
   }catch(e){}
@@ -1761,6 +1780,52 @@ async function adminDelPost(id,btn){
   }
 }
 window.adminDelPost=adminDelPost;
+/* ===== بلاغات السكوير + الحظر النهائي ===== */
+var REP_REASON_AR={spam:'إزعاج/سبام',abuse:'إساءة',scam:'احتيال',nudity:'محتوى غير لائق',misinfo:'مضلّل',other:'آخر'};
+async function loadReports(){
+  var box=$('reportsTable'); if(!box)return;
+  box.innerHTML='<div class="empty">…جارٍ التحميل</div>';
+  try{
+    var all=($('repAll')&&$('repAll').checked)?'&status=all':'';
+    var d=await api('/api/admin/square/reports?limit=100'+all);
+    var posts=d.posts||[];
+    if($('repOpen'))$('repOpen').textContent=fmtNum(d.openReports||0);
+    if($('repPosts'))$('repPosts').textContent=fmtNum(posts.length);
+    if($('badgeRep')){var n=Number(d.openReports||0);$('badgeRep').textContent=n?String(n):'';$('badgeRep').style.display=n?'':'none';}
+    if(!posts.length){box.innerHTML='<div class="empty">لا بلاغات — كل شيء نظيف ✓</div>';return;}
+    box.innerHTML='<table><thead><tr><th>المنشور</th><th>الكاتب</th><th>البلاغات</th><th>الأسباب</th><th>آخر بلاغ</th><th></th></tr></thead><tbody>'+
+      posts.map(function(p){
+        var txt=String(p.content||'').slice(0,90); if(String(p.content||'').length>90)txt+='…';
+        var rs=(p.reasons||[]).map(function(r){return '<span class="pill pending" style="margin:2px">'+esc(REP_REASON_AR[r.reason]||r.reason)+' '+r.n+'</span>';}).join('');
+        var open=Number(p.open_reports||0);
+        return '<tr><td style="max-width:320px;line-height:1.6">'+esc(txt)+'<div class="u-mail">#'+p.id+' · ❤ '+fmtNum(p.likes||0)+' · 👁 '+fmtNum(p.views||0)+'</div></td>'+
+          '<td class="u-name">'+esc(p.author||'-')+'<div class="u-mail">UID '+esc(p.user_id)+'</div></td>'+
+          '<td style="font-weight:800;color:'+(open?'var(--red)':'var(--muted)')+'">'+fmtNum(p.reports||0)+(open?('<div class="u-mail">مفتوح '+open+'</div>'):'<div class="u-mail">مُعالَج</div>')+'</td>'+
+          '<td>'+rs+'</td>'+
+          '<td style="color:var(--muted);white-space:nowrap">'+fmtTime(p.last_report||p.created_at)+'</td>'+
+          '<td class="acts">'+
+            '<button class="btn ghost sm" style="color:var(--red);border-color:rgba(246,70,93,.4)" onclick="adminDelPost('+p.id+',this);setTimeout(loadReports,600)">حذف المنشور</button>'+
+            '<button class="btn ghost sm" onclick="markHandled('+p.id+',this)">✓ تمت المعالجة</button>'+
+            '<button class="btn red sm" onclick="banPermanent('+p.user_id+',\''+esc(p.author||'').replace(/'/g,"\\'")+'\',this)">🚫 حظر نهائي</button>'+
+          '</td></tr>';
+      }).join('')+'</tbody></table>';
+  }catch(e){box.innerHTML='<div class="empty">تعذّر تحميل البلاغات — تحقّق من الصلاحية</div>';}
+}
+async function markHandled(id,btn){
+  if(btn){btn.disabled=true;btn.textContent='…';}
+  try{await api('/api/admin/square/posts/'+id+'/reports-handled',{method:'POST'});toast('عُلِّمت البلاغات كمعالجة ✓');loadReports();}
+  catch(e){toast('تعذّر التنفيذ');if(btn){btn.disabled=false;btn.textContent='✓ تمت المعالجة';}}
+}
+async function banPermanent(uid,name,btn){
+  if(!confirm('حظر نهائي للمستخدم «'+(name||uid)+'»؟\nسيُمنع من الدخول والتداول والنشر فوراً، وتُغلق جلساته الحالية، وتُعلَّم بلاغاته كمعالجة.'))return;
+  var reason=prompt('سبب الحظر النهائي (يظهر للمستخدم):','مخالفة سياسة المحتوى');
+  if(reason===null)return;
+  if(btn){btn.disabled=true;btn.textContent='…';}
+  try{await api('/api/admin/square/users/'+uid+'/ban-permanent',{method:'POST',body:JSON.stringify({reason:reason||''})});
+    toast('تم الحظر النهائي 🚫');loadReports();if($('pg-users').classList.contains('on'))loadUsers();}
+  catch(e){toast('تعذّر الحظر');if(btn){btn.disabled=false;btn.textContent='🚫 حظر نهائي';}}
+}
+window.loadReports=loadReports;window.markHandled=markHandled;window.banPermanent=banPermanent;
 async function loadLogs(){
   try{const d=await api('/api/admin/logs');const logs=d.logs||[];
     if(!logs.length){$('logsTable').innerHTML='<div class="empty">لا توجد عمليات مسجّلة</div>';return;}

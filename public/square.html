@@ -58,7 +58,37 @@ html[data-theme=light] .ptext .hashtag{color:#1a66d6}
 .tagbar .clr{padding:6px 13px;border-radius:999px;border:1px solid var(--border);background:var(--panel);color:var(--muted);font-size:12px;font-weight:800;cursor:pointer;font-family:inherit}
 .pimg{margin-top:10px;width:100%;border-radius:12px;display:block}
 .pchart{margin-top:10px;height:120px;border-radius:12px;background:linear-gradient(180deg,rgba(14,203,129,.12),transparent);border:1px solid var(--border);display:flex;align-items:flex-end;gap:3px;padding:10px;overflow:hidden}
+
 .pchart i{flex:1;border-radius:2px 2px 0 0;background:linear-gradient(180deg,var(--green),rgba(14,203,129,.35))}
+/* زر النقاط الثلاث + قائمة الخيارات */
+.morebtn{flex:0 0 auto;width:30px;height:30px;border-radius:50%;border:1px solid transparent;background:none;color:var(--muted);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:background .15s,color .15s}
+.morebtn:hover,.morebtn:focus-visible{background:var(--panel2);color:var(--txt)}
+.morebtn svg{width:18px;height:18px;fill:currentColor;stroke:none}
+.menu{position:fixed;z-index:80;min-width:196px;background:var(--panel);border:1px solid var(--border);border-radius:13px;padding:6px;box-shadow:0 14px 40px rgba(0,0,0,.45);display:none;animation:pop .13s ease}
+html[data-theme=light] .menu{box-shadow:0 14px 40px rgba(15,25,45,.18)}
+.menu.on{display:block}
+@keyframes pop{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+.menu button{display:flex;align-items:center;gap:10px;width:100%;padding:10px 11px;border:0;background:none;color:var(--txt);font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;border-radius:9px;text-align:start}
+.menu button:hover{background:var(--panel2)}
+.menu button svg{width:17px;height:17px;flex:0 0 auto;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.menu button.chosen{color:var(--gold2)}
+.menu button.danger{color:#f6465d}
+.menu .sep{height:1px;background:var(--border);margin:5px 4px}
+/* شارات الحالة على المنشور (محفوظ / مهتم) */
+.vbadge{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:999px;margin-right:6px;vertical-align:middle}
+.vbadge.up{background:rgba(14,203,129,.14);color:var(--green)}
+.vbadge.down{background:rgba(246,70,93,.13);color:#f6465d}
+.vbadge.sv{background:rgba(224,166,21,.16);color:var(--gold2)}
+/* شريط «أعاد النشر بواسطة …» */
+.rpbar{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:800;color:var(--green);margin:0 0 8px 2px}
+.rpbar svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2}
+.rpbar b{color:var(--txt);font-weight:800}
+.rpbar .rpn{font-size:10px;font-weight:800;color:var(--green);background:rgba(14,203,129,.14);padding:1px 6px;border-radius:999px}
+.rpquote{border:1px solid var(--border);background:var(--panel2);border-radius:12px;padding:10px 12px;margin:0 0 10px;font-size:12.5px;color:var(--muted);line-height:1.65}
+.msep{height:1px;background:var(--border);margin:5px 4px}
+.reasonwrap{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 4px}
+.reasonwrap .rs{padding:8px 13px;border-radius:999px;border:1px solid var(--border);background:var(--panel2);color:var(--muted);font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit}
+.reasonwrap .rs.sel{border-color:#f6465d;color:#f6465d;background:rgba(246,70,93,.1)}
 </style>
 </head>
 <body>
@@ -135,6 +165,8 @@ html[data-theme=light] .bnav{background:#fff}
   <button class="chip" data-f="new">الأحدث</button>
   <button class="chip" data-f="news">📰 الأخبار</button>
   <button class="chip" data-f="mine">منشوراتي</button>
+  <button class="chip" data-f="saved">🔖 المحفوظات</button>
+  <button class="chip" data-f="report">🚩 الأكثر إبلاغاً</button>
 </div>
 <div class="trends" id="trends"></div>
 <div class="tagbar" id="tagbar" style="display:none"></div>
@@ -172,6 +204,25 @@ html[data-theme=light] .bnav{background:#fff}
   </div>
 </div>
 <div id="toast" class="toast"></div>
+<!-- قائمة خيارات المنشور (⋮) — تُملأ ديناميكياً وتُموضَع بجانب الزر -->
+<div id="pmenu" class="menu" role="menu" aria-label="خيارات المنشور"></div>
+<!-- نافذة الإبلاغ عن منشور -->
+<div class="mask" id="repMask" onclick="if(event.target===this)closeReport()">
+  <div class="sheet">
+    <h3>الإبلاغ عن المنشور <span class="x" onclick="closeReport()">×</span></h3>
+    <p style="font-size:12.5px;color:var(--muted);margin-bottom:10px">اختر سبب البلاغ — يصل للإدارة مباشرة ويُدقَّق بسرعة.</p>
+    <div class="reasonwrap" id="repReasons">
+      <button class="rs" data-r="spam">إزعاج / سبام</button>
+      <button class="rs" data-r="abuse">إساءة أو تحريض</button>
+      <button class="rs" data-r="scam">احتيال أو نصب</button>
+      <button class="rs" data-r="nudity">محتوى غير لائق</button>
+      <button class="rs" data-r="misinfo">معلومات مضلّلة</button>
+      <button class="rs" data-r="other">سبب آخر</button>
+    </div>
+    <textarea class="ta" id="repNote" style="min-height:80px;margin-top:10px" maxlength="400" placeholder="تفاصيل إضافية (اختياري)"></textarea>
+    <button class="btn" id="repBtn" style="margin-top:12px" onclick="sendReport()">إرسال البلاغ</button>
+  </div>
+</div>
 <nav class="bnav">
   <a href="index.html"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h14V10"/></svg><span>الرئيسية</span></a>
   <a href="markets.html"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M21 7v5h-5"/></svg><span>الأسواق</span></a>
@@ -302,9 +353,100 @@ function trashIco(){return '<svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M
 function isMine(p){return MYID>0&&Number(p.user_id)===MYID;}
 function delPost(id,ev){if(ev)ev.stopPropagation();var p=POSTS.find(function(x){return +x.id===+id;});if(!p||!isMine(p)){toast('يمكنك حذف منشوراتك فقط');return;}if(!confirm('هل تريد حذف هذا المنشور نهائياً؟\nلا يمكن التراجع عن الحذف.'))return;api('/api/square/posts/'+id,{method:'DELETE'}).then(function(){POSTS=POSTS.filter(function(x){return +x.id!==+id;});render();toast('تم حذف المنشور ✓');}).catch(function(e){if(String(e)==='forbidden')toast('لا تملك صلاحية حذف هذا المنشور');else toast('تعذّر الحذف، حاول مجدداً');});}
 window.delPost=delPost;
+/* ===== قائمة خيارات المنشور (⋮) + مهتم/غير مهتم + حفظ + بلاغ ===== */
+function moreIco(){return '<svg viewBox="0 0 24 24" style="fill:none"><circle cx="12" cy="5" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="19" r="1.6" fill="currentColor"/></svg>';}
+function plusIco(){return '<svg viewBox="0 0 24 24" style="fill:none"><path d="M12 5v14M5 12h14"/></svg>';}
+function minusIco(){return '<svg viewBox="0 0 24 24" style="fill:none"><path d="M5 12h14"/></svg>';}
+function saveIco(){return '<svg viewBox="0 0 24 24" style="fill:none"><path d="M6 3h12a1 1 0 011 1v17l-7-4-7 4V4a1 1 0 011-1z"/></svg>';}
+function flagIco(){return '<svg viewBox="0 0 24 24" style="fill:none"><path d="M5 21V4h9l-1 3h6l-2 5 2 5h-6l1 4H5"/></svg>';}
+var MENU_PID=null,REP_PID=null,REP_REASON='';
+function findPost(id){return POSTS.find(function(x){return +x.id===+id;});}
+function closeMenu(){var m=$('pmenu');if(m){m.classList.remove('on');m.innerHTML='';}MENU_PID=null;}
+window.closeMenu=closeMenu;
+function toggleMenu(id,ev){
+  if(ev){ev.preventDefault();ev.stopPropagation();}
+  var m=$('pmenu');if(!m)return;
+  if(MENU_PID!==null&&+MENU_PID===+id&&m.classList.contains('on')){closeMenu();return;}
+  var p=findPost(id);if(!p)return;
+  MENU_PID=id;
+  var voted=+p.my_vote||0, saved=+p.saved>0;
+  var html='';
+  html+='<button class="mi'+(voted===1?' act':'')+'" onclick="vote('+id+',\'in\',event)"><i>'+plusIco()+'</i>مهتم</button>';
+  html+='<button class="mi'+(voted===-1?' act':'')+'" onclick="vote('+id+',\'out\',event)"><i>'+minusIco()+'</i>غير مهتم</button>';
+  html+='<button class="mi'+(saved?' act':'')+'" onclick="savePost('+id+',event)"><i>'+saveIco()+'</i>'+(saved?'إزالة من المحفوظات':'حفظ المنشور')+'</button>';
+  html+='<button class="mi danger" onclick="openReport('+id+',event)"><i>'+flagIco()+'</i>الإبلاغ عن المنشور</button>';
+  if(isMine(p)){html+='<div class="msep"></div><button class="mi danger" onclick="closeMenu();delPost('+id+')"><i>'+trashIco()+'</i>حذف المنشور</button>';}
+  m.innerHTML=html;m.classList.add('on');
+  try{
+    var r=ev.currentTarget.getBoundingClientRect();
+    var w=200,h=m.offsetHeight||200;
+    var left=r.right-w;if(left<8)left=8;
+    if(left+w>window.innerWidth-8)left=window.innerWidth-w-8;
+    var top=r.bottom+6;if(top+h>window.innerHeight-12)top=Math.max(8,r.top-h-6);
+    m.style.left=left+'px';m.style.top=top+'px';
+  }catch(e){}
+}
+window.toggleMenu=toggleMenu;
+document.addEventListener('click',function(e){
+  var m=$('pmenu');if(!m||!m.classList.contains('on'))return;
+  if(e.target.closest('#pmenu')||e.target.closest('.morebtn'))return;
+  closeMenu();
+},{passive:true});
+window.addEventListener('scroll',function(){if(MENU_PID!==null)closeMenu();},{passive:true});
+function vote(id,dir,ev){if(ev){ev.preventDefault();ev.stopPropagation();}closeMenu();
+  api('/api/square/posts/'+id+'/vote',{method:'POST',body:JSON.stringify({vote:dir})}).then(function(d){
+    var v=d&&typeof d.vote==='number'?d.vote:0;
+    if(v===-1&&dir==='out'){POSTS=POSTS.filter(function(x){return +x.id!==+id;});render();}
+    else{var q=findPost(id);if(q)q.my_vote=v;render();}
+    toast(dir==='in'?'سجّلنا اهتمامك — سنعرض لك المزيد مثل هذا':'تم — سنقلّل منشورات مثل هذا');
+  }).catch(function(){toast('تعذّر تسجيل رأيك، حاول مجدداً');});}
+function savePost(id,ev){if(ev){ev.preventDefault();ev.stopPropagation();}closeMenu();
+  api('/api/square/posts/'+id+'/save',{method:'POST'}).then(function(d){
+    var p=findPost(id);if(p)p.saved=(d&&d.saved)?1:0;
+    render();
+    toast(d&&d.saved?'تم حفظ المنشور ✓ — تجده في «المحفوظات»':'أُزيل من المحفوظات');
+  }).catch(function(){toast('تعذّر الحفظ، حاول مجدداً');});}
+function openReport(id,ev){if(ev){ev.preventDefault();ev.stopPropagation();}closeMenu();REP_PID=id;REP_REASON='';
+  var box=$('repReasons');if(box){Array.prototype.forEach.call(box.querySelectorAll('.rs'),function(b){b.classList.remove('sel');});}
+  var n=$('repNote');if(n)n.value='';
+  $('repMask').classList.add('on');}
+function closeReport(){$('repMask').classList.remove('on');REP_PID=null;REP_REASON='';}
+function pickReason(btn){var box=$('repReasons');if(box)Array.prototype.forEach.call(box.querySelectorAll('.rs'),function(b){b.classList.remove('sel');});btn.classList.add('sel');REP_REASON=btn.dataset.r||'';}
+function sendReport(){if(!REP_PID){return;}if(!REP_REASON){toast('اختر سبب البلاغ أولاً');return;}
+  var note=($('repNote')&&$('repNote').value||'').trim();
+  var btn=$('repBtn');if(btn)btn.disabled=true;
+  api('/api/square/posts/'+REP_PID+'/report',{method:'POST',body:JSON.stringify({reason:REP_REASON,note:note})}).then(function(){
+    if(btn)btn.disabled=false;closeReport();toast('تم إرسال البلاغ — شكراً لمساعدتنا ✓');
+  }).catch(function(e){if(btn)btn.disabled=false;toast('تعذّر إرسال البلاغ، حاول مجدداً');});}
+window.vote=vote;window.savePost=savePost;window.openReport=openReport;window.closeReport=closeReport;window.sendReport=sendReport;
+(function(){var box=document.getElementById('repReasons');if(box)box.addEventListener('click',function(e){var b=e.target.closest('.rs');if(b)pickReason(b);});})();
 function render(){var feed=$('feed');
   var list=POSTS;
-  if(!list.length){feed.innerHTML='<div style="padding:54px 24px;text-align:center;color:var(--muted)"><div style="font-size:40px;margin-bottom:10px">📝</div><b style="display:block;color:var(--txt);margin-bottom:6px">لا منشورات بعد</b><p style="font-size:12.5px">كن أول من ينشر — اضغط زر +</p></div>';return;}feed.innerHTML=list.map(function(p){var liked=+p.liked>0;var reposted=+p.reposted>0;return '<div class="post" data-pid="'+p.id+'"><div class="phead">'+avatar(p.author)+'<div class="who"><b>'+esc(p.author)+'</b><span>'+timeAgo(p.created_at)+(p.tag?(' • $'+esc(p.tag)):'')+'</span></div>'+(isMine(p)?'<button class="delbtn" title="حذف المنشور" onclick="delPost('+p.id+',event)">'+trashIco()+'</button>':'')+'</div><div class="ptext">'+fmtText(p.content)+'</div>'+(p.image?'<img class="pimg" src="'+esc(p.image)+'">':'')+(+p.has_video?videoCard(p.id):'')+'<div class="pacts">'+'<div class="pact" onclick="openCmt('+p.id+')">'+bubble()+'<span>'+fmtNum(+p.comments||0)+'</span></div>'+'<div class="pact repost'+(reposted?' reposted':'')+'" onclick="repost('+p.id+')">'+reicon()+'<span>'+fmtNum(+p.reposts||0)+'</span></div>'+'<div class="pact like'+(liked?' liked':'')+'" onclick="like('+p.id+')">'+heart()+'<span>'+fmtNum(+p.likes||0)+'</span></div>'+'<div class="pact stat" onclick="openStats('+p.id+')">'+staticon()+'<span>'+fmtNum(+p.views||0)+'</span></div>'+'<div class="pact" onclick="sharePost('+p.id+')">'+shareicon()+'</div>'+'</div></div>';}).join('');observeViews();}
+  if(!list.length){feed.innerHTML='<div style="padding:54px 24px;text-align:center;color:var(--muted)"><div style="font-size:40px;margin-bottom:10px">📝</div><b style="display:block;color:var(--txt);margin-bottom:6px">لا منشورات بعد</b><p style="font-size:12.5px">كن أول من ينشر — اضغط زر +</p></div>';return;}
+  feed.innerHTML=list.map(function(p){
+    var liked=+p.liked>0,reposted=+p.reposted>0,saved=+p.saved>0,voted=+p.my_vote||0;
+    var rp='';
+    if(p.reposted_by){rp='<div class="rpbar">'+reicon()+'<span>أعاد النشر بواسطة <b>'+esc(p.reposted_by)+'</b>'+(p.orig_author?' • نشرها أصلاً <b>'+esc(p.orig_author)+'</b>':'')+(+p.reposts>1?' <span class="rpn">+'+(+p.reposts-1)+'</span>':'')+'</span></div>';}
+    var vb='';
+    if(voted===1)vb+='<span class="vbadge up">مهتم</span>';
+    else if(voted===-1)vb+='<span class="vbadge down">غير مهتم</span>';
+    if(saved)vb+='<span class="vbadge sv">محفوظ</span>';
+    return '<div class="post" data-pid="'+p.id+'">'+rp+
+      '<div class="phead">'+avatar(p.author)+
+      '<div class="who"><b>'+esc(p.author)+'</b><span>'+timeAgo(p.created_at)+(p.tag?(' • $'+esc(p.tag)):'')+'</span>'+vb+'</div>'+
+      '<button class="morebtn" title="خيارات المنشور" onclick="toggleMenu('+p.id+',event)">'+moreIco()+'</button>'+
+      '</div>'+
+      '<div class="ptext">'+fmtText(p.content)+'</div>'+
+      (p.image?'<img class="pimg" src="'+esc(p.image)+'">':'')+
+      (+p.has_video?videoCard(p.id):'')+
+      '<div class="pacts">'+
+      '<div class="pact" onclick="openCmt('+p.id+')">'+bubble()+'<span>'+fmtNum(+p.comments||0)+'</span></div>'+
+      '<div class="pact repost'+(reposted?' reposted':'')+'" onclick="repost('+p.id+')">'+reicon()+'<span>'+fmtNum(+p.reposts||0)+'</span></div>'+
+      '<div class="pact like'+(liked?' liked':'')+'" onclick="like('+p.id+')">'+heart()+'<span>'+fmtNum(+p.likes||0)+'</span></div>'+
+      '<div class="pact stat" onclick="openStats('+p.id+')">'+staticon()+'<span>'+fmtNum(+p.views||0)+'</span></div>'+
+      '<div class="pact" onclick="sharePost('+p.id+')">'+shareicon()+'</div>'+
+      '</div></div>';
+  }).join('');observeViews();}
 function like(id){api('/api/square/posts/'+id+'/like',{method:'POST'}).then(function(d){var p=POSTS.find(function(x){return +x.id===+id;});if(p){p.likes=d.likes;p.liked=d.liked?1:0;}render();}).catch(function(){});}
 function repost(id){api('/api/square/posts/'+id+'/repost',{method:'POST'}).then(function(d){var p=POSTS.find(function(x){return +x.id===+id;});if(p){p.reposts=d.reposts;p.reposted=d.reposted?1:0;}render();toast(d.reposted?'تمت إعادة النشر 🔁':'أُلغيت إعادة النشر');}).catch(function(){});}
 function statRow(ic,label,n){return '<div class="statrow"><span class="si">'+ic+'</span><span class="sl">'+label+'</span><b class="sn">'+fmtNum(n)+'</b></div>';}
