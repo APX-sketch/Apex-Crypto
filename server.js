@@ -10,7 +10,7 @@ import rateLimit from 'express-rate-limit';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
-import { createHmac, createHash, createSign, randomBytes, timingSafeEqual, scryptSync } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual, scryptSync } from 'node:crypto';
 import zlib from 'node:zlib';
 
 import { PriceCache } from './lib/priceCache.js';
@@ -919,7 +919,6 @@ function dbPublicUser(u) {
     status: u.status || 'pending',
     rejectReason: u.reject_reason || '',
     banUntil: Number(u.ban_until) || 0,
-    banPermanent: !!Number(u.ban_permanent),
     frozen: !!Number(u.frozen),
     frozenUntil: Number(u.frozen_until) || 0,
     force2fa: !!Number(u.force_2fa),
@@ -984,8 +983,6 @@ async function ensureSchema() {
   await ensureColumn('users', 'frozen_until', '`frozen_until` BIGINT NOT NULL DEFAULT 0');
   // فرض التحقّق بخطوتين عند الدخول (يُفعَّل تلقائياً للحسابات المستعادة)
   await ensureColumn('users', 'force_2fa', '`force_2fa` TINYINT NOT NULL DEFAULT 0');
-  // حظر نهائي (دائم) — يُميّز الحظر الدائم عن المؤقّت حتى لا يرفعه أي مؤقّت تلقائياً
-  await ensureColumn('users', 'ban_permanent', '`ban_permanent` TINYINT NOT NULL DEFAULT 0');
   // identity documents (KYC): one row per user, holds the base64 image.
   await pool.query(
     'CREATE TABLE IF NOT EXISTS id_documents (' +
@@ -1176,10 +1173,6 @@ async function ensureSchema() {
     ' PRIMARY KEY (post_id, user_id),' +
     ' INDEX idx_rp_post (post_id)' +
     ')');
-  // اسم الناشر الأصلي محفوظ وقت إعادة النشر (لأن صاحب المنشور قد يغيّر اسمه لاحقاً)،
-  // واسم مُعيد النشر ليُعرض «أعاد النشر بواسطة فلان» في التغذية.
-  await ensureColumn('square_reposts', 'author', '`author` VARCHAR(120) NULL');
-  await ensureColumn('square_reposts', 'orig_author', '`orig_author` VARCHAR(120) NULL');
   // المشاهدات (الإحصائيات) — صف فريد لكل (منشور، مستخدم) فتُحسب كل مشاهدة مرّة واحدة لكل مستخدم
   await pool.query(
     'CREATE TABLE IF NOT EXISTS square_views (' +
@@ -1197,44 +1190,6 @@ async function ensureSchema() {
     ' PRIMARY KEY (post_id, tag),' +
     ' INDEX idx_tag (tag),' +
     ' INDEX idx_tag_created (tag, created_at)' +
-    ')');
-  // ===== تفاعلات إضافية على منشورات السكوير =====
-  // خيارات القائمة (⋮) لكل مستخدم على كل منشور: مهتم / غير مهتم
-  // صف واحد لكل (منشور، مستخدم) — يُحدَّد بـvote='in' أو 'out'.
-  await pool.query(
-    'CREATE TABLE IF NOT EXISTS square_votes (' +
-    ' post_id INT NOT NULL,' +
-    ' user_id INT NOT NULL,' +
-    ' vote VARCHAR(4) NOT NULL,' +
-    ' created_at BIGINT NOT NULL DEFAULT 0,' +
-    ' PRIMARY KEY (post_id, user_id),' +
-    ' INDEX idx_vote_post (post_id)' +
-    ')');
-  // المنشورات المحفوظة (المفضّلة) لكل مستخدم
-  await pool.query(
-    'CREATE TABLE IF NOT EXISTS square_saves (' +
-    ' post_id INT NOT NULL,' +
-    ' user_id INT NOT NULL,' +
-    ' created_at BIGINT NOT NULL DEFAULT 0,' +
-    ' PRIMARY KEY (post_id, user_id),' +
-    ' INDEX idx_save_user (user_id)' +
-    ')');
-  // البلاغات — سبب البلاغ + وقت المعالجة (NULL = لسا مفتوح).
-  // صف واحد لكل (منشور، مُبلِّغ) فلا يستطيع مستخدم تضخيم عدّاد البلاغات.
-  await pool.query(
-    'CREATE TABLE IF NOT EXISTS square_reports (' +
-    ' id INT AUTO_INCREMENT PRIMARY KEY,' +
-    ' post_id INT NOT NULL,' +
-    ' user_id INT NOT NULL,' +
-    ' reporter VARCHAR(120) NULL,' +
-    ' reason VARCHAR(40) NOT NULL,' +
-    ' note VARCHAR(400) NULL,' +
-    ' created_at BIGINT NOT NULL DEFAULT 0,' +
-    ' handled TINYINT NOT NULL DEFAULT 0,' +
-    ' handled_at BIGINT NOT NULL DEFAULT 0,' +
-    ' UNIQUE KEY uq_report (post_id, user_id),' +
-    ' INDEX idx_rep_post (post_id),' +
-    ' INDEX idx_rep_open (handled, created_at)' +
     ')');
   // ===== تقييمات ومراجعات المتداولين (نظام الثقة) — صف واحد لكل (متداول، مُقيِّم) =====
   await pool.query(
@@ -2318,175 +2273,6 @@ function validIdImage(v) {
 // approved / rejected) is returned so the app can show the right state
 // ("under review" banner, verified badge, or a re-verify prompt). Only
 // BANNED accounts are refused entry.
-// ==================== فحص وجود البريد (الخطوة الأولى في الدخول) ====================
-// الواجهة تسأل: هل هذا البريد مسجّل؟ ثم تُظهر كلمة المرور فقط إن وُجد.
-// (بطلبك الصريح: نكشف صراحةً عدم وجود الحساب — كما في forgot-password.)
-app.get('/api/auth/check-email', strictLimiter, async (req, res) => {
-  try {
-    const email = String((req.query || {}).email || '').trim().toLowerCase();
-    if (!email || !EMAIL_RE.test(email) || email.length > 160) return res.status(400).json({ error: 'bad_email' });
-    const user = await dbGetUserByEmail(email);
-    if (!user) return res.json({ ok: true, exists: false });
-    await maybeExpireTempBan(user);
-    return res.json({
-      ok: true, exists: true,
-      social: { google: !!user.oauth_google_id, apple: !!user.oauth_apple_id },
-      banned: user.status === 'banned',
-      pending: user.status === 'pending',
-    });
-  } catch (e) { console.error('[auth/check-email]', e.message); res.status(500).json({ error: 'server_error' }); }
-});
-
-// ==================== الدخول عبر Google / Apple (OAuth) ====================
-// يعمل فقط عند ضبط متغيّرات البيئة على Render:
-//   GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET  → Redirect URI: {PUBLIC_BASE_URL}/api/auth/oauth/google/callback
-//   APPLE_CLIENT_ID (Service ID) / APPLE_TEAM_ID / APPLE_KEY_ID / APPLE_PRIVATE_KEY (.p8)
-//   PUBLIC_BASE_URL  (مثال: https://apex-crypto-1.onrender.com)
-// بدون الضبط: /api/auth/oauth/config يعيد false والواجهة تخبر المستخدم أن المزوّد غير مفعّل.
-const OAUTH_PKCE = new Map();       // state → { verifier, provider, next, exp }
-const OAUTH_STATE_TTL = 10 * 60 * 1000;
-function oauthBase() {
-  return String(process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL || 'https://apex-crypto-1.onrender.com').replace(/\/+$/, '');
-}
-function oauthRedirect(provider) { return oauthBase() + '/api/auth/oauth/' + provider + '/callback'; }
-function oauthCfg(provider) {
-  if (provider === 'google') {
-    const id = String(process.env.GOOGLE_CLIENT_ID || '');
-    const secret = String(process.env.GOOGLE_CLIENT_SECRET || '');
-    return { ok: !!(id && secret), id, secret };
-  }
-  if (provider === 'apple') {
-    const id = String(process.env.APPLE_CLIENT_ID || '');
-    const team = String(process.env.APPLE_TEAM_ID || '');
-    const keyId = String(process.env.APPLE_KEY_ID || '');
-    const key = String(process.env.APPLE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
-    return { ok: !!(id && team && keyId && key), id, team, keyId, key };
-  }
-  return { ok: false };
-}
-app.get('/api/auth/oauth/config', (req, res) => {
-  res.setHeader('Cache-Control', 'no-store');
-  res.json({ ok: true, google: oauthCfg('google').ok, apple: oauthCfg('apple').ok, base: oauthBase() });
-});
-function _cleanNext(n) {
-  n = String(n || '').replace(/^\/+/, '');
-  return /^[a-zA-Z0-9_\-]+\.html([?#].*)?$/.test(n) ? n : 'index.html';
-}
-app.get('/api/auth/oauth/:provider/start', (req, res) => {
-  const provider = String(req.params.provider || '');
-  const cfg = oauthCfg(provider);
-  if (!cfg.ok) return res.status(400).send('OAuth provider not configured');
-  const state = b64url(randomBytes(16));
-  const verifier = b64url(randomBytes(32));
-  const challenge = b64url(createHash('sha256').update(verifier).digest());
-  const next = _cleanNext(req.query.next);
-  OAUTH_PKCE.set(state, { verifier, provider, next, exp: Date.now() + OAUTH_STATE_TTL });
-  for (const [k, v] of OAUTH_PKCE) if (v.exp < Date.now()) OAUTH_PKCE.delete(k);
-  const redirectUri = oauthRedirect(provider);
-  let url;
-  if (provider === 'google') {
-    url = 'https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=' + encodeURIComponent(cfg.id) +
-      '&redirect_uri=' + encodeURIComponent(redirectUri) + '&scope=' + encodeURIComponent('openid email profile') +
-      '&state=' + state + '&code_challenge=' + challenge + '&code_challenge_method=S256&prompt=select_account';
-  } else {
-    url = 'https://appleid.apple.com/auth/authorize?response_type=code&client_id=' + encodeURIComponent(cfg.id) +
-      '&redirect_uri=' + encodeURIComponent(redirectUri) + '&scope=' + encodeURIComponent('name email') +
-      '&response_mode=form_post&state=' + state;
-  }
-  res.redirect(302, url);
-});
-// إصدار جلسة لِحساب OAuth: إن وُجد الحساب بالبريد ندخل عليه، وإلا ننشئ حساباً موافَقاً
-// تلقائياً (بلا كلمة مرور محلية — الدخول بالمزوّد فقط) ونُعلمه بذلك.
-async function oauthLoginOrCreate(provider, profile) {
-  const emailNorm = String(profile.email || '').trim().toLowerCase();
-  if (!EMAIL_RE.test(emailNorm)) return { error: 'bad_email' };
-  let user = await dbGetUserByEmail(emailNorm);
-  if (!user) {
-    const name = String(profile.name || emailNorm.split('@')[0]).trim().slice(0, 120) || 'مستخدم';
-    const status = 'approved';
-    const [r] = await pool.query(
-      'INSERT INTO users (name, username, email, password, status, country) VALUES (?, ?, ?, ?, ?, ?)',
-      [name, name, emailNorm, hashPassword(b64url(randomBytes(24))), status, '']);
-    const uid = r.insertId;
-    await ensureColumn('users', 'oauth_google_id', '`oauth_google_id` VARCHAR(64) NULL');
-    await ensureColumn('users', 'oauth_apple_id', '`oauth_apple_id` VARCHAR(64) NULL');
-    try {
-      await pool.query('UPDATE users SET ' + (provider === 'google' ? 'oauth_google_id' : 'oauth_apple_id') + ' = ? WHERE id = ?', [String(profile.sub || '').slice(0, 64), uid]);
-    } catch (e) { console.warn('[oauth] provider id save failed', e.message); }
-    try {
-      await pool.query('INSERT INTO wallets (user_id, currency, balance, locked_balance) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE balance = balance', [uid, 'USDT', 0, 0]);
-    } catch (e) {}
-    try { store.ensureUser(String(uid), { uid, name, email: emailNorm, country: '', status }); } catch (e) {}
-    try { logOps(null, { user: { id: String(uid), uid, name, email: emailNorm }, category: 'kyc', kind: 'account_created', status: 'ok', detail: 'تسجيل حساب جديد عبر ' + provider, meta: { provider } }); } catch (e) {}
-    user = await dbGetUserByEmail(emailNorm);
-    if (!user) return { error: 'create_failed' };
-  } else {
-    await maybeExpireTempBan(user);
-    if (user.status === 'banned') return { error: 'banned' };
-    try { await pool.query('UPDATE users SET last_seen = ? WHERE id = ?', [Date.now(), user.id]); } catch (e) {}
-  }
-  const token = signUserToken(user.id);
-  return { token, user };
-}
-function oauthFinish(res, result, next) {
-  if (result.error) return res.redirect(302, 'login.html?oauth_error=' + encodeURIComponent(result.error));
-  setSessionCookie(res, result.token);
-  // نمرّر التوكن للواجهة عبر بارامتر لمرّة واحدة (الصفحة تخزّنه ثم يُمحى من العنوان)
-  return res.redirect(302, _cleanNext(next) + '#oauth_token=' + encodeURIComponent(result.token));
-}
-async function oauthExchange(provider, code, verifier) {
-  const cfg = oauthCfg(provider);
-  const redirectUri = oauthRedirect(provider);
-  const body = new URLSearchParams({ grant_type: 'authorization_code', code: String(code || ''), redirect_uri: redirectUri });
-  if (provider === 'google') {
-    body.set('client_id', cfg.id); body.set('client_secret', cfg.secret); body.set('code_verifier', verifier);
-  } else {
-    body.set('client_id', cfg.id); body.set('client_secret', makeAppleClientSecret(cfg)); body.set('code_verifier', verifier);
-  }
-  const r = await fetch(provider === 'google'
-    ? 'https://oauth2.googleapis.com/token'
-    : 'https://appleid.apple.com/auth/token',
-    { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok || !j.id_token) throw new Error('token_exchange_failed');
-  const claims = JSON.parse(Buffer.from(String(j.id_token).split('.')[1], 'base64').toString('utf8'));
-  return claims;
-}
-function makeAppleClientSecret(cfg) {
-  const now = Math.floor(Date.now() / 1000);
-  const header = b64url(JSON.stringify({ alg: 'ES256', kid: cfg.keyId }));
-  const payload = b64url(JSON.stringify({ iss: cfg.team, iat: now, exp: now + 3600, aud: 'https://appleid.apple.com', sub: cfg.id }));
-  const sig = createSign('SHA256').update(header + '.' + payload).sign({ key: cfg.key, dsaEncoding: 'ieee-p1363' });
-  return header + '.' + payload + '.' + b64url(sig);
-}
-// Google: callback GET
-app.get('/api/auth/oauth/google/callback', async (req, res) => {
-  try {
-    const st = OAUTH_PKCE.get(String(req.query.state || ''));
-    if (!st || st.provider !== 'google' || st.exp < Date.now()) return res.redirect(302, 'login.html?oauth_error=state');
-    OAUTH_PKCE.delete(String(req.query.state || ''));
-    if (!req.query.code) return res.redirect(302, 'login.html?oauth_error=denied');
-    const claims = await oauthExchange('google', req.query.code, st.verifier);
-    const result = await oauthLoginOrCreate('google', { email: claims.email, name: claims.name, sub: claims.sub });
-    return oauthFinish(res, result, st.next);
-  } catch (e) { console.error('[oauth/google]', e.message); res.redirect(302, 'login.html?oauth_error=failed'); }
-});
-// Apple: callback POST (response_mode=form_post)
-app.post('/api/auth/oauth/apple/callback', express.urlencoded({ extended: false }), async (req, res) => {
-  try {
-    const b = req.body || {};
-    const st = OAUTH_PKCE.get(String(b.state || ''));
-    if (!st || st.provider !== 'apple' || st.exp < Date.now()) return res.redirect(302, 'login.html?oauth_error=state');
-    OAUTH_PKCE.delete(String(b.state || ''));
-    if (!b.code) return res.redirect(302, 'login.html?oauth_error=denied');
-    const claims = await oauthExchange('apple', b.code, st.verifier);
-    let name = '';
-    try { if (b.user) { const u = JSON.parse(b.user); name = [u.name && u.name.firstName, u.name && u.name.lastName].filter(Boolean).join(' '); } } catch (e) {}
-    const result = await oauthLoginOrCreate('apple', { email: claims.email, name, sub: claims.sub });
-    return oauthFinish(res, result, st.next);
-  } catch (e) { console.error('[oauth/apple]', e.message); res.redirect(302, 'login.html?oauth_error=failed'); }
-});
-
 app.post('/api/auth/login', strictLimiter, async (req, res) => {
   try {
     const { email, password } = req.body || {};
@@ -3823,12 +3609,9 @@ app.get('/api/admin/users/:id/id-doc', requireAdmin, async (req, res) => {
 // Admin: change a user's KYC/approval status in MySQL (source of truth).
 async function adminSetStatus(id, status, reason, action, res, req) {
   try {
-    // ban_permanent: الحظر العادي = دائم (1)، الحظر المؤقّت يبقى 0 فيُرفع تلقائياً عند انتهاء المدة.
-    // رفع الحظر (unban) أو الموافقة (approve) يمسح العلم حتى لا يبقى معلّقاً.
-    const permFlag = (action === 'ban') ? 1 : 0;
     const [r] = await pool.query(
-      'UPDATE users SET status = ?, reject_reason = ?, ban_permanent = ? WHERE id = ?',
-      [status, reason || null, permFlag, id]);
+      'UPDATE users SET status = ?, reject_reason = ? WHERE id = ?',
+      [status, reason || null, id]);
     if (!r.affectedRows) return res.status(404).json({ error: 'not_found' });
     const u = await dbGetUserById(id);
     try { store.logAdmin && store.logAdmin({ admin: 'admin', action: action || status, targetId: String(id), targetEmail: u && u.email, targetName: u && (u.name || u.username) }); } catch (e) {}
@@ -3844,18 +3627,6 @@ async function adminSetStatus(id, status, reason, action, res, req) {
         detail: 'قرار الأدمن: ' + (action || status) + (reason ? (' — ' + reason) : ''),
         meta: { status, reason: reason || '' },
       });
-    } catch (e) {}
-    // إشعار المستخدم بقرار الحساب (يظهر في جرس الإشعارات) — الحظر النهائي يوضّح أنه دائم.
-    try {
-      if (u && (action === 'ban' || action === 'unban')) {
-        store.addNotification && store.addNotification(String(id), {
-          title: action === 'ban' ? '\u26d4 حظر نهائي للحساب' : '\u2705 رُفع الحظر عن حسابك',
-          kind: 'admin',
-          body: action === 'ban'
-            ? 'تم حظر حسابك نهائياً بقرار من الإدارة' + (reason ? (': ' + reason) : '') + '. لن تتمكّن من الدخول أو التداول.'
-            : 'تم رفع الحظر عن حسابك؛ يمكنك الدخول والتداول من جديد.',
-        });
-      }
     } catch (e) {}
     res.json({ ok: true, user: dbPublicUser(u) });
   } catch (err) {
@@ -5666,42 +5437,21 @@ async function notifyPostOwner(pid, actorUid, actorName, action, snippet) {
     });
   } catch (e) { console.warn('[square/notify-interact]', e.message); }
 }
-// ---- عوامل ترتيب التغذية ----
-// 'hot'  : الأكثر تفاعلاً (إعجابات + تعليقات×2 + إعادة نشر×3)
-// 'new'  : الأحدث أولاً
-// 'mine' : منشوراتي
-// 'saved': المنشورات التي حفظتها
-// 'report': الأكثر إبلاغاً (عادةً للأدمن — لكنه متاح لمن يريد مراجعة المحتوى)
 app.get('/api/square/posts', requireUser, async (req, res) => {
   try {
-    const me = Number(req.user.uid);
+    const me = req.user.uid;
     const filter = String(req.query.filter || 'new');
     const q = String(req.query.q || '').trim();
     let where = '1=1';
-    // ترتيب البارامترات: (liked, reposted, following, saved, voted, reported) قبل شروط WHERE
-    const params = [me, me, me, me, me, me];
+    const params = [me, me, me];
     if (filter === 'mine') { where = 'p.user_id = ?'; params.push(me); }
     if (q) { where += ' AND (p.content LIKE ? OR p.author LIKE ?)'; params.push('%' + q + '%', '%' + q + '%'); }
     const symbol = String(req.query.symbol || '').trim().toUpperCase().slice(0, 20);
     if (symbol) { where += ' AND p.symbol = ?'; params.push(symbol); }
     const htag = String(req.query.tag || '').trim().toLowerCase().slice(0, 80);
     if (htag) { where += ' AND p.id IN (SELECT post_id FROM square_tags WHERE tag = ?)'; params.push(htag); }
-    // «حفظ المنشور» — فلتر يعرض المحفوظات فقط
-    if (filter === 'saved') where += ' AND p.id IN (SELECT post_id FROM square_saves WHERE user_id = ?)';
-    // «غير مهتم» — يُخفى المنشور عن هذا المستخدم في التغذية (يبقى ظاهراً في «منشوراتي»)
-    if (filter !== 'mine' && filter !== 'saved') {
-      where += ' AND p.id NOT IN (SELECT post_id FROM square_votes WHERE user_id = ? AND vote = \'out\')';
-      params.push(me);
-    }
     let order = 'p.created_at DESC';
-    if (filter === 'hot') {
-      order = '((SELECT COUNT(*) FROM square_likes l WHERE l.post_id = p.id) + ' +
-        '(SELECT COUNT(*) FROM square_comments c WHERE c.post_id = p.id) * 2 + ' +
-        '(SELECT COUNT(*) FROM square_reposts r WHERE r.post_id = p.id) * 3) DESC, p.created_at DESC';
-    }
-    if (filter === 'report') {
-      order = '(SELECT COUNT(*) FROM square_reports rp WHERE rp.post_id = p.id) DESC, p.created_at DESC';
-    }
+    if (filter === 'hot') order = 'likes DESC, p.created_at DESC';
     const [rows] = await pool.query(
       'SELECT p.id, p.user_id, p.author, p.content, p.image, p.tag, p.symbol, p.created_at, ' +
       ' (p.video IS NOT NULL AND p.video <> \'\') AS has_video, ' +
@@ -5711,47 +5461,9 @@ app.get('/api/square/posts', requireUser, async (req, res) => {
       ' (SELECT COUNT(*) FROM square_reposts r WHERE r.post_id = p.id AND r.user_id = ?) AS reposted, ' +
       ' (SELECT COUNT(*) FROM square_follows f WHERE f.follower_id = ? AND f.target_id = p.user_id) AS following, ' +
       ' (SELECT COUNT(*) FROM square_reposts r WHERE r.post_id = p.id) AS reposts, ' +
-      ' (SELECT COUNT(*) FROM square_views v WHERE v.post_id = p.id) AS views, ' +
-      // حالة خيارات القائمة (⋮) لهذا المستخدم على هذا المنشور
-      ' (SELECT COUNT(*) FROM square_saves s WHERE s.post_id = p.id AND s.user_id = ?) AS saved, ' +
-      ' (SELECT vote FROM square_votes vo WHERE vo.post_id = p.id AND vo.user_id = ? LIMIT 1) AS my_vote, ' +
-      ' (SELECT COUNT(*) FROM square_reports rp WHERE rp.post_id = p.id) AS reports ' +
+      ' (SELECT COUNT(*) FROM square_views v WHERE v.post_id = p.id) AS views ' +
       'FROM square_posts p WHERE ' + where + ' ORDER BY ' + order + ' LIMIT 200',
       params);
-
-    // ---- إعادات النشر: «أعاد النشر بواسطة فلان» ----
-    // نجلبها دفعة واحدة (استعلام واحد لكل التغذية) بدل استعلام لكل منشور — باندويث أقل.
-    const ids = rows.map((r) => Number(r.id)).filter(Boolean);
-    const rpByPost = {};
-    if (ids.length) {
-      try {
-        const [rps] = await pool.query(
-          'SELECT r.post_id, r.user_id, COALESCE(r.author, u.name, u.username, u.email, \'مستخدم\') AS reposter, ' +
-          ' COALESCE(r.orig_author, p.author, \'مستخدم\') AS orig_author ' +
-          'FROM square_reposts r LEFT JOIN users u ON u.id = r.user_id ' +
-          'LEFT JOIN square_posts p ON p.id = r.post_id ' +
-          'WHERE r.post_id IN (' + ids.map(() => '?').join(',') + ') ORDER BY r.created_at DESC LIMIT 500',
-          ids);
-        for (const r of rps) {
-          const p = String(r.post_id);
-          (rpByPost[p] = rpByPost[p] || []).push({ uid: r.user_id, name: r.reposter, orig: r.orig_author });
-        }
-      } catch (e) { console.warn('[square/reposters]', e.message); }
-    }
-    for (const r of rows) {
-      r.reposters = rpByPost[String(r.id)] || [];
-      // «أعيد النشر» = للمنشور إعادات نشر، والاسم الظاهر هو اسم آخر مُعيد نشر،
-      // و«نشرها أصلاً» = اسم صاحب المنشور الأصلي.
-      const rp = r.reposters;
-      if (rp.length) {
-        const latest = rp[0];
-        r.reposted_by = latest.name || null;
-        r.reposter_uid = latest.uid || null;
-        r.orig_author = latest.orig || r.author || null;
-      } else {
-        r.reposted_by = null; r.reposter_uid = null; r.orig_author = null;
-      }
-    }
     res.json({ ok: true, posts: rows });
   } catch (e) { console.error('[square/posts]', e.message); res.status(500).json({ error: 'server_error' }); }
 });
@@ -5854,17 +5566,8 @@ app.post('/api/square/posts/:id/repost', requireUser, async (req, res) => {
     const pid = Number(req.params.id);
     if (!pid) return res.status(400).json({ error: 'bad_id' });
     const [[ex]] = await pool.query('SELECT 1 AS n FROM square_reposts WHERE post_id = ? AND user_id = ?', [pid, req.user.uid]);
-    const myName = req.user.name || req.user.username || req.user.email;
     if (ex) await pool.query('DELETE FROM square_reposts WHERE post_id = ? AND user_id = ?', [pid, req.user.uid]);
-    else {
-      // نحفظ اسم مُعيد النشر واسم الناشر الأصلي وقت الإعادة (ليُعرض «أعاد النشر بواسطة …»)
-      let origAuthor = null;
-      try { const [[op]] = await pool.query('SELECT author FROM square_posts WHERE id = ?', [pid]); origAuthor = op ? op.author : null; } catch (e) {}
-      await pool.query(
-        'INSERT INTO square_reposts (post_id, user_id, created_at, author, orig_author) VALUES (?, ?, ?, ?, ?) ' +
-        'ON DUPLICATE KEY UPDATE author = VALUES(author), orig_author = VALUES(orig_author)',
-        [pid, req.user.uid, Date.now(), myName, origAuthor]);
-    }
+    else await pool.query('INSERT IGNORE INTO square_reposts (post_id, user_id, created_at) VALUES (?, ?, ?)', [pid, req.user.uid, Date.now()]);
     const [[c]] = await pool.query('SELECT COUNT(*) AS n FROM square_reposts WHERE post_id = ?', [pid]);
     if (!ex) { try { await notifyPostOwner(pid, req.user.uid, (req.user.name || req.user.username || req.user.email), 'repost', ''); } catch (e) {} }
     res.json({ ok: true, reposted: !ex, reposts: c.n });
@@ -5936,87 +5639,6 @@ app.get('/api/square/stats/overview', requireUser, async (req, res) => {
     }
     res.json({ ok: true, totals: { posts: t.n, likes: lk.n, comments: cm.n, reposts: rp.n, views: vw.n }, top, authors, tags, daily });
   } catch (e) { console.error('[square/overview]', e.message); res.status(500).json({ error: 'server_error' }); }
-});
-
-// ============================================================
-//  خيارات قائمة المنشور (⋮): مهتم / غير مهتم / حفظ / بلاغ
-// ============================================================
-// ملاحظة تصميم: كل خيار صف واحد لكل (منشور، مستخدم) عبر PRIMARY KEY —
-// فمستخدم واحد لا يستطيع تكرار البلاغ أو تضخيم الأعداد. والتخزين مضغوط
-// جداً (لا نصوص طويلة) حفاظاً على مساحة القاعدة في الخطة المجانية.
-const VOTE_SET = new Set(['in', 'out']);
-const REPORT_REASONS = new Set(['spam', 'abuse', 'scam', 'nudity', 'misinfo', 'other']);
-
-// مهتم / غير مهتم — تبديل (اختيار نفس الخيار يلغيه، واختيار الآخر يبدّله)
-app.post('/api/square/posts/:id/vote', requireUser, async (req, res) => {
-  try {
-    const pid = Number(req.params.id);
-    const v = String((req.body || {}).vote || '').trim().toLowerCase();
-    if (!pid) return res.status(400).json({ error: 'bad_id' });
-    if (!VOTE_SET.has(v)) return res.status(400).json({ error: 'bad_vote' });
-    const [[post]] = await pool.query('SELECT user_id FROM square_posts WHERE id = ?', [pid]);
-    if (!post) return res.status(404).json({ error: 'not_found' });
-    if (Number(post.user_id) === Number(req.user.uid)) return res.status(400).json({ error: 'own_post' });
-    const [[ex]] = await pool.query('SELECT vote FROM square_votes WHERE post_id = ? AND user_id = ?', [pid, req.user.uid]);
-    let vote = v;
-    if (ex && ex.vote === v) {
-      await pool.query('DELETE FROM square_votes WHERE post_id = ? AND user_id = ?', [pid, req.user.uid]);
-      vote = null;
-    } else {
-      await pool.query(
-        'INSERT INTO square_votes (post_id, user_id, vote, created_at) VALUES (?, ?, ?, ?) ' +
-        'ON DUPLICATE KEY UPDATE vote = VALUES(vote), created_at = VALUES(created_at)',
-        [pid, req.user.uid, v, Date.now()]);
-    }
-    const [[c]] = await pool.query('SELECT COUNT(*) AS n FROM square_votes WHERE post_id = ? AND vote = ?', [pid, v]);
-    res.json({ ok: true, vote: vote, count: Number(c && c.n) || 0 });
-  } catch (e) { console.error('[square/vote]', e.message); res.status(500).json({ error: 'server_error' }); }
-});
-
-// حفظ / إلغاء حفظ المنشور — تبديل
-app.post('/api/square/posts/:id/save', requireUser, async (req, res) => {
-  try {
-    const pid = Number(req.params.id);
-    if (!pid) return res.status(400).json({ error: 'bad_id' });
-    const [[post]] = await pool.query('SELECT id FROM square_posts WHERE id = ?', [pid]);
-    if (!post) return res.status(404).json({ error: 'not_found' });
-    const [[ex]] = await pool.query('SELECT 1 AS n FROM square_saves WHERE post_id = ? AND user_id = ?', [pid, req.user.uid]);
-    if (ex) await pool.query('DELETE FROM square_saves WHERE post_id = ? AND user_id = ?', [pid, req.user.uid]);
-    else await pool.query('INSERT IGNORE INTO square_saves (post_id, user_id, created_at) VALUES (?, ?, ?)', [pid, req.user.uid, Date.now()]);
-    res.json({ ok: true, saved: !ex });
-  } catch (e) { console.error('[square/save]', e.message); res.status(500).json({ error: 'server_error' }); }
-});
-
-// قائمة المحفوظات (لصفحة «المحفوظات» إن أردت لاحقاً)
-app.get('/api/square/saved', requireUser, async (req, res) => {
-  try {
-    const [rows] = await pool.query(
-      'SELECT p.id, p.user_id, p.author, p.content, p.tag, p.created_at, s.created_at AS saved_at ' +
-      'FROM square_saves s JOIN square_posts p ON p.id = s.post_id ' +
-      'WHERE s.user_id = ? ORDER BY s.created_at DESC LIMIT 200', [req.user.uid]);
-    res.json({ ok: true, posts: rows });
-  } catch (e) { console.error('[square/saved]', e.message); res.status(500).json({ error: 'server_error' }); }
-});
-
-// البلاغ عن المنشور (سبب + ملاحظة اختيارية). بلاغ واحد لكل مستخدم لكل منشور.
-app.post('/api/square/posts/:id/report', requireUser, async (req, res) => {
-  try {
-    const pid = Number(req.params.id);
-    const b = req.body || {};
-    const reason = String(b.reason || 'other').trim().toLowerCase();
-    const note = String(b.note || '').trim().slice(0, 400);
-    if (!pid) return res.status(400).json({ error: 'bad_id' });
-    if (!REPORT_REASONS.has(reason)) return res.status(400).json({ error: 'bad_reason' });
-    const [[post]] = await pool.query('SELECT user_id FROM square_posts WHERE id = ?', [pid]);
-    if (!post) return res.status(404).json({ error: 'not_found' });
-    if (Number(post.user_id) === Number(req.user.uid)) return res.status(400).json({ error: 'own_post' });
-    await pool.query(
-      'INSERT INTO square_reports (post_id, user_id, reporter, reason, note, created_at) VALUES (?, ?, ?, ?, ?, ?) ' +
-      'ON DUPLICATE KEY UPDATE reason = VALUES(reason), note = VALUES(note)',
-      [pid, req.user.uid, req.user.name || req.user.username || req.user.email, reason, note || null, Date.now()]);
-    const [[c]] = await pool.query('SELECT COUNT(*) AS n FROM square_reports WHERE post_id = ?', [pid]);
-    res.json({ ok: true, reported: true, reports: Number(c && c.n) || 0 });
-  } catch (e) { console.error('[square/report]', e.message); res.status(500).json({ error: 'server_error' }); }
 });
 
 app.get('/api/square/posts/:id/comments', requireUser, async (req, res) => {
@@ -6107,74 +5729,6 @@ app.get('/api/admin/square/posts', requireAdmin, async (req, res) => {
   } catch (e) { console.error('[admin/square/posts]', e.message); res.status(500).json({ error: 'server_error' }); }
 });
 
-
-// ===== لوحة الإشراف: جدول المنشورات الأكثر إبلاغاً =====
-// يعرض المنشور + الكاتب + عدّاد البلاغات + الأسباب الأكثر تكراراً،
-// مرتّباً من الأكثر إبلاغاً. مع خيار «المفتوحة فقط» (بلاغات لم تُعالج).
-app.get('/api/admin/square/reports', requireAdmin, async (req, res) => {
-  try {
-    const onlyOpen = String(req.query.status || '') !== 'all';
-    const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
-    const [rows] = await pool.query(
-      'SELECT p.id, p.user_id, p.author, p.content, p.created_at, ' +
-      ' COUNT(r.id) AS reports, ' +
-      ' SUM(CASE WHEN r.handled = 0 THEN 1 ELSE 0 END) AS open_reports, ' +
-      ' MAX(r.created_at) AS last_report, ' +
-      ' (SELECT COUNT(*) FROM square_likes l WHERE l.post_id = p.id) AS likes, ' +
-      ' (SELECT COUNT(*) FROM square_views v WHERE v.post_id = p.id) AS views ' +
-      'FROM square_reports r JOIN square_posts p ON p.id = r.post_id ' +
-      'GROUP BY p.id, p.user_id, p.author, p.content, p.created_at ' +
-      'HAVING reports > 0 ' + (onlyOpen ? 'AND open_reports > 0 ' : '') +
-      'ORDER BY reports DESC, last_report DESC LIMIT ' + limit);
-    // أسباب كل منشور (مجموعة واحدة لكل المنشورات — استعلام واحد)
-    const ids = rows.map((r) => Number(r.id));
-    const byPost = {};
-    if (ids.length) {
-      const [rs] = await pool.query(
-        'SELECT post_id, reason, COUNT(*) AS n FROM square_reports WHERE post_id IN (' + ids.map(() => '?').join(',') + ') ' +
-        'GROUP BY post_id, reason ORDER BY n DESC', ids);
-      for (const r of rs) (byPost[String(r.post_id)] = byPost[String(r.post_id)] || []).push({ reason: r.reason, n: Number(r.n) || 0 });
-    }
-    for (const r of rows) r.reasons = byPost[String(r.id)] || [];
-    const [[tot]] = await pool.query('SELECT COUNT(*) AS n FROM square_reports WHERE handled = 0');
-    res.json({ ok: true, posts: rows, openReports: Number(tot && tot.n) || 0 });
-  } catch (e) { console.error('[admin/square/reports]', e.message); res.status(500).json({ error: 'server_error' }); }
-});
-
-// تعليم بلاغات منشور كـ«تمت معالجتها» بدون حذف المنشور (مثلاً تحذير فقط)
-app.post('/api/admin/square/posts/:id/reports-handled', requireAdmin, async (req, res) => {
-  try {
-    const pid = Number(req.params.id);
-    if (!pid) return res.status(400).json({ error: 'bad_id' });
-    const [r] = await pool.query('UPDATE square_reports SET handled = 1, handled_at = ? WHERE post_id = ? AND handled = 0', [Date.now(), pid]);
-    res.json({ ok: true, handled: r.affectedRows || 0 });
-  } catch (e) { console.error('[admin/square/handled]', e.message); res.status(500).json({ error: 'server_error' }); }
-});
-
-// الحظر النهائي (الدائم) من صفحة الإشراف — يمنع الدخول والتداول ويعلّم بلاغاته كمعالجة.
-app.post('/api/admin/square/users/:uid/ban-permanent', requireAdmin, async (req, res) => {
-  try {
-    const uid = Number(req.params.uid);
-    const reason = String((req.body || {}).reason || 'مخالفة سياسة المحتوى').slice(0, 300);
-    if (!uid) return res.status(400).json({ error: 'bad_user' });
-    const [r] = await pool.query(
-      "UPDATE users SET status = 'banned', ban_permanent = 1, ban_until = 0, reject_reason = ? WHERE id = ?", [reason, uid]);
-    if (!r.affectedRows) return res.status(404).json({ error: 'not_found' });
-    const u = await dbGetUserById(uid);
-    try { store.logAdmin && store.logAdmin({ admin: 'admin', action: 'ban_permanent', targetId: String(uid), targetEmail: u && u.email, targetName: u && (u.name || u.username), note: 'حظر نهائي — ' + reason }); } catch (e) {}
-    try {
-      store.addNotification && store.addNotification(String(uid), {
-        title: '\u26d4 حظر نهائي للحساب', kind: 'admin',
-        body: 'تم حظر حسابك نهائياً بقرار من الإدارة: ' + reason,
-      });
-    } catch (e) {}
-    // أغلق جلساته الحالية فوراً: نضع sid مستحيلاً فلا يطابق أي توكن صادر
-    // → كل توكناته القديمة تُرفض بـsession_revoked عند أول طلب.
-    try { setActiveSid(uid, 'banned-' + Date.now()); } catch (e) {}
-    res.json({ ok: true, user: dbPublicUser(u) });
-  } catch (e) { console.error('[admin/ban-permanent]', e.message); res.status(500).json({ error: 'server_error' }); }
-});
-
 // ---- Static frontend ----
 // تخزين المتصفّح: الأصول الثابتة (صور/CSS/JS/خطوط) تُخزّن أسبوعاً فيالمتصفّح
 // فلا يُعاد تحميلها عند الزيارة العائدة (أكبر توفير لأن الصور كثيرة وثقيلة).
@@ -6232,16 +5786,10 @@ app.use((req, res, next) => {
 
   // هل المطلوب ملف HTML؟ (الصفحة الجذرية تُعامَل كـ index.html)
   let name = rawPath === '/' ? 'index.html' : rawPath.replace(/^\/+/, '');
-  // صفحة الهبوط العامة: فتح المنصة بلا حساب (تُطلب إضافة ?guest=1 من الواجهة)
-  const isGuestHome = /^index\.html$/i.test(name) && String(req.query.guest || '') === '1';
   if (!/\.html?$/i.test(name)) return next();              // أصول ثابتة (css/js/صور) تمرّ
 
   const leaf = name.split('/').pop().toLowerCase();
   if (PUBLIC_PAGES.has(leaf)) return next();               // صفحات عامة لا تحتاج دخولاً
-  if (isGuestHome) {                                        // الرئيسية للزائر (بلا بيانات حساب)
-    res.setHeader('Cache-Control', 'no-store');
-    return next();
-  }
   if (pageIsAuthed(req)) return next();                    // مسجّل دخول → اسمح
 
   // غير مسجّل حاول فتح صفحة محمية: أعِده لتسجيل الدخول مع وجهته
