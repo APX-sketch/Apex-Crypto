@@ -183,6 +183,13 @@ h1{font-size:24px;font-weight:800;margin:0 0 18px;letter-spacing:-.2px;animation
         <input id="otpCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="000000" dir="ltr" style="text-align:center;letter-spacing:8px;font-size:20px;font-weight:800">
       </div>
     </div>
+    <div id="devCodeBox" class="hide" style="margin:0 0 14px;padding:12px 14px;border-radius:12px;background:rgba(224,166,21,.10);border:1px solid rgba(224,166,21,.35);text-align:center">
+      <div style="font-size:12px;font-weight:700;color:#b98900;margin-bottom:6px">وضع التطوير — البريد غير مُفعّل، الرمز يظهر هنا:</div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:10px">
+        <b id="devCodeVal" dir="ltr" style="font-size:24px;letter-spacing:6px;color:#8a6500">------</b>
+        <button type="button" onclick="useDevCode()" style="border:0;border-radius:9px;padding:7px 12px;font-weight:800;font-size:12px;background:#f0b90b;color:#1e1e1e;cursor:pointer">استخدام الرمز</button>
+      </div>
+    </div>
     <button class="btn" id="otpBtn" onclick="doVerify()">تأكيد الدخول</button>
     <div class="links">
       <a href="#" onclick="doResend();return false;">إعادة إرسال الرمز</a>
@@ -338,8 +345,11 @@ async function doLogin(){
       OTP_EMAIL=d.email||email;
       $('credBox').style.display='none';
       $('otpBox').style.display='block';
-      $('otpHint').textContent='أدخل رمز التحقق المرسل إلى '+(OTP_EMAIL||'بريدك')+'.';
-      showMsg(d.devCode?('وضع التطوير: الرمز '+d.devCode):'تم إرسال رمز التحقق إلى بريدك.', d.devCode?'warn':'ok');
+      $('otpHint').textContent = (d.mailSent===false)
+        ? ('تعذّر إرسال بريد إلى '+(OTP_EMAIL||'بريدك')+' (إعداد البريد غير مكتمل على الخادم). استخدم الرمز الظاهر أدناه.')
+        : ('أدخل رمز التحقق المرسل إلى '+(OTP_EMAIL||'بريدك')+'.');
+      if(d.devCode){showDevCode(d.devCode);showMsg('لم يُضبط بريد الإرسال على الخادم، لذلك يظهر الرمز أسفل الحقل.','warn');}
+      else{showDevCode('');showMsg('تم إرسال رمز التحقق إلى بريدك.','ok');}
       btn.disabled=false;btn.classList.remove('loading');btn.removeAttribute('aria-busy');
       setTimeout(function(){$('otpCode').focus();},80);
       return;
@@ -371,11 +381,29 @@ async function doResend(){
   try{
     const r=await fetch('/api/auth/login/resend-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:OTP_EMAIL})});
     const d=await r.json().catch(function(){return{};});
-    showMsg(d.devCode?('وضع التطوير: الرمز '+d.devCode):'تم إرسال رمز جديد إلى بريدك.', d.devCode?'warn':'ok');
+    if(d.devCode){showDevCode(d.devCode);showMsg('وضع التطوير: الرمز الجديد ظاهر أسفل الحقل.','warn');}
+      else{showDevCode('');showMsg('تم إرسال رمز جديد إلى بريدك.','ok');}
   }catch(e){showMsg('تعذّر إعادة الإرسال، حاول مجدداً.','err');}
 }
+var OTP_DEV='';
+function showDevCode(code){
+  OTP_DEV=String(code||'');
+  var box=$('devCodeBox'),v=$('devCodeVal');
+  if(!box||!v)return;
+  if(!OTP_DEV){box.classList.add('hide');return;}
+  v.textContent=OTP_DEV;
+  box.classList.remove('hide');
+  var inp=$('otpCode');
+  if(inp){inp.value=OTP_DEV;try{inp.dispatchEvent(new Event('input',{bubbles:true}));}catch(e){}}
+}
+function useDevCode(){
+  if(!OTP_DEV)return;
+  var inp=$('otpCode');if(inp){inp.value=OTP_DEV;inp.focus();}
+  doVerify();
+}
+window.showDevCode=showDevCode;window.useDevCode=useDevCode;
 function otpBack(){
-  OTP_EMAIL='';
+  OTP_EMAIL='';showDevCode('');
   var bb=$('backBtn');if(bb&&$('step2').classList.contains('on'))bb.classList.remove('hide');
   $('otpBox').style.display='none';
   $('credBox').style.display='block';

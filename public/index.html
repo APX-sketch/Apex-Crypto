@@ -254,6 +254,7 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
 .kbanner.pending .kico{background:rgba(224,166,21,.18)} .kbanner.pending .kico svg{stroke:var(--gold2)}
 .kbanner.rejected .kico{background:rgba(246,70,93,.18)} .kbanner.rejected .kico svg{stroke:var(--red)}
 .vf.pending{color:var(--gold1)!important;background:rgba(224,166,21,.12)!important}
+.vf:not(.pending):not(.rejected){color:var(--muted)!important;background:rgba(255,255,255,.06)!important}
 .vf.rejected{color:#ff8a97!important;background:rgba(246,70,93,.12)!important}
 /* ===== QR SCANNER OVERLAY ===== */
 .scan-ov{position:fixed;top:0;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;height:100vh;height:100dvh;z-index:9999;background:#000;display:none;flex-direction:column}
@@ -304,6 +305,7 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
 .pf-badges .bdg svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2.2}
 .pf-badges .bdg.v{color:var(--green);background:rgba(14,203,129,.12)}
 .pf-badges .bdg.n{color:var(--gold2);background:rgba(224,166,21,.12)}
+.pf-badges .bdg.r{color:var(--red);background:rgba(246,70,93,.12)}
 .pf-support{margin:4px 16px 18px;display:flex;align-items:center;justify-content:center;gap:10px;width:calc(100% - 32px);background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#231a02;border:0;border-radius:14px;font-family:inherit;font-weight:800;font-size:15px;padding:15px 0;cursor:pointer}
 .pf-support svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2}
 .row .tx2{flex:1;font-size:14px;font-weight:700}
@@ -473,7 +475,7 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
   <div class="dhead">
     <div class="av" id="dAv">A</div>
     <div class="di">
-      <div class="nm"><span id="dName">مستخدم</span><span class="vf pending" id="vfBadge" data-i18n="statusPending">قيد المراجعة</span></div>
+      <div class="nm"><span id="dName">مستخدم</span><span class="vf" id="vfBadge" style="color:var(--muted)!important;background:rgba(255,255,255,.06)!important" data-i18n="statusPending">قيد المراجعة</span></div>
       <div class="uid">UID: <span id="dUid">--</span><span class="cp" onclick="copyUid()" data-i18n="copy">نسخ</span></div>
     </div>
   </div>
@@ -506,9 +508,8 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
         <div class="pu">UID: <span id="pfUid">--</span><span class="cp" onclick="copyUid()" data-i18n="copy">نسخ</span></div>
       </div>
     </div>
-    <div class="pf-badges">
-      <span class="bdg v"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 12l2 2 4-4"/></svg>موثق</span>
-      <span class="bdg n"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>عادي</span>
+    <div class="pf-badges" id="pfBadges">
+      <span class="bdg n" id="pfKycBadge"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span id="pfKycTxt">قيد المراجعة</span></span>
     </div>
     <button class="pf-support" onclick="openSupport()"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 0118 0M3 12v4a2 2 0 002 2h1v-6H5a2 2 0 00-2 2zM21 12v4a2 2 0 01-2 2h-1v-6h1a2 2 0 012 2z"/></svg>الحصول على الدعم</button>
     <div class="grp">
@@ -962,6 +963,7 @@ function openProfile(){
   var a=$('pfAv');if(a)a.textContent=initial;
   var n=$('pfName');if(n)n.textContent=uname;
   var u=$('pfUid');if(u)u.textContent=UID;
+  try{refreshProfileBadge();}catch(e){}
   openSheet('shProfile');
 }
 function inviteFriend(){
@@ -1455,11 +1457,28 @@ function pickLang(code){applyLang(code);toast(t('langChanged'));setTimeout(funct
 var KYC_TOKEN=(sess&&sess.token)||localStorage.getItem('apex_token')||'';
 var KYC_POLL=null, KYC_CUR='';
 function kL(k,fb){try{var v=window.APEX_I18N&&window.APEX_I18N.t(k);return (v&&v!==k)?v:fb;}catch(e){return fb;}}
+function paintProfileBadge(status){
+  var b=document.getElementById('pfKycBadge'), t=document.getElementById('pfKycTxt');
+  if(!b||!t) return;
+  b.classList.remove('v','n','r');
+  var svg=b.querySelector('svg');
+  if(status==='approved'){
+    b.classList.add('v'); t.textContent=kL('statusVerified','موثّق');
+    if(svg) svg.innerHTML='<circle cx="12" cy="12" r="9"/><path d="M9 12l2 2 4-4"/>';
+  } else if(status==='rejected'){
+    b.classList.add('r'); t.textContent=kL('statusRejected','مرفوض');
+    if(svg) svg.innerHTML='<circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/>';
+  } else {
+    b.classList.add('n'); t.textContent=kL('statusPending','قيد المراجعة');
+    if(svg) svg.innerHTML='<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>';
+  }
+}
 function applyKycStatus(status){
   KYC_CUR=status||'pending';
+  paintProfileBadge(KYC_CUR);
   var badge=$('vfBadge'),ban=$('kBanner'),btn=$('kBanBtn'),tx=$('kBanTx'),ico=$('kBanIco');
   var title=$('kycTitle'),desc=$('kycDesc'),shield=document.querySelector('#shKyc .shield'),kst=$('kycStatusVal');
-  if(badge){badge.classList.remove('pending','rejected');
+  if(badge){badge.classList.remove('pending','rejected');badge.style.color='';badge.style.background='';
     if(status==='approved'){badge.setAttribute('data-i18n','statusVerified');badge.textContent='✓ '+kL('statusVerified','موثّق');}
     else if(status==='rejected'){badge.classList.add('rejected');badge.setAttribute('data-i18n','statusRejected');badge.textContent=kL('statusRejected','مرفوض');}
     else{badge.classList.add('pending');badge.setAttribute('data-i18n','statusPending');badge.textContent=kL('statusPending','قيد المراجعة');}
@@ -1479,6 +1498,12 @@ function applyKycStatus(status){
     else{kst.classList.add('warn');kst.textContent=kL('statusPending','قيد المراجعة');}
   }
 }
+/* عند فتح الملف الشخصي: اعرض الحالة المعروفة فوراً ثم حدّثها من الخادم */
+function refreshProfileBadge(){
+  var cached=localStorage.getItem('apex_kyc_status')||'pending';
+  paintProfileBadge(cached);
+  fetchKyc();
+}
 function handleKyc(status){
   var prev=localStorage.getItem('apex_kyc_status')||'';
   if(status==='approved'&&prev&&prev!=='approved'){toast(kL('approvedToast','تمت الموافقة على حسابك ✅'));}
@@ -1491,8 +1516,8 @@ async function fetchKyc(){
     var r=await fetch('/api/auth/me',{headers:{'Authorization':'Bearer '+KYC_TOKEN}});
     if(r.status===401||r.status===403){doLogout();return;}
     if(!r.ok)return;
-    var d=await r.json();var st=d&&d.user&&d.user.status;
-    if(st)handleKyc(st);
+    var d=await r.json();var st=(d&&d.user&&d.user.status)||'pending';
+    handleKyc(st);
     var u=(d&&d.user)||{};
     window.APEX_FROZEN=!!u.frozen;window.APEX_FREEZE_UNTIL=u.freezeUntil||null;
     renderFrozenBanner();
@@ -1505,8 +1530,8 @@ function renderFrozenBanner(){
   else el.style.display='none';
 }
 function initKycStatus(){
-  var cached=localStorage.getItem('apex_kyc_status');
-  if(cached)applyKycStatus(cached);
+  var cached=localStorage.getItem('apex_kyc_status')||'pending';
+  applyKycStatus(cached);   /* الافتراضي: قيد المراجعة — لا "موثّق" قبل تأكيد الخادم */
   fetchKyc();
   if(KYC_POLL)clearInterval(KYC_POLL);
   KYC_POLL=setInterval(function(){if(!document.hidden)fetchKyc();},60000);

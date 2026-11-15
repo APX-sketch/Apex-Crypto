@@ -2537,9 +2537,13 @@ app.post('/api/auth/login', strictLimiter, async (req, res) => {
       const emailNorm = String(user.email || '').trim().toLowerCase();
       const { code, expiresInSec } = loginOtps.issue(emailNorm, { uid: user.id });
       try { await sendOtp({ to: user.email, code, purpose: 'login' }); } catch (e) {}
-      const devMode = !isMailerConfigured() || process.env.OTP_DEBUG === 'true';
+      // إن لم يُضبط مفتاح البريد فعلياً على الخادم (أو OTP_DEBUG=true) نُرجع الرمز
+      // داخل الرد حتى لا يعلق المستخدم على شاشة الرمز بلا رسالة بريد.
+      const devMode = !hasMailerKey() || process.env.OTP_DEBUG === 'true';
+      // الإرسال يحتاج مفتاحاً؛ بلا مفتاح لا فائدة من انتظار رسالة بريد.
+      const mailSent = hasMailerKey();
       return res.json({ ok: true, otpRequired: true, email: user.email || '',
-        expiresInSec, devCode: devMode ? code : undefined });
+        mailSent, expiresInSec, devCode: devMode ? code : undefined, devMode: !!devMode });
     }
 
     // 5. (بدون OTP) نجاح الدخول: أصدر توكناً موقّعاً
@@ -2606,7 +2610,7 @@ app.post('/api/auth/login/resend-otp', strictLimiter, async (req, res) => {
     if (!email) return res.status(400).json({ error: 'invalid_credentials' });
     // لا نكشف هل البريد مسجّل أم لا (حماية من التعداد): نردّ ok دائماً
     const user = await dbGetUserByEmail(email);
-    const devMode = !isMailerConfigured() || process.env.OTP_DEBUG === 'true';
+    const devMode = !hasMailerKey() || process.env.OTP_DEBUG === 'true';
     if (user) await maybeExpireTempBan(user);
     if (!user || user.status === 'banned') {
       return res.json({ ok: true, sent: true });
@@ -2731,7 +2735,7 @@ app.post('/api/auth/change-email', strictLimiter, requireUser, async (req, res) 
     // 3) أصدِر رمزاً مرتبطاً بالمستخدم والبريد الجديد، وأرسِله للبريد الجديد
     const { code, expiresInSec } = emailChangeOtps.issue(req.user.id, { newEmail });
     try { await sendEmailChangeOtp({ to: newEmail, code }); } catch (e) {}
-    const devMode = !isMailerConfigured() || process.env.OTP_DEBUG === 'true';
+    const devMode = !hasMailerKey() || process.env.OTP_DEBUG === 'true';
     res.json({ ok: true, otpRequired: true, newEmail, expiresInSec,
       devCode: devMode ? code : undefined });
   } catch (err) {
@@ -6370,6 +6374,11 @@ app.post('/api/auth/register', strictLimiter, async (req, res) => {
 // ---- OTP تأكيد السحب + تسجيل الدخول ----
 // مخزنان مستقلان (بالذاكرة): رمز 6 خانات، صالح 5 دقائق، 5 محاولات.
 const withdrawOtps = new OtpStore({ ttlMs: 5 * 60 * 1000, maxTries: 5 });
+// هل يوجد مفتاح بريد صالح فعلاً؟ (mailer.js يرجع true دائماً، لذا نفحص المتغيّر مباشرة)
+function hasMailerKey() {
+  return !!String(process.env.SMTP_PASS || process.env.BREVO_API_KEY || '').trim();
+}
+
 const loginOtps = new OtpStore({ ttlMs: 5 * 60 * 1000, maxTries: 5 });
 // رمز تأكيد تغيير البريد (يُرسَل للبريد الجديد) — مُفتاح بمعرّف المستخدم
 const emailChangeOtps = new OtpStore({ ttlMs: 5 * 60 * 1000, maxTries: 5 });
@@ -6383,7 +6392,7 @@ app.post('/api/auth/forgot-password', strictLimiter, async (req, res) => {
   try {
     const email = String((req.body || {}).email || '').trim().toLowerCase();
     if (!EMAIL_RE.test(email) || email.length > 160) return res.status(400).json({ error: 'bad_email' });
-    const devMode = !isMailerConfigured() || process.env.OTP_DEBUG === 'true';
+    const devMode = !hasMailerKey() || process.env.OTP_DEBUG === 'true';
     const user = await dbGetUserByEmail(email);
     if (!user) return res.status(404).json({ error: 'not_found' });
     const { code, expiresInSec } = passwordResetOtps.issue(email, { uid: user.id });
@@ -6449,7 +6458,7 @@ app.post('/api/wallet/withdraw/request-otp', strictLimiter, requireUser, require
   try { sendOtp({ to: req.user.email, code, amount, currency }); } catch (e) {}
   // في وضع الاختبار فقط (بلا بريد مُعدّ) نضع الرمز داخل إشعار بالتطبيق لتيسير التجربة؛
   // أمّا عند تفعيل البريد الحقيقي فلا نكشف الرمز داخل التطبيق إطلاقاً (يصل للإيميل فقط).
-  const emailOn = isMailerConfigured() && process.env.OTP_DEBUG !== 'true';
+  const emailOn = hasMailerKey() && process.env.OTP_DEBUG !== 'true';
   try {
     store.addNotification(req.user.id, {
       title: 'رمز تأكيد السحب',
@@ -6461,7 +6470,7 @@ app.post('/api/wallet/withdraw/request-otp', strictLimiter, requireUser, require
   } catch (e) {}
 
   // في بيئة العرض/الاختبار دون بريد مُعدّ نعيد devCode لتيسير التجربة.
-  const devMode = !isMailerConfigured() || process.env.OTP_DEBUG === 'true';
+  const devMode = !hasMailerKey() || process.env.OTP_DEBUG === 'true';
   res.json({ ok: true, sent: true, expiresInSec,
     email: req.user.email || '', devCode: devMode ? code : undefined });
 });
