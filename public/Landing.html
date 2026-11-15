@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إنشاء حساب جديد - Apex Crypto Official</title>
+    <style>
+:root{--bg:#0b0e11;--panel2:#1e2329;--border:#2b3139;--txt:#eaecef;--muted:#848e9c;--gold1:#f8d979;--gold2:#f0b90b;--yellow:#fcd535;--green:#0ecb81;--red:#f6465d}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;font-family:'Segoe UI',Tahoma,system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--txt);min-height:100vh;display:flex;justify-content:center;padding:0;-webkit-font-smoothing:antialiased}
+.wrap{width:100%;max-width:430px;min-height:100vh;display:flex;flex-direction:column;padding:14px 22px 26px}
+
+.topbar{height:44px;display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.iconbtn{background:none;border:0;color:var(--txt);cursor:pointer;padding:8px;display:flex;align-items:center;justify-content:center;border-radius:50%;transition:background .15s}
+.iconbtn:hover{background:var(--panel2)}
+.iconbtn svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+.brand{text-align:center;margin:2px 0 18px}
+.brand b{font-size:26px;font-weight:900;letter-spacing:.5px;background:linear-gradient(135deg,var(--gold1),var(--gold2));-webkit-background-clip:text;background-clip:text;color:transparent}
+
+/* شاشتان مع تحريك انزلاق */
+.stage{position:relative;flex:1;display:flex;flex-direction:column;overflow:hidden}
+.screen{width:100%;transition:transform .38s cubic-bezier(.22,.61,.36,1),opacity .3s ease}
+.screen.slide-out{transform:translateX(-38px);opacity:0;pointer-events:none;position:absolute;top:0;right:0;left:0}
+.screen.slide-in-ready{transform:translateX(38px);opacity:0}
+.screen.show{transform:translateX(0);opacity:1}
+.hidden{display:none!important}
+
+h1{font-size:24px;font-weight:800;margin:0 0 8px;letter-spacing:-.2px;animation:fadeUp .45s ease both}
+.hint{color:var(--muted);font-size:13.5px;line-height:1.7;margin:0 0 22px;animation:fadeUp .45s .05s ease both}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+.msg{padding:11px 14px;border-radius:10px;font-size:13px;line-height:1.6;margin-bottom:16px;display:none;animation:fadeUp .3s ease both}
+.msg.err{display:block;background:rgba(246,70,93,.12);color:#ff8a97;border:1px solid rgba(246,70,93,.3)}
+.msg.warn{display:block;background:rgba(240,185,11,.1);color:var(--gold1);border:1px solid rgba(240,185,11,.3)}
+.msg.ok{display:block;background:rgba(14,203,129,.12);color:#5be0a8;border:1px solid rgba(14,203,129,.3)}
+
+.fld{margin-bottom:16px;animation:fadeUp .45s ease both}
+.fld label{display:block;font-size:13px;color:var(--muted);margin-bottom:8px}
+.fld .box{position:relative;display:flex;align-items:center;background:var(--panel2);border:1px solid var(--border);border-radius:6px;transition:border-color .18s,box-shadow .18s}
+.fld .box:focus-within{border-color:var(--yellow);box-shadow:0 0 0 3px rgba(252,213,53,.08)}
+.fld input,.fld select,.fld textarea{flex:1;width:100%;padding:14px;background:transparent;border:0;color:var(--txt);font-family:inherit;font-size:15px;outline:none;min-width:0;border-radius:6px}
+.fld select{appearance:none;-webkit-appearance:none;cursor:pointer}
+.fld select option{background:#1e2329;color:var(--txt)}
+.fld input::placeholder{color:#5e6673}
+.fld .clear,.fld .eye,.fld .arrow{background:none;border:0;color:var(--muted);cursor:pointer;padding:0 12px;display:none;align-items:center}
+.fld .clear.show{display:flex}
+.fld .eye,.fld .arrow{display:flex}
+.fld .clear svg,.fld .eye svg,.fld .arrow svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.fld.bad .box{border-color:var(--red);background:rgba(246,70,93,.05)}
+.fld.good .box{border-color:rgba(14,203,129,.6)}
+.fld .errtx{display:none;color:var(--red);font-size:12.5px;font-weight:700;margin-top:8px;line-height:1.6}
+.fld.bad .errtx{display:block}
+
+/* رفع الوثيقة */
+.filebox{display:flex;align-items:center;gap:12px;background:var(--panel2);border:1px dashed #3a424c;border-radius:6px;padding:14px;cursor:pointer;transition:border-color .18s,background .18s}
+.filebox:hover{border-color:var(--yellow);background:#232930}
+.filebox.filled{border-style:solid;border-color:rgba(14,203,129,.6)}
+.filebox svg{width:22px;height:22px;flex:0 0 auto;fill:none;stroke:var(--yellow);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.filebox .fname{flex:1;font-size:13.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.filebox.filled .fname{color:var(--txt);font-weight:600}
+.thumb{margin-top:10px;display:none;border-radius:8px;overflow:hidden;border:1px solid var(--border);max-height:150px}
+.thumb.show{display:block}
+.thumb img{width:100%;max-height:150px;object-fit:cover;display:block}
+.fhint{font-size:12px;color:var(--muted);margin-top:8px}
+
+.terms-check{display:flex;align-items:flex-start;gap:10px;font-size:12.5px;color:var(--muted);line-height:1.7;margin:4px 0 18px;cursor:pointer}
+.terms-check input{margin-top:3px;accent-color:var(--yellow);width:16px;height:16px;flex:0 0 auto}
+.terms-check a{color:var(--yellow);text-decoration:none;font-weight:700}
+
+.btn{width:100%;padding:14px;border:0;border-radius:6px;font-family:inherit;font-weight:700;font-size:16px;cursor:pointer;background:var(--yellow);color:#181a20;transition:transform .12s,filter .15s,box-shadow .2s;box-shadow:0 0 0 0 rgba(252,213,53,0)}
+.btn:hover{filter:brightness(1.06);box-shadow:0 6px 18px rgba(252,213,53,.18)}
+.btn:active{transform:scale(.985)}
+.btn:disabled{opacity:.55;cursor:default;box-shadow:none}
+.btn.loading::after{content:'';display:inline-block;width:14px;height:14px;margin-right:8px;vertical-align:-2px;border:2px solid rgba(0,0,0,.25);border-top-color:#181a20;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.sep{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:13px;margin:26px 0 18px}
+.sep:before,.sep:after{content:'';flex:1;height:1px;background:var(--border)}
+.social{display:flex;flex-direction:column;gap:12px}
+.sbtn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:13px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--txt);font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;transition:background .15s,transform .12s}
+.sbtn:hover{background:var(--panel2)}.sbtn:active{transform:scale(.99)}
+.sbtn svg{width:20px;height:20px;flex:0 0 auto}
+
+.links{text-align:center;margin-top:22px;font-size:14px;line-height:2}
+.links a{color:var(--txt);font-weight:700;text-decoration:none;display:block;padding:4px}
+.links a:hover{color:var(--yellow)}
+.links .mutedlink{color:var(--muted);font-weight:500}
+.legal{text-align:center;color:var(--muted);font-size:11.5px;line-height:1.8;margin-top:auto;padding-top:22px}
+.legal a{color:var(--muted)}
+.spacer{flex:1}
+@media(max-width:380px){h1{font-size:21px}.wrap{padding:14px 16px 22px}}
+</style>
+<script src="i18n.js"></script>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <button class="iconbtn" type="button" onclick="goLogin()" aria-label="رجوع">
+      <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+    <button class="iconbtn" type="button" onclick="goLogin()" aria-label="إغلاق">
+      <svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+
+  <div class="brand"><b>Apex</b></div>
+
+  <div class="stage">
+    <!-- ============ الشاشة 1: بيانات الحساب ============ -->
+    <div class="screen show" id="scr1">
+      <h1>إنشاء حساب جديد</h1>
+      <p class="hint">سيتم مراجعة طلبك من الإدارة قبل تفعيل الحساب</p>
+
+      <div class="msg" id="msg"></div>
+
+      <div class="fld" id="fldName" style="animation-delay:.06s">
+        <label for="regName">الاسم الكامل</label>
+        <div class="box">
+          <input id="regName" type="text" autocomplete="name" placeholder="الاسم الكامل">
+        </div>
+        <div class="errtx" id="nameErr">اكتب اسمك الكامل (حرفان على الأقل)</div>
+      </div>
+
+      <div class="fld" id="fldEmail" style="animation-delay:.1s">
+        <label for="regEmail">البريد الإلكتروني</label>
+        <div class="box">
+          <input id="regEmail" type="email" autocomplete="email" placeholder="name@email.com" dir="ltr" style="text-align:right">
+          <button class="clear" id="emailClear" type="button" onclick="clearField('regEmail','fldEmail')" aria-label="مسح">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+          </button>
+        </div>
+        <div class="errtx" id="regEmailErr">صيغة البريد الإلكتروني غير صحيحة</div>
+      </div>
+
+      <div class="fld" id="fldCountry" style="animation-delay:.14s">
+        <label for="regCountry">الدولة (اختياري)</label>
+        <div class="box">
+          <input id="regCountry" type="text" autocomplete="country-name" placeholder="الدولة">
+        </div>
+      </div>
+
+      <div class="fld" id="fldPass" style="animation-delay:.18s">
+        <label for="regPass">كلمة المرور</label>
+        <div class="box">
+          <input id="regPass" type="password" autocomplete="new-password" placeholder="8 أحرف على الأقل">
+          <button class="eye" type="button" onclick="togglePass('regPass',this)" aria-label="إظهار كلمة المرور">
+            <svg viewBox="0 0 24 24"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/><path class="slash" d="M4 4l16 16" style="display:none"/></svg>
+          </button>
+        </div>
+        <div class="errtx" id="regPassErr">كلمة المرور يجب أن تكون 8 أحرف على الأقل</div>
+      </div>
+
+      <div class="fld" id="fldPass2" style="animation-delay:.22s">
+        <label for="regPass2">تأكيد كلمة المرور</label>
+        <div class="box">
+          <input id="regPass2" type="password" autocomplete="new-password" placeholder="أعد إدخال كلمة المرور">
+          <button class="eye" type="button" onclick="togglePass('regPass2',this)" aria-label="إظهار كلمة المرور">
+            <svg viewBox="0 0 24 24"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/><path class="slash" d="M4 4l16 16" style="display:none"/></svg>
+          </button>
+        </div>
+        <div class="errtx" id="regPass2Err">كلمتا المرور غير متطابقتين</div>
+      </div>
+
+      <button class="btn" id="toStep2" onclick="nextStep()">متابعة</button>
+
+      <div class="sep">أو</div>
+      <div class="social">
+        <button class="sbtn" type="button" onclick="socialLogin('google')">
+          <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#4285F4" d="M45.1 24.5c0-1.6-.1-2.7-.4-3.9H24v7.4h12c-.2 2-1.5 5-4.4 7l-.1.3 6.4 4.9.4.1c4-3.7 6.8-9.1 6.8-15.8z"/><path fill="#34A853" d="M24 46c5.8 0 10.6-1.9 14.2-5.2l-6.8-5.2c-1.8 1.2-4.2 2.1-7.4 2.1-5.7 0-10.5-3.7-12.2-8.8l-.3.1-6.6 5-.1.3C8.4 41.1 15.6 46 24 46z"/><path fill="#FBBC05" d="M11.8 28.9c-.5-1.4-.7-2.8-.7-4.3s.3-3 .7-4.3l-.1-.3-6.7-5.2-.2.1C3.1 18.2 2.4 21 2.4 24s.7 5.8 2.2 8.4l7.2-5.4z"/><path fill="#EA4335" d="M24 9.6c4 0 6.7 1.7 8.2 3.2l6-5.9C34.6 3.6 29.8 2 24 2 15.6 2 8.4 6.9 5.2 14.5l7.1 5.5C15.6 14.9 20.3 9.6 24 9.6z"/></svg>
+          المتابعة باستخدام Google
+        </button>
+        <button class="sbtn" type="button" onclick="socialLogin('apple')">
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M16.4 12.7c0-2.4 2-3.6 2.1-3.6-1.1-1.7-2.9-1.9-3.5-1.9-1.5-.2-2.9.9-3.7.9-.8 0-1.9-.9-3.2-.8-1.6.02-3.1 1-4 2.4-1.7 2.9-.4 7.2 1.2 9.6.8 1.2 1.8 2.5 3.1 2.4 1.2-.05 1.7-.8 3.2-.8 1.5 0 1.9.8 3.2.8 1.3-.02 2.2-1.2 3-2.4.9-1.4 1.3-2.7 1.3-2.8-.03-.01-2.5-1-2.7-3.8zM14 5.5c.7-.8 1.1-2 1-3.1-1 .04-2.2.7-2.9 1.5-.6.7-1.2 1.9-1 3 1.1.08 2.2-.6 2.9-1.4z"/></svg>
+          المتابعة باستخدام Apple
+        </button>
+      </div>
+
+      <div class="links">
+        <a href="login.html" class="mutedlink">لديك حساب بالفعل؟ <b style="color:var(--txt)">تسجيل الدخول</b></a>
+      </div>
+    </div>
+
+    <!-- ============ الشاشة 2: التحقق من الهوية ============ -->
+    <div class="screen hidden" id="scr2">
+      <h1>التحقق من الهوية</h1>
+      <p class="hint">نحتاج وثيقة هوية لتفعيل حسابك بشكل آمن</p>
+
+      <div class="msg" id="msg2"></div>
+
+      <div class="fld" id="fldDoc">
+        <label for="docType">نوع وثيقة الهوية</label>
+        <div class="box">
+          <select id="docType">
+            <option value="national_id">بطاقة هوية وطنية</option>
+            <option value="passport">جواز سفر</option>
+            <option value="driver_license">رخصة قيادة</option>
+          </select>
+          <span class="arrow"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span>
+        </div>
+      </div>
+
+      <div class="fld">
+        <label>صورة الوثيقة</label>
+        <div class="filebox" id="filebox" onclick="document.getElementById('docFile').click()">
+          <svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3"/></svg>
+          <span class="fname" id="fileName">لم يتم اختيار أي ملف</span>
+        </div>
+        <div class="thumb" id="thumb"><img id="thumbImg" alt="معاينة الوثيقة"></div>
+        <input type="file" id="docFile" accept="image/png,image/jpeg,image/webp" style="display:none" onchange="onPickFile(this)">
+        <div class="fhint">ارفع صورة واضحة للوثيقة (JPG/PNG) — الحد الأقصى 2 ميجابايت</div>
+        <div class="errtx" id="docErr">ارفع صورة واضحة للوثيقة</div>
+      </div>
+
+      <label class="terms-check">
+        <input type="checkbox" id="regTerms">
+        <span>أوافق على <a href="terms.html" target="_blank">شروط الخدمة</a> و<a href="privacy.html" target="_blank">سياسة الخصوصية</a> الخاصة بمنصة Apex.</span>
+      </label>
+
+      <button class="btn" id="regBtn" onclick="submitRegister()">إنشاء الحساب</button>
+      <div class="links">
+        <a href="#" class="mutedlink" onclick="prevStep();return false;">رجوع للبيانات</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="legal">بالمتابعة أنت توافق على <a href="terms.html">شروط الاستخدام</a> و<a href="privacy.html">سياسة الخصوصية</a> الخاصة بـ Apex.</div>
+</div>
+<script>
+(function(){
+  var $=function(id){return document.getElementById(id);};
+  var PREFILL=null;
+  try{ PREFILL=new URLSearchParams(location.search); }catch(e){ PREFILL=null; }
+
+  function showMsg(box,text,kind){
+    var m=$(box); if(!m) return;
+    m.className='msg '+(kind||'err'); m.textContent=text;
+  }
+  function hideMsg(box){ var m=$(box); if(m) m.className='msg'; }
+  function bad(fld,tx,text){
+    var f=$(fld); if(!f) return;
+    f.classList.add('bad'); f.classList.remove('good');
+    if(text&&tx){ var t=$(tx); if(t) t.textContent=text; }
+    var i=f.querySelector('input,select'); if(i&&i.focus) try{i.focus();}catch(e){}
+  }
+  function good(fld){ var f=$(fld); if(f){ f.classList.remove('bad'); f.classList.add('good'); } }
+  function clearErr(fld){ var f=$(fld); if(f){ f.classList.remove('bad'); } }
+
+  function getNext(){
+    if(PREFILL){ var n=PREFILL.get('next'); if(n){ n=String(n).replace(/^\/+/,''); if(/^[a-zA-Z0-9_\-]+\.html([?#].*)?$/.test(n)) return n; } }
+    return 'index.html';
+  }
+  function goLogin(){
+    var em=($('regEmail')&&$('regEmail').value||'').trim();
+    location.href='login.html'+(em?('?email='+encodeURIComponent(em)):'');
+  }
+  function clearField(inputId,fldId){
+    var i=$(inputId); if(i){ i.value=''; syncClear(); }
+    clearErr(fldId); hideMsg('msg');
+  }
+  function syncClear(){
+    var e=$('regEmail'),b=$('emailClear');
+    if(e&&b) b.classList.toggle('show',!!e.value);
+  }
+  function togglePass(id,btn){
+    var i=$(id); if(!i) return;
+    var show=i.type==='password'; i.type=show?'text':'password';
+    var sl=btn&&btn.querySelector('.slash'); if(sl) sl.style.display=show?'':'none';
+  }
+
+  /* ===== التنقل بين الشاشتين مع حركة انزلاق ===== */
+  function swap(fromId,toId){
+    var from=$(fromId),to=$(toId);
+    if(!from||!to) return;
+    from.classList.add('slide-out');
+    setTimeout(function(){
+      from.classList.add('hidden'); from.classList.remove('slide-out','show');
+      to.classList.remove('hidden');
+      to.classList.add('slide-in-ready');
+      void to.offsetWidth;              // إجبار المتصفح على إعادة الحساب لتعمل الحركة
+      to.classList.remove('slide-in-ready');
+      to.classList.add('show');
+      window.scrollTo({top:0,behavior:'smooth'});
+    },240);
+  }
+  function nextStep(){
+    hideMsg('msg');
+    var name=($('regName').value||'').trim();
+    var email=($('regEmail').value||'').trim().toLowerCase();
+    var pass=$('regPass').value||'',pass2=$('regPass2').value||'';
+    ['fldName','fldEmail','fldPass','fldPass2'].forEach(clearErr);
+
+    if(name.length<2){ bad('fldName','nameErr','اكتب اسمك الكامل (حرفان على الأقل)'); return; }
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)){ bad('fldEmail','regEmailErr','صيغة البريد الإلكتروني غير صحيحة'); return; }
+    if(pass.length<8){ bad('fldPass','regPassErr','كلمة المرور يجب أن تكون 8 أحرف على الأقل'); return; }
+    if(pass!==pass2){ bad('fldPass2','regPass2Err','كلمتا المرور غير متطابقتين'); return; }
+    good('fldName'); good('fldEmail'); good('fldPass'); good('fldPass2');
+    swap('scr1','scr2');
+  }
+  function prevStep(){ hideMsg('msg2'); swap('scr2','scr1'); }
+
+  /* ===== صورة الوثيقة ===== */
+  var DOC_DATAURL='';
+  function onPickFile(inp){
+    clearErr('fldDoc'); hideMsg('msg2');
+    var f=inp.files&&inp.files[0];
+    DOC_DATAURL='';
+    if(!f){
+      $('fileName').textContent='لم يتم اختيار أي ملف';
+      $('filebox').classList.remove('filled');
+      $('thumb').classList.remove('show');
+      return;
+    }
+    if(!/^image\/(jpeg|jpg|png|webp)$/.test(f.type)){
+      inp.value=''; $('fileName').textContent='لم يتم اختيار أي ملف';
+      bad('fldDoc','docErr','الملف يجب أن يكون صورة JPG أو PNG'); return;
+    }
+    if(f.size>2*1024*1024){
+      inp.value=''; $('fileName').textContent='لم يتم اختيار أي ملف';
+      bad('fldDoc','docErr','حجم الصورة أكبر من 2 ميجابايت — اختر صورة أصغر'); return;
+    }
+    $('fileName').textContent=f.name+' · '+(Math.round(f.size/1024))+' كيلوبايت';
+    $('filebox').classList.add('filled');
+    var rd=new FileReader();
+    rd.onload=function(){
+      DOC_DATAURL=String(rd.result||'');
+      $('thumbImg').src=DOC_DATAURL;
+      $('thumb').classList.add('show');
+    };
+    rd.readAsDataURL(f);
+  }
+
+  /* ===== إنشاء الحساب ===== */
+  async function submitRegister(){
+    hideMsg('msg2');
+    clearErr('fldDoc');
+    if(!DOC_DATAURL){ bad('fldDoc','docErr','ارفع صورة واضحة للوثيقة'); return; }
+    var terms=$('regTerms');
+    if(terms&&!terms.checked){ showMsg('msg2','يجب الموافقة على شروط الخدمة وسياسة الخصوصية.','err'); return; }
+
+    var payload={
+      name:($('regName').value||'').trim(),
+      email:($('regEmail').value||'').trim().toLowerCase(),
+      password:$('regPass').value||'',
+      country:($('regCountry').value||'').trim(),
+      idDocType:($('docType').value||'national_id'),
+      idImage:DOC_DATAURL
+    };
+
+    var btn=$('regBtn'), old=btn.textContent;
+    btn.disabled=true; btn.textContent='جارٍ إنشاء الحساب'; btn.classList.add('loading');
+    try{
+      var r=await fetch('/api/auth/register',{
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
+      });
+      var d=await r.json().catch(function(){return {};});
+
+      if(r.status===413){ showMsg('msg2','الصورة كبيرة جداً على الخادم — اختر صورة أصغر.','err'); return; }
+      if(r.status===409||d.error==='email_exists'){
+        showMsg('msg2','هذا البريد مسجّل مسبقاً — جارٍ تحويلك لتسجيل الدخول.','err');
+        setTimeout(function(){ location.href='login.html?email='+encodeURIComponent(payload.email); },1600);
+        return;
+      }
+      if(!r.ok||!d.token){
+        var map={
+          bad_name:'اكتب اسمك الكامل (حرفان على الأقل).',
+          bad_email:'صيغة البريد الإلكتروني غير صحيحة.',
+          weak_password:'كلمة المرور يجب أن تكون 8 أحرف على الأقل.'
+        };
+        showMsg('msg2',map[d.error]||'تعذّر إنشاء الحساب، حاول مرة أخرى.','err');
+        return;
+      }
+
+      saveSession(d.token,d.user||{});
+      var pending=(String(d.status||'')!=='approved');
+      showMsg('msg2',pending
+        ? 'تم إرسال طلبك ✓ وهو قيد المراجعة من الإدارة قبل تفعيل الحساب.'
+        : 'تم إنشاء حسابك بنجاح ✓ جارٍ تحويلك...','ok');
+      setTimeout(function(){ location.href=getNext(); },pending?2200:900);
+    }catch(e){
+      showMsg('msg2','تعذّر الاتصال بالخادم، تحقّق من الشبكة وحاول مرة أخرى.','err');
+    }finally{
+      btn.disabled=false; btn.textContent=old; btn.classList.remove('loading');
+    }
+  }
+  function saveSession(token,u){
+    var sess={id:u.id,uid:u.id,username:u.username||u.name,name:u.name,email:u.email,token:token};
+    try{
+      localStorage.setItem('skygo_session',JSON.stringify(sess));
+      localStorage.setItem('apex_user',JSON.stringify(sess));
+      localStorage.setItem('apex_token',token);
+      localStorage.setItem('currentUser',JSON.stringify(sess));
+    }catch(e){}
+    try{document.cookie='apex_token='+encodeURIComponent(token)+'; Path=/; SameSite=Lax'+(location.protocol==='https:'?'; Secure':'')+'; Max-Age='+(7*24*3600);}catch(e){}
+  }
+
+  /* ===== Google / Apple ===== */
+  var cfg=null;
+  fetch('/api/auth/oauth/config').then(function(r){return r.json();})
+    .then(function(c){cfg=c||{};}).catch(function(){cfg={};});
+  function socialLogin(p){
+    var on=cfg&&(cfg[p]===true||(cfg[p]&&cfg[p].enabled===true));
+    if(!on){
+      showMsg('msg',(p==='google'?'المتابعة باستخدام Google':'المتابعة باستخدام Apple')+' غير مفعّلة حالياً — سجّل بالبريد وكلمة المرور.','warn');
+      return;
+    }
+    location.href='/api/auth/oauth/'+p+'/start?next='+encodeURIComponent(getNext());
+  }
+
+  /* ===== أحداث ===== */
+  if(PREFILL){
+    var pre=PREFILL.get('email');
+    if(pre&&$('regEmail')&&!$('regEmail').value) $('regEmail').value=pre;
+  }
+  syncClear();
+  $('regEmail').addEventListener('input',function(){ syncClear(); clearErr('fldEmail'); hideMsg('msg'); });
+  $('regName').addEventListener('input',function(){ clearErr('fldName'); });
+  $('regPass').addEventListener('input',function(){ clearErr('fldPass'); });
+  $('regPass2').addEventListener('input',function(){ clearErr('fldPass2'); });
+  $('regPass2').addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); nextStep(); } });
+  $('regEmail').addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); nextStep(); } });
+
+  window.goLogin=goLogin; window.clearField=clearField; window.togglePass=togglePass;
+  window.nextStep=nextStep; window.prevStep=prevStep; window.onPickFile=onPickFile;
+  window.submitRegister=submitRegister; window.socialLogin=socialLogin;
+})();
+</script>
+</body>
+</html>

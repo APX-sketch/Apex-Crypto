@@ -11,7 +11,12 @@
 *{box-sizing:border-box}
 html,body{height:100%}
 body{margin:0;font-family:'Segoe UI',Tahoma,system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--txt);min-height:100vh;display:flex;justify-content:center;padding:0}
-.wrap{width:100%;max-width:430px;min-height:100vh;display:flex;flex-direction:column;padding:14px 22px 26px}
+.wrap{width:100%;max-width:430px;min-height:100vh;display:flex;flex-direction:column;padding:0 22px}
+.topbar{flex:0 0 auto}
+.brand{flex:0 0 auto}
+#credBox,#otpBox{flex:1 1 auto;display:flex;flex-direction:column;justify-content:center;padding:10px 0}
+#step1,#step2,.step2.on{width:100%}
+.legal{flex:0 0 auto;margin-top:0;padding:18px 0 22px}
 
 /* رأس الصفحة: سهم رجوع يمين + إغلاق يسار */
 .topbar{height:44px;display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
@@ -22,7 +27,13 @@ body{margin:0;font-family:'Segoe UI',Tahoma,system-ui,-apple-system,sans-serif;b
 
 .brand{text-align:center;margin:6px 0 20px}
 .brand b{font-size:26px;font-weight:900;letter-spacing:.5px;background:linear-gradient(135deg,var(--gold1),var(--gold2));-webkit-background-clip:text;background-clip:text;color:transparent}
-h1{font-size:24px;font-weight:800;margin:0 0 18px;letter-spacing:-.2px}
+h1{font-size:24px;font-weight:800;margin:0 0 18px;letter-spacing:-.2px;animation:fadeUp .45s ease both}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes slideInR{from{opacity:0;transform:translateX(38px)}to{opacity:1;transform:none}}
+@keyframes slideInL{from{opacity:0;transform:translateX(-38px)}to{opacity:1;transform:none}}
+.anim-r{animation:slideInR .42s cubic-bezier(.22,.61,.36,1) both}
+.anim-l{animation:slideInL .42s cubic-bezier(.22,.61,.36,1) both}
+.step1.leaving{animation:slideInL .28s ease reverse forwards}
 .who{color:var(--muted);font-size:14px;margin:-10px 0 20px;direction:ltr;text-align:right}
 .who b{color:var(--txt);font-weight:700}
 
@@ -46,9 +57,12 @@ h1{font-size:24px;font-weight:800;margin:0 0 18px;letter-spacing:-.2px}
 .fld .errtx{display:none;color:var(--red);font-size:12.5px;font-weight:700;margin-top:8px;line-height:1.6}
 .fld.bad .errtx{display:block}
 
-.btn{width:100%;padding:14px;border:0;border-radius:6px;font-family:inherit;font-weight:700;font-size:16px;cursor:pointer;background:var(--yellow);color:#181a20;margin-top:2px;transition:filter .15s}
-.btn:hover{filter:brightness(1.06)}
-.btn:disabled{opacity:.55;cursor:default}
+.btn{width:100%;padding:14px;border:0;border-radius:6px;font-family:inherit;font-weight:700;font-size:16px;cursor:pointer;background:var(--yellow);color:#181a20;margin-top:2px;transition:filter .15s,transform .12s,box-shadow .2s}
+.btn:hover{filter:brightness(1.06);box-shadow:0 6px 18px rgba(252,213,53,.18)}
+.btn:active{transform:scale(.985)}
+.btn:disabled{opacity:.55;cursor:default;box-shadow:none}
+.btn.loading::after{content:'';display:inline-block;width:14px;height:14px;margin-right:8px;vertical-align:-2px;border:2px solid rgba(0,0,0,.25);border-top-color:#181a20;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 .btn.ghost{background:var(--panel2);color:var(--txt);border:1px solid var(--border);margin-top:10px}
 
 .sep{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:13px;margin:26px 0 18px}
@@ -226,7 +240,7 @@ async function checkEmail(){
   var email=($('email').value||'').trim().toLowerCase();
   clearMsgSoft();setFieldErr('fldEmail','emailErr','');
   if(!email||!emailValid(email)){return setFieldErr('fldEmail','emailErr','أدخل بريداً إلكترونياً صحيحاً');}
-  var btn=$('nextBtn');btn.disabled=true;var old=btn.textContent;btn.textContent='جارٍ التحقق...';
+  var btn=$('nextBtn');btn.disabled=true;var old=btn.textContent;btn.textContent='جارٍ التحقق';btn.classList.add('loading');
   try{
     var r=await fetch('/api/auth/check-email?email='+encodeURIComponent(email));
     var d=await r.json().catch(function(){return{};});
@@ -240,13 +254,23 @@ async function checkEmail(){
     EMAIL_OK=email;btn.disabled=false;btn.textContent=old;
     $('fldEmail').classList.add('good');
     $('emailShown').textContent=maskEmail(email);
-    $('step1').style.display='none';$('step2').classList.add('on');
+    var s1=$('step1'),s2=$('step2');
+    s1.classList.add('leaving');
+    setTimeout(function(){
+      s1.style.display='none';s1.classList.remove('leaving');
+      s2.classList.add('on','anim-r');
+      window.scrollTo({top:0,behavior:'smooth'});
+    },200);
     var bb=$('backBtn');if(bb)bb.classList.remove('hide');
     setTimeout(function(){try{$('pass').focus();}catch(e){}},80);
   }catch(e){btn.disabled=false;btn.textContent=old;showMsg('تعذّر الاتصال بالخادم، حاول مجدداً','err');}
 }
 function backToEmail(){
-  $('step2').classList.remove('on');$('step1').style.display='block';
+  var s2=$('step2'),s1=$('step1');
+  s2.classList.remove('on','anim-r');
+  s1.style.display='block';s1.classList.remove('leaving');
+  void s1.offsetWidth;s1.classList.add('anim-l');
+  if(s2) s2.classList.remove('anim-r');
   var bb=$('backBtn');if(bb)bb.classList.add('hide');
   setFieldErr('fldPass','passErr','');clearMsgSoft();
   try{$('pass').value='';}catch(e){}
@@ -254,7 +278,7 @@ function backToEmail(){
 }
 function goRegister(){
   var em=($('email').value||'').trim();
-  location.href='register.html'+(em?('?email='+encodeURIComponent(em)):'');
+  location.href='Landing.html'+(em?('?email='+encodeURIComponent(em)):'');
 }
 /* دخول Google / Apple — يحتاج إعداد المزوّد على السيرفر (راجع رسالة النشر) */
 async function socialLogin(provider){
@@ -287,7 +311,7 @@ async function doLogin(){
       else if(d.error==='rejected')showMsg('تم رفض طلبك'+(d.reason?(': '+d.reason):'.'),'err');
       else if(d.error==='banned')showMsg('تم حظر هذا الحساب. تواصل مع الدعم.','err');
       else{showMsg('البريد أو كلمة المرور غير صحيحة','err');var pe=$('passErr');if(pe)pe.textContent='كلمة المرور غير صحيحة';$('fldPass').classList.add('bad');}
-      btn.disabled=false;btn.textContent='متابعة';return;
+      btn.disabled=false;btn.textContent='متابعة';btn.classList.remove('loading');return;
     }
     // خطوة التحقق بخطوتين: الخادم يطلب رمز بريدي قبل إصدار التوكن
     if(d.otpRequired){
@@ -296,12 +320,12 @@ async function doLogin(){
       $('otpBox').style.display='block';
       $('otpHint').textContent='أدخل رمز التحقق المرسل إلى '+(OTP_EMAIL||'بريدك')+'.';
       showMsg(d.devCode?('وضع التطوير: الرمز '+d.devCode):'تم إرسال رمز التحقق إلى بريدك.', d.devCode?'warn':'ok');
-      btn.disabled=false;btn.textContent='متابعة';
+      btn.disabled=false;btn.textContent='متابعة';btn.classList.remove('loading');
       setTimeout(function(){$('otpCode').focus();},80);
       return;
     }
     finishLogin(d);
-  }catch(e){showMsg('خطأ في الاتصال بالخادم','err');btn.disabled=false;btn.textContent='متابعة';}
+  }catch(e){showMsg('خطأ في الاتصال بالخادم','err');btn.disabled=false;btn.textContent='متابعة';btn.classList.remove('loading');}
 }
 function mapOtpErr(e){
   if(e==='bad_code'||e==='invalid')return 'رمز التحقق غير صحيح.';
