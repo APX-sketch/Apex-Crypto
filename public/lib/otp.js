@@ -41,6 +41,18 @@ export class OtpStore {
     return { ok: true, meta };
   }
 
+  // يسجّل محاولة خاطئة واحدة على المفتاح دون حذف الرمز (يُستخدم عند «تحقق مسبق»)
+  // يعيد عدد المحاولات المتبقية.
+  registerFailedTry(key) {
+    const k = String(key);
+    const r = this._m.get(k);
+    if (!r) return 0;
+    if (Date.now() > r.exp) { this._m.delete(k); return 0; }
+    r.tries += 1;
+    if (r.tries >= this.max) { this._m.delete(k); return 0; }
+    return Math.max(0, this.max - r.tries);
+  }
+
   // يقرأ السجل دون استهلاك (للفحص فقط).
   peek(key) { return this._m.get(String(key)) || null; }
 

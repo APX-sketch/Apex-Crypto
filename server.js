@@ -6423,6 +6423,32 @@ app.post('/api/auth/forgot-password', strictLimiter, async (req, res) => {
   }
 });
 
+// ---- نسيت كلمة المرور: تحقّق من الرمز دون استهلاكه ----
+// الواجهة تنادي هذا المسار عند الضغط على «التالي» للتأكد أن الرمز صحيح
+// قبل السماح بالانقال لشاشة كلمة المرور. المحاولة الخاطئة تُحسَب ضمن maxTries.
+app.post('/api/auth/reset-password/check', strictLimiter, async (req, res) => {
+  try {
+    const email = String((req.body || {}).email || '').trim().toLowerCase();
+    const code = String((req.body || {}).code || '').trim();
+    if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'bad_email' });
+    if (!/^[0-9]{4,8}$/.test(code)) return res.status(400).json({ error: 'bad_code' });
+    const rec = passwordResetOtps.peek(email);
+    if (!rec) return res.status(400).json({ error: 'otp_required' });
+    if (Date.now() > rec.exp) { passwordResetOtps.clear(email); return res.status(400).json({ error: 'otp_expired' }); }
+    if (rec.tries >= 5) { passwordResetOtps.clear(email); return res.status(400).json({ error: 'otp_locked' }); }
+    if (String(rec.code) !== code) {
+      // نحسب المحاولة الخاطئة فعلياً (دون حذف الرمز) — unlockOtpTries تعيد السجل بعد زيادة العدّاد
+      passwordResetOtps.registerFailedTry(email);
+      const left = Math.max(0, 5 - rec.tries);
+      return res.status(400).json({ error: left > 0 ? 'otp_invalid' : 'otp_locked', triesLeft: left });
+    }
+    return res.json({ ok: true, expiresInSec: Math.max(0, Math.round((rec.exp - Date.now()) / 1000)) });
+  } catch (err) {
+    console.error('reset-password check error:', err.message);
+    res.status(500).json({ error: 'check_failed' });
+  }
+});
+
 // ---- نسيت كلمة المرور: الخطوة 2 — التحقق من الرمز وتعيين كلمة مرور جديدة ----
 app.post('/api/auth/reset-password', strictLimiter, async (req, res) => {
   try {
@@ -6431,6 +6457,10 @@ app.post('/api/auth/reset-password', strictLimiter, async (req, res) => {
     const newPassword = String((req.body || {}).newPassword || '');
     if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'bad_email' });
     if (newPassword.length < 6 || newPassword.length > 200) return res.status(400).json({ error: 'weak_password' });
+    // حماية إضافية: الرمز صالح 59 ثانية فقط — لا نقبل أي رمز بعد انتهاء الـTTL حتى لو بقي بالسجل
+    const rec = passwordResetOtps.peek(email);
+    if (!rec) return res.status(400).json({ error: 'otp_required' });
+    if (Date.now() > rec.exp) { passwordResetOtps.clear(email); return res.status(400).json({ error: 'otp_expired' }); }
     const vr = passwordResetOtps.verify(email, code);
     if (!vr.ok) return res.status(400).json({ error: vr.error });
     const user = await dbGetUserByEmail(email);
