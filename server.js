@@ -6383,7 +6383,10 @@ const loginOtps = new OtpStore({ ttlMs: 5 * 60 * 1000, maxTries: 5 });
 // رمز تأكيد تغيير البريد (يُرسَل للبريد الجديد) — مُفتاح بمعرّف المستخدم
 const emailChangeOtps = new OtpStore({ ttlMs: 5 * 60 * 1000, maxTries: 5 });
 // رمز إعادة تعيين كلمة المرور (نسيت كلمة المرور) — مُفتاح بالبريد الإلكتروني
-const passwordResetOtps = new OtpStore({ ttlMs: 15 * 60 * 1000, maxTries: 5 });
+// رمز استعادة كلمة المرور صالح 59 ثانية فقط (بحسب طلب المستخدم: عدّاد 59 ثانية
+// في الواجهة وانتهاء الصلاحية عند وصول العدّاد للصفر) — بعدها يجب طلب رمز جديد.
+const RESET_OTP_TTL_MS = 59 * 1000;
+const passwordResetOtps = new OtpStore({ ttlMs: RESET_OTP_TTL_MS, maxTries: 5 });
 
 // ---- نسيت كلمة المرور: الخطوة 1 — البحث عن البريد ثم إرسال رمز ----
 // بطلب المستخدم: نكشف صراحةً إن كان البريد غير مسجّل (404 not_found)،
@@ -6397,16 +6400,17 @@ app.post('/api/auth/forgot-password', strictLimiter, async (req, res) => {
     if (!user) return res.status(404).json({ error: 'not_found' });
     const { code, expiresInSec } = passwordResetOtps.issue(email, { uid: user.id });
     const mins = Math.max(1, Math.round(expiresInSec / 60));
+    const secs = expiresInSec;
     try {
       await sendMail({
         to: user.email,
         subject: 'إعادة تعيين كلمة المرور - Apex',
-        text: 'رمز إعادة تعيين كلمة المرور الخاص بك هو: ' + code + '\nالرمز صالح لمدة ' + mins + ' دقيقة. إن لم تطلب ذلك فتجاهل هذه الرسالة.',
+        text: 'رمز إعادة تعيين كلمة المرور الخاص بك هو: ' + code + '\nالرمز صالح لمدة ' + secs + ' ثانية فقط. إن لم تطلب ذلك فتجاهل هذه الرسالة.',
         html: renderEmailTemplate({
           title: 'إعادة تعيين كلمة المرور',
           intro: 'طلبت إعادة تعيين كلمة مرور حسابك في Apex. استخدم رمز التحقق التالي لمتابعة العملية:',
           code: code,
-          lines: ['الرمز صالح لمدة ' + mins + ' دقيقة فقط.'],
+          lines: ['الرمز صالح لمدة ' + secs + ' ثانية فقط.'],
           note: 'إن لم تطلب إعادة التعيين فتجاهل هذه الرسالة، ولا تشارك هذا الرمز مع أحد.',
         }),
       });
