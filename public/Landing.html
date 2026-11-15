@@ -65,6 +65,22 @@ h1{font-size:24px;font-weight:800;margin:0 0 8px;letter-spacing:-.2px;animation:
 .thumb img{width:100%;max-height:150px;object-fit:cover;display:block}
 .fhint{font-size:12px;color:var(--muted);margin-top:8px}
 
+/* مؤشر قوة كلمة المرور */
+.pwbar{display:flex;gap:6px;margin:10px 0 8px}
+.pwbar i{flex:1;height:4px;border-radius:3px;background:#2b3139;transition:background .25s}
+.pwbar.s1 i:nth-child(1){background:#f6465d}
+.pwbar.s2 i:nth-child(-n+2){background:#f0b90b}
+.pwbar.s3 i:nth-child(-n+3){background:#f0b90b}
+.pwbar.s4 i{background:#0ecb81}
+.pwlabel{font-size:12px;font-weight:700;margin-bottom:8px;display:none}
+.pwlabel.show{display:block}
+.pwlabel.t1{color:#f6465d}.pwlabel.t2,.pwlabel.t3{color:#f0b90b}.pwlabel.t4{color:#0ecb81}
+.pwrules{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;margin-top:2px}
+.pwrules span{font-size:11.5px;color:var(--muted);display:flex;align-items:center;gap:6px;transition:color .2s}
+.pwrules span:before{content:'○';font-size:11px;line-height:1}
+.pwrules span.ok{color:#0ecb81}
+.pwrules span.ok:before{content:'✓';font-weight:800}
+
 .terms-check{display:flex;align-items:flex-start;gap:10px;font-size:12.5px;color:var(--muted);line-height:1.7;margin:4px 0 18px;cursor:pointer}
 .terms-check input{margin-top:3px;accent-color:var(--yellow);width:16px;height:16px;flex:0 0 auto}
 .terms-check a{color:var(--yellow);text-decoration:none;font-weight:700}
@@ -148,7 +164,16 @@ h1{font-size:24px;font-weight:800;margin:0 0 8px;letter-spacing:-.2px;animation:
             <svg viewBox="0 0 24 24"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/><path class="slash" d="M4 4l16 16" style="display:none"/></svg>
           </button>
         </div>
-        <div class="errtx" id="regPassErr">كلمة المرور يجب أن تكون 8 أحرف على الأقل</div>
+        <div class="pwbar" id="pwBar"><i></i><i></i><i></i><i></i></div>
+        <div class="pwlabel" id="pwLabel"></div>
+        <div class="pwrules" id="pwRules">
+          <span data-r="len">8 أحرف على الأقل</span>
+          <span data-r="upper">حرف كبير (A-Z)</span>
+          <span data-r="lower">حرف صغير (a-z)</span>
+          <span data-r="digit">رقم (0-9)</span>
+          <span data-r="symbol">رمز (!@#$)</span>
+        </div>
+        <div class="errtx" id="regPassErr">كلمة المرور ضعيفة — لازم تحتوي حرف كبير وصغير ورقم ورمز</div>
       </div>
 
       <div class="fld" id="fldPass2" style="animation-delay:.22s">
@@ -262,6 +287,45 @@ h1{font-size:24px;font-weight:800;margin:0 0 8px;letter-spacing:-.2px;animation:
     var e=$('regEmail'),b=$('emailClear');
     if(e&&b) b.classList.toggle('show',!!e.value);
   }
+  /* قوة كلمة المرور: 8+ / حرف كبير / حرف صغير / رقم / رمز */
+  function pwChecks(v){
+    v=String(v||'');
+    var hasArabic=/[\u0621-\u064A]/.test(v), hasLatin=/[A-Za-z]/.test(v);
+    var c={
+      len: v.length>=8,
+      upper: /[A-Z]/.test(v),
+      lower: /[a-z]/.test(v),
+      digit: /[0-9]/.test(v),
+      symbol: /[^A-Za-z0-9\s]/.test(v)
+    };
+    // كلمة مرور عربية بدون لاتيني: ما في حالة أحرف → نعتبر الحالتين محققتين
+    if(hasArabic&&!hasLatin){ c.upper=true; c.lower=true; }
+    return c;
+  }
+  function pwScore(v){
+    if(!v) return 0;
+    var c=pwChecks(v), n=0, keys=['len','upper','lower','digit','symbol'];
+    keys.forEach(function(k){ if(c[k]) n++; });
+    return n; // 0..5
+  }
+  function renderPw(v){
+    var c=pwChecks(v), n=0;
+    ['len','upper','lower','digit','symbol'].forEach(function(k){ if(c[k]) n++; });
+    var bar=$('pwBar'), lab=$('pwLabel'), rules=$('pwRules');
+    if(rules) Array.prototype.forEach.call(rules.querySelectorAll('span'),function(el){
+      var k=el.getAttribute('data-r');
+      var map={len:c.len,upper:c.upper,lower:c.lower,digit:c.digit,symbol:c.symbol};
+      el.classList.toggle('ok',!!map[k]);
+    });
+    var lvl = (!v)?0 : (n>=5?4 : n>=4?3 : n>=3?2 : 1);
+    if(bar) bar.className='pwbar'+(lvl?' s'+lvl:'');
+    if(lab){
+      var txt=['','ضعيفة جداً','ضعيفة','متوسطة','قوية'][lvl]||'';
+      lab.className='pwlabel'+(lvl?' show t'+lvl:'');
+      lab.textContent=txt;
+    }
+    return n;
+  }
   function togglePass(id,btn){
     var i=$(id); if(!i) return;
     var show=i.type==='password'; i.type=show?'text':'password';
@@ -292,7 +356,12 @@ h1{font-size:24px;font-weight:800;margin:0 0 8px;letter-spacing:-.2px;animation:
 
     if(name.length<2){ bad('fldName','nameErr','اكتب اسمك الكامل (حرفان على الأقل)'); return; }
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)){ bad('fldEmail','regEmailErr','صيغة البريد الإلكتروني غير صحيحة'); return; }
-    if(pass.length<8){ bad('fldPass','regPassErr','كلمة المرور يجب أن تكون 8 أحرف على الأقل'); return; }
+    var pc=pwChecks(pass), missing=[];
+    if(!pc.len) missing.push('8 أحرف على الأقل');
+    if(!pc.upper||!pc.lower) missing.push('حرف كبير وحرف صغير');
+    if(!pc.digit) missing.push('رقم');
+    if(!pc.symbol) missing.push('رمز');
+    if(missing.length){ bad('fldPass','regPassErr','كلمة المرور لازم تحتوي: '+missing.join(' + ')); renderPw(pass); return; }
     if(pass!==pass2){ bad('fldPass2','regPass2Err','كلمتا المرور غير متطابقتين'); return; }
     good('fldName'); good('fldEmail'); good('fldPass'); good('fldPass2');
     swap('scr1','scr2');
@@ -335,6 +404,11 @@ h1{font-size:24px;font-weight:800;margin:0 0 8px;letter-spacing:-.2px;animation:
     hideMsg('msg2');
     clearErr('fldDoc');
     if(!DOC_DATAURL){ bad('fldDoc','docErr','ارفع صورة واضحة للوثيقة'); return; }
+    var _pc=pwChecks($('regPass').value||'');
+    if(!(_pc.len&&_pc.upper&&_pc.lower&&_pc.digit&&_pc.symbol)){
+      showMsg('msg2','كلمة المرور ضعيفة — ارجع للبيانات وأضف حرف كبير وصغير ورقم ورمز.','err');
+      return;
+    }
     var terms=$('regTerms');
     if(terms&&!terms.checked){ showMsg('msg2','يجب الموافقة على شروط الخدمة وسياسة الخصوصية.','err'); return; }
 
@@ -415,14 +489,15 @@ h1{font-size:24px;font-weight:800;margin:0 0 8px;letter-spacing:-.2px;animation:
   syncClear();
   $('regEmail').addEventListener('input',function(){ syncClear(); clearErr('fldEmail'); hideMsg('msg'); });
   $('regName').addEventListener('input',function(){ clearErr('fldName'); });
-  $('regPass').addEventListener('input',function(){ clearErr('fldPass'); });
+  $('regPass').addEventListener('input',function(){ clearErr('fldPass'); renderPw(this.value); });
   $('regPass2').addEventListener('input',function(){ clearErr('fldPass2'); });
   $('regPass2').addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); nextStep(); } });
   $('regEmail').addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); nextStep(); } });
 
   window.goLogin=goLogin; window.clearField=clearField; window.togglePass=togglePass;
   window.nextStep=nextStep; window.prevStep=prevStep; window.onPickFile=onPickFile;
-  window.submitRegister=submitRegister; window.socialLogin=socialLogin;
+  window.submitRegister=submitRegister; window.socialLogin=socialLogin; window.renderPw=renderPw;
+  renderPw('');
 })();
 </script>
 </body>

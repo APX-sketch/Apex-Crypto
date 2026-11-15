@@ -25,7 +25,7 @@ body{margin:0;font-family:'Segoe UI',Tahoma,system-ui,-apple-system,sans-serif;b
 .iconbtn svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .iconbtn.hide{visibility:hidden}
 
-.brand{text-align:center;margin:6px 0 20px}
+.brand{text-align:center;margin:22px 0 28px}
 .brand b{font-size:26px;font-weight:900;letter-spacing:.5px;background:linear-gradient(135deg,var(--gold1),var(--gold2));-webkit-background-clip:text;background-clip:text;color:transparent}
 h1{font-size:24px;font-weight:800;margin:0 0 18px;letter-spacing:-.2px;animation:fadeUp .45s ease both}
 @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
@@ -63,6 +63,9 @@ h1{font-size:24px;font-weight:800;margin:0 0 18px;letter-spacing:-.2px;animation
 .btn:disabled{opacity:.55;cursor:default;box-shadow:none}
 .btn.loading::after{content:'';display:inline-block;width:14px;height:14px;margin-right:8px;vertical-align:-2px;border:2px solid rgba(0,0,0,.25);border-top-color:#181a20;border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+.btn .spin{display:none;width:16px;height:16px;margin-left:9px;vertical-align:-3px;border:2px solid rgba(0,0,0,.22);border-top-color:#181a20;border-radius:50%;animation:spin .65s linear infinite}
+.btn.loading .spin{display:inline-block}
+.btn.loading{pointer-events:none}
 .btn.ghost{background:var(--panel2);color:var(--txt);border:1px solid var(--border);margin-top:10px}
 
 .sep{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:13px;margin:26px 0 18px}
@@ -126,7 +129,7 @@ h1{font-size:24px;font-weight:800;margin:0 0 18px;letter-spacing:-.2px;animation
         </div>
         <div class="errtx" id="emailErr">لا يوجد حساب بهذا البريد</div>
       </div>
-      <button class="btn" id="nextBtn" onclick="checkEmail()">قم بتسجيل دخولك الآن</button>
+      <button class="btn" id="nextBtn" onclick="checkEmail()"><span class="spin" aria-hidden="true"></span><span class="btxt">قم بتسجيل دخولك الآن</span></button>
 
       <div class="sep">أو</div>
 
@@ -145,7 +148,7 @@ h1{font-size:24px;font-weight:800;margin:0 0 18px;letter-spacing:-.2px;animation
         </button>
       </div>
 
-      <div class="links">
+      <div class="links" id="linksBox">
         <a href="#" onclick="goRegister();return false;">إنشاء حساب Apex</a>
         <a href="reset-password.html" class="mutedlink">ألا يمكنك تسجيل الدخول؟</a>
       </div>
@@ -166,7 +169,7 @@ h1{font-size:24px;font-weight:800;margin:0 0 18px;letter-spacing:-.2px;animation
         <div class="errtx" id="passErr">كلمة المرور غير صحيحة</div>
       </div>
       <div class="forgot"><a href="reset-password.html">هل نسيت كلمة المرور؟</a></div>
-      <button class="btn" id="submitBtn" onclick="doLogin()">متابعة</button>
+      <button class="btn" id="submitBtn" onclick="doLogin()"><span class="spin" aria-hidden="true"></span><span class="btxt">متابعة</span></button>
       <button class="btn ghost" id="bioBtn" onclick="doBioLogin()" style="display:none">🔑 الدخول بالبصمة / الوجه</button>
     </div>
   </div>
@@ -240,19 +243,33 @@ async function checkEmail(){
   var email=($('email').value||'').trim().toLowerCase();
   clearMsgSoft();setFieldErr('fldEmail','emailErr','');
   if(!email||!emailValid(email)){return setFieldErr('fldEmail','emailErr','أدخل بريداً إلكترونياً صحيحاً');}
-  var btn=$('nextBtn');btn.disabled=true;var old=btn.textContent;btn.textContent='جارٍ التحقق';btn.classList.add('loading');
+  var btn=$('nextBtn');
+  btn.disabled=true;btn.classList.add('loading');btn.setAttribute('aria-busy','true');
   try{
     var r=await fetch('/api/auth/check-email?email='+encodeURIComponent(email));
     var d=await r.json().catch(function(){return{};});
-    if(d&&d.exists===false){
-      btn.disabled=false;btn.textContent=old;
-      setFieldErr('fldEmail','emailErr','لا يوجد حساب بهذا البريد — أنشئ حساباً جديداً الآن');
-      var al=document.querySelector('#step1 .alt');
-      if(al)al.style.opacity='1';
+    if(!r.ok){
+      btn.disabled=false;btn.classList.remove('loading');btn.removeAttribute('aria-busy');
+      setFieldErr('fldEmail','emailErr', r.status===429
+        ? 'محاولات كثيرة — انتظر دقيقة وحاول مجدداً'
+        : 'تعذّر التحقق الآن، حاول مجدداً');
       return;
     }
-    EMAIL_OK=email;btn.disabled=false;btn.textContent=old;
-    $('fldEmail').classList.add('good');
+    if(!d || d.exists!==true){
+      // بريد غير موجود: نبقى بالشاشة الأولى والحقل يصير أحمر — ما بيفوت لكلمة المرور
+      btn.disabled=false;btn.classList.remove('loading');btn.removeAttribute('aria-busy');
+      setFieldErr('fldEmail','emailErr','لا يوجد حساب بهذا البريد — أنشئ حساباً جديداً الآن');
+      var al=document.getElementById('linksBox'); if(al) al.style.opacity='1';
+      try{$('email').focus();$('email').select();}catch(e){}
+      return;
+    }
+    if(d.banned){
+      btn.disabled=false;btn.classList.remove('loading');btn.removeAttribute('aria-busy');
+      setFieldErr('fldEmail','emailErr','هذا الحساب محظور — تواصل مع الدعم');
+      return;
+    }
+    EMAIL_OK=email;btn.disabled=false;btn.classList.remove('loading');btn.removeAttribute('aria-busy');
+    $('fldEmail').classList.remove('bad');$('fldEmail').classList.add('good');
     $('emailShown').textContent=maskEmail(email);
     var s1=$('step1'),s2=$('step2');
     s1.classList.add('leaving');
@@ -263,7 +280,10 @@ async function checkEmail(){
     },200);
     var bb=$('backBtn');if(bb)bb.classList.remove('hide');
     setTimeout(function(){try{$('pass').focus();}catch(e){}},80);
-  }catch(e){btn.disabled=false;btn.textContent=old;showMsg('تعذّر الاتصال بالخادم، حاول مجدداً','err');}
+  }catch(e){
+    btn.disabled=false;btn.classList.remove('loading');btn.removeAttribute('aria-busy');
+    setFieldErr('fldEmail','emailErr','تعذّر الاتصال بالخادم، تحقّق من الشبكة وحاول مجدداً');
+  }
 }
 function backToEmail(){
   var s2=$('step2'),s1=$('step1');
@@ -302,7 +322,7 @@ window.checkEmail=checkEmail;window.backToEmail=backToEmail;window.goRegister=go
 async function doLogin(){
   const email=EMAIL_OK||$('email').value.trim(),pass=$('pass').value;
   if(!email||!pass)return showMsg('الرجاء إدخال البريد وكلمة المرور');
-  const btn=$('submitBtn');btn.disabled=true;btn.textContent='جارٍ التحقق...';
+  const btn=$('submitBtn');btn.disabled=true;btn.classList.add('loading');btn.setAttribute('aria-busy','true');
   try{
     const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password:pass})});
     const d=await r.json();
@@ -311,7 +331,7 @@ async function doLogin(){
       else if(d.error==='rejected')showMsg('تم رفض طلبك'+(d.reason?(': '+d.reason):'.'),'err');
       else if(d.error==='banned')showMsg('تم حظر هذا الحساب. تواصل مع الدعم.','err');
       else{showMsg('البريد أو كلمة المرور غير صحيحة','err');var pe=$('passErr');if(pe)pe.textContent='كلمة المرور غير صحيحة';$('fldPass').classList.add('bad');}
-      btn.disabled=false;btn.textContent='متابعة';btn.classList.remove('loading');return;
+      btn.disabled=false;btn.classList.remove('loading');btn.removeAttribute('aria-busy');return;
     }
     // خطوة التحقق بخطوتين: الخادم يطلب رمز بريدي قبل إصدار التوكن
     if(d.otpRequired){
@@ -320,12 +340,12 @@ async function doLogin(){
       $('otpBox').style.display='block';
       $('otpHint').textContent='أدخل رمز التحقق المرسل إلى '+(OTP_EMAIL||'بريدك')+'.';
       showMsg(d.devCode?('وضع التطوير: الرمز '+d.devCode):'تم إرسال رمز التحقق إلى بريدك.', d.devCode?'warn':'ok');
-      btn.disabled=false;btn.textContent='متابعة';btn.classList.remove('loading');
+      btn.disabled=false;btn.classList.remove('loading');btn.removeAttribute('aria-busy');
       setTimeout(function(){$('otpCode').focus();},80);
       return;
     }
     finishLogin(d);
-  }catch(e){showMsg('خطأ في الاتصال بالخادم','err');btn.disabled=false;btn.textContent='متابعة';btn.classList.remove('loading');}
+  }catch(e){showMsg('خطأ في الاتصال بالخادم','err');btn.disabled=false;btn.classList.remove('loading');btn.removeAttribute('aria-busy');}
 }
 function mapOtpErr(e){
   if(e==='bad_code'||e==='invalid')return 'رمز التحقق غير صحيح.';
