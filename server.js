@@ -228,31 +228,104 @@ const pool = mysql.createPool({
 //   wallets (صفّ لكل عملة) فيظهر الرصيد ويتحدّث في قاعدة
 //   البيانات مباشرة (DBeaver / لوحة الأدمن).
 // ============================================================
-// خريطة لتخفيف المزامنة عند القراءة (مرة كل 60ث لكل مستخدم)
-const _lastWalletSync = {};
-async function dbSyncWallets(userId, balances) {
-  if (PERSIST_RO) return; // المثيل للقراءة فقط لا يُصفّر/يغيّر wallets
+// ============================================================
+//  حارس جدول wallets — نقطة الكتابة الوحيدة (مسؤولية واحدة)
+//  قبل هذا الحارس كان كل مسار يكتب صفّه بنفسه، وبعضها يستخدم
+//  ON DUPLICATE KEY بلا مفتاح UNIQUE فعلي على قاعدة البيانات،
+//  فكانت كل كتابة تُنشئ صفاً جديداً (7 صفوف USDT = 6000$ وهمية).
+//  الآن: (فرق) لكل تغيّر رصيد يُجمع ويُكتب مرة واحدة لكل مستخدم
+//  عبر upsert واحد، ثم يتم التحقق أن الجدول فعلاً صار له UNIQUE
+//  وإن لم يكن يضيفه — فلا يمكن أن تعود المشكلة.
+// ============================================================
+const WALLET_CUR_RE = /^[A-Z0-9]{2,12}$/;
+const _lastWalletSync = {}; // تهدئة مزامنة القراءة: مرة كل 60ث لكل مستخدم
+let walletsUqState = 0; // 0 = لم يُفحص، 1 = موجود، 2 = تعذّر إضافته
+
+async function ensureWalletsUnique() {
+  if (walletsUqState) return walletsUqState === 1;
   try {
-    const uid = Number(userId);
-    if (!Number.isFinite(uid)) return;
-    const entries = Object.entries(balances || {})
-      .map(([k, v]) => [String(k).toUpperCase().slice(0, 12), Number(v)])
-      .filter(([k, v]) => /^[A-Z0-9]{2,12}$/.test(k) && isFinite(v) && v >= 0);
-    for (const [cur, amt] of entries) {
-      await pool.query(
-        'INSERT INTO wallets (user_id, currency, balance, updated_at) VALUES (?, ?, ?, NOW()) ' +
-        'ON DUPLICATE KEY UPDATE balance = VALUES(balance), updated_at = NOW()',
-        [uid, cur, amt]);
-    }
-    // صفّر أي عملة لم تعد موجودة في المحفظة (بدل ترك رصيد وهمي)
-    const keep = entries.map((e) => e[0]);
-    if (keep.length) {
-      await pool.query('UPDATE wallets SET balance = 0, updated_at = NOW() WHERE user_id = ? AND currency NOT IN (?)', [uid, keep]);
-    } else {
-      await pool.query('UPDATE wallets SET balance = 0, updated_at = NOW() WHERE user_id = ?', [uid]);
-    }
-  } catch (e) { /* غير قاتل: الدفتر الحيّ يبقى المصدر الرسمي */ }
+    const [idx] = await pool.query(
+      "SELECT COUNT(*) AS n FROM information_schema.statistics " +
+      "WHERE table_schema = DATABASE() AND table_name = 'wallets' AND non_unique = 0 " +
+      "AND column_name IN ('user_id','currency') AND index_name <> 'PRIMARY'");
+    const hasComposite = Number(idx[0] && idx[0].n) >= 2;
+    // مفتاح UNIQUE رئيسي آخر (id) لا يكفي — لازم فهرس يغطّي العمودين
+    const [anyUnique] = await pool.query(
+      "SELECT index_name, GROUP_CONCAT(column_name ORDER BY seq_in_index) AS cols " +
+      "FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'wallets' " +
+      "AND non_unique = 0 GROUP BY index_name");
+    const ok = hasComposite || (anyUnique || []).some((r) => {
+      const cols = String(r.cols || '').toLowerCase();
+      return r.index_name !== 'PRIMARY' && cols.indexOf('user_id') >= 0 && cols.indexOf('currency') >= 0;
+    });
+    if (ok) { walletsUqState = 1; return true; }
+    // لا UNIQUE: نظّف التكرار (احتفظ بأقدم صف) ثم أضف المفتاح
+    await pool.query(
+      'DELETE w FROM wallets w JOIN (' +
+      ' SELECT user_id, currency, MIN(id) AS keep_id FROM wallets GROUP BY user_id, currency' +
+      ') k ON k.user_id = w.user_id AND k.currency = w.currency WHERE w.id <> k.keep_id');
+    await pool.query('ALTER TABLE wallets ADD UNIQUE KEY uq_user_currency (user_id, currency)');
+    walletsUqState = 1;
+    console.log('[wallets] أُضيف مفتاح UNIQUE(user_id, currency) ونُظّف التكرار');
+    return true;
+  } catch (e) {
+    walletsUqState = 2;
+    console.warn('[wallets] تعذّر تأكيد UNIQUE(user_id, currency):', e.message);
+    return false;
+  }
 }
+
+// جدول wallets هو مرآة للدفتر الحيّ. الكتابة هنا "قيمة مطلقة" لكل عملة،
+// فأي تغيّر بمقدار 1000$ يحدّث الصف نفسه — لا يضيف صفاً.
+async function walletsMirrorUser(userId, balances) {
+  if (PERSIST_RO) return;
+  const uid = Number(userId);
+  if (!Number.isFinite(uid)) return;
+  await ensureWalletsUnique();
+  const entries = Object.entries(balances || {})
+    .map(function (kv) { return [String(kv[0]).toUpperCase().slice(0, 12), Number(kv[1])]; })
+    .filter(function (e) { return WALLET_CUR_RE.test(e[0]) && isFinite(e[1]); });
+  for (const [cur, amt] of entries) {
+    const val = amt > 0 ? +amt.toFixed(8) : 0;
+    await pool.query(
+      'INSERT INTO wallets (user_id, currency, balance) VALUES (?, ?, ?) ' +
+      'ON DUPLICATE KEY UPDATE balance = ?, updated_at = NOW()',
+      [uid, cur, val, val]);
+  }
+  const keep = entries.map(function (e) { return e[0]; });
+  if (keep.length) {
+    await pool.query(
+      'UPDATE wallets SET balance = 0, updated_at = NOW() WHERE user_id = ? AND currency NOT IN (?)',
+      [uid, keep]);
+  } else {
+    await pool.query('UPDATE wallets SET balance = 0, updated_at = NOW() WHERE user_id = ?', [uid]);
+  }
+}
+
+// ---- تجميع الكتابات: تغييرات كثيرة خلال 400ms ← كتابة واحدة ----
+const _walletDirty = new Set();
+let _walletTimer = null;
+function queueWalletMirror(userId) {
+  if (PERSIST_RO) return;
+  const id = String(userId);
+  if (!id || id === 'undefined') return;
+  _walletDirty.add(id);
+  if (_walletTimer) return;
+  _walletTimer = setTimeout(flushWalletMirror, 400);
+  if (_walletTimer && typeof _walletTimer.unref === 'function') _walletTimer.unref();
+}
+async function flushWalletMirror() {
+  if (_walletTimer) { clearTimeout(_walletTimer); _walletTimer = null; }
+  const ids = Array.from(_walletDirty);
+  _walletDirty.clear();
+  for (const id of ids) {
+    try {
+      const su = store.findUserById(id);
+      if (su) await walletsMirrorUser(su.uid || id, su.balances || {});
+    } catch (e) { /* غير قاتل: الدفتر الحيّ يبقى المصدر الرسمي */ }
+  }
+}
+
 // اربط كل تغيير رصيد في الدفتر بمزامنة فورية إلى wallets.
 (function hookWalletSync() {
   const methods = ['applyDeltas', 'addDeposit', 'debitBalance', 'setBalances'];
@@ -270,7 +343,7 @@ async function dbSyncWallets(userId, balances) {
         try {
           const su = store.findUserById(String(args[0]));
           if (su) {
-            dbSyncWallets(args[0], su.balances || {});
+            queueWalletMirror(su.uid || args[0]);
             logBalanceDiff(args[0], before, su.balances || {}, m, su);
           }
         } catch (e) {}
@@ -627,7 +700,7 @@ async function syncBalancesFromLedger(reason) {
         applied++;
         console.warn('[ledger] استُعيد رصيد المستخدم', uid, 'من ' + bestName + ': $' + sumCur.toFixed(2) + ' → $' + bestTotal.toFixed(2));
         // أعِد مزامنة الجدول بالذاكرة إلى القاعدة حتى يتوحّد الجميع
-        try { dbSyncWallets(uid, u.balances); } catch (e) {}
+        try { queueWalletMirror(u.uid || uid); } catch (e) {}
       }
     }
     if (applied > 0) {
@@ -1251,7 +1324,12 @@ async function ensureSchema() {
     ')');
 }
 ensureSchema()
-  .then(() => console.log('[schema] ensured OK'))
+  .then(function () {
+    console.log('[schema] ensured OK');
+    return ensureWalletsUnique().then(function (ok) {
+      if (ok) return flushWalletMirror();
+    });
+  })
   .catch((e) => console.error('[schema] ensure FAILED:', e.message));
 
 // ---- Platform commission ledger (trading fees collected) ----
@@ -2257,12 +2335,13 @@ async function requireUser(req, res, next) {
     // keep the "last active" marker fresh for the admin online indicator
     try { pool.query('UPDATE users SET last_seen = ? WHERE id = ?', [Date.now(), dbu.id]); } catch (e) {}
     // اعكس أرصدة المستخدم الحالية إلى جدول wallets (مخنوقة: مرة كل 60ث)
+    // مرّت عبر طابور الحارس: upsert واحد بلا صفوف جديدة.
     try {
       if (su && su.balances) {
         const k = String(dbu.id); const t = Date.now();
         if (!_lastWalletSync[k] || (t - _lastWalletSync[k]) > 60000) {
           _lastWalletSync[k] = t;
-          dbSyncWallets(dbu.id, su.balances);
+          queueWalletMirror(dbu.id);
         }
       }
     } catch (e) {}
@@ -2537,13 +2616,9 @@ app.post('/api/auth/login', strictLimiter, async (req, res) => {
       const emailNorm = String(user.email || '').trim().toLowerCase();
       const { code, expiresInSec } = loginOtps.issue(emailNorm, { uid: user.id });
       try { await sendOtp({ to: user.email, code, purpose: 'login' }); } catch (e) {}
-      // إن لم يُضبط مفتاح البريد فعلياً على الخادم (أو OTP_DEBUG=true) نُرجع الرمز
-      // داخل الرد حتى لا يعلق المستخدم على شاشة الرمز بلا رسالة بريد.
-      const devMode = !hasMailerKey() || process.env.OTP_DEBUG === 'true';
-      // الإرسال يحتاج مفتاحاً؛ بلا مفتاح لا فائدة من انتظار رسالة بريد.
-      const mailSent = hasMailerKey();
+      const devMode = !isMailerConfigured() || process.env.OTP_DEBUG === 'true';
       return res.json({ ok: true, otpRequired: true, email: user.email || '',
-        mailSent, expiresInSec, devCode: devMode ? code : undefined, devMode: !!devMode });
+        expiresInSec, devCode: devMode ? code : undefined });
     }
 
     // 5. (بدون OTP) نجاح الدخول: أصدر توكناً موقّعاً
@@ -2610,7 +2685,7 @@ app.post('/api/auth/login/resend-otp', strictLimiter, async (req, res) => {
     if (!email) return res.status(400).json({ error: 'invalid_credentials' });
     // لا نكشف هل البريد مسجّل أم لا (حماية من التعداد): نردّ ok دائماً
     const user = await dbGetUserByEmail(email);
-    const devMode = !hasMailerKey() || process.env.OTP_DEBUG === 'true';
+    const devMode = !isMailerConfigured() || process.env.OTP_DEBUG === 'true';
     if (user) await maybeExpireTempBan(user);
     if (!user || user.status === 'banned') {
       return res.json({ ok: true, sent: true });
@@ -2735,7 +2810,7 @@ app.post('/api/auth/change-email', strictLimiter, requireUser, async (req, res) 
     // 3) أصدِر رمزاً مرتبطاً بالمستخدم والبريد الجديد، وأرسِله للبريد الجديد
     const { code, expiresInSec } = emailChangeOtps.issue(req.user.id, { newEmail });
     try { await sendEmailChangeOtp({ to: newEmail, code }); } catch (e) {}
-    const devMode = !hasMailerKey() || process.env.OTP_DEBUG === 'true';
+    const devMode = !isMailerConfigured() || process.env.OTP_DEBUG === 'true';
     res.json({ ok: true, otpRequired: true, newEmail, expiresInSec,
       devCode: devMode ? code : undefined });
   } catch (err) {
@@ -2824,6 +2899,7 @@ app.post('/api/account/delete', strictLimiter, requireUser, async (req, res) => 
     // 2) احذف كل بيانات المستخدم (نفس نمط حذف الأدمن)
     await pool.query('DELETE FROM id_documents WHERE user_id = ?', [dbu.id]);
     await pool.query('DELETE FROM wallets WHERE user_id = ?', [dbu.id]);
+    _walletDirty.delete(String(dbu.id));
     const [r] = await pool.query('DELETE FROM users WHERE id = ?', [dbu.id]);
     try { store.deleteUser && store.deleteUser(String(dbu.id)); } catch (e) {}
     try {
@@ -4038,6 +4114,7 @@ app.delete('/api/admin/users/:id', requireAdmin, async (req, res) => {
   try {
     await pool.query('DELETE FROM id_documents WHERE user_id = ?', [req.params.id]);
     await pool.query('DELETE FROM wallets WHERE user_id = ?', [req.params.id]);
+    _walletDirty.delete(String(req.params.id));
     const [r] = await pool.query('DELETE FROM users WHERE id = ?', [req.params.id]);
     try { store.deleteUser && store.deleteUser(String(req.params.id)); } catch (e) {}
     res.json({ ok: !!r.affectedRows });
@@ -6374,19 +6451,11 @@ app.post('/api/auth/register', strictLimiter, async (req, res) => {
 // ---- OTP تأكيد السحب + تسجيل الدخول ----
 // مخزنان مستقلان (بالذاكرة): رمز 6 خانات، صالح 5 دقائق، 5 محاولات.
 const withdrawOtps = new OtpStore({ ttlMs: 5 * 60 * 1000, maxTries: 5 });
-// هل يوجد مفتاح بريد صالح فعلاً؟ (mailer.js يرجع true دائماً، لذا نفحص المتغيّر مباشرة)
-function hasMailerKey() {
-  return !!String(process.env.SMTP_PASS || process.env.BREVO_API_KEY || '').trim();
-}
-
 const loginOtps = new OtpStore({ ttlMs: 5 * 60 * 1000, maxTries: 5 });
 // رمز تأكيد تغيير البريد (يُرسَل للبريد الجديد) — مُفتاح بمعرّف المستخدم
 const emailChangeOtps = new OtpStore({ ttlMs: 5 * 60 * 1000, maxTries: 5 });
 // رمز إعادة تعيين كلمة المرور (نسيت كلمة المرور) — مُفتاح بالبريد الإلكتروني
-// رمز استعادة كلمة المرور صالح 59 ثانية فقط (بحسب طلب المستخدم: عدّاد 59 ثانية
-// في الواجهة وانتهاء الصلاحية عند وصول العدّاد للصفر) — بعدها يجب طلب رمز جديد.
-const RESET_OTP_TTL_MS = 59 * 1000;
-const passwordResetOtps = new OtpStore({ ttlMs: RESET_OTP_TTL_MS, maxTries: 5 });
+const passwordResetOtps = new OtpStore({ ttlMs: 15 * 60 * 1000, maxTries: 5 });
 
 // ---- نسيت كلمة المرور: الخطوة 1 — البحث عن البريد ثم إرسال رمز ----
 // بطلب المستخدم: نكشف صراحةً إن كان البريد غير مسجّل (404 not_found)،
@@ -6395,22 +6464,21 @@ app.post('/api/auth/forgot-password', strictLimiter, async (req, res) => {
   try {
     const email = String((req.body || {}).email || '').trim().toLowerCase();
     if (!EMAIL_RE.test(email) || email.length > 160) return res.status(400).json({ error: 'bad_email' });
-    const devMode = !hasMailerKey() || process.env.OTP_DEBUG === 'true';
+    const devMode = !isMailerConfigured() || process.env.OTP_DEBUG === 'true';
     const user = await dbGetUserByEmail(email);
     if (!user) return res.status(404).json({ error: 'not_found' });
     const { code, expiresInSec } = passwordResetOtps.issue(email, { uid: user.id });
     const mins = Math.max(1, Math.round(expiresInSec / 60));
-    const secs = expiresInSec;
     try {
       await sendMail({
         to: user.email,
         subject: 'إعادة تعيين كلمة المرور - Apex',
-        text: 'رمز إعادة تعيين كلمة المرور الخاص بك هو: ' + code + '\nالرمز صالح لمدة ' + secs + ' ثانية فقط. إن لم تطلب ذلك فتجاهل هذه الرسالة.',
+        text: 'رمز إعادة تعيين كلمة المرور الخاص بك هو: ' + code + '\nالرمز صالح لمدة ' + mins + ' دقيقة. إن لم تطلب ذلك فتجاهل هذه الرسالة.',
         html: renderEmailTemplate({
           title: 'إعادة تعيين كلمة المرور',
           intro: 'طلبت إعادة تعيين كلمة مرور حسابك في Apex. استخدم رمز التحقق التالي لمتابعة العملية:',
           code: code,
-          lines: ['الرمز صالح لمدة ' + secs + ' ثانية فقط.'],
+          lines: ['الرمز صالح لمدة ' + mins + ' دقيقة فقط.'],
           note: 'إن لم تطلب إعادة التعيين فتجاهل هذه الرسالة، ولا تشارك هذا الرمز مع أحد.',
         }),
       });
@@ -6423,32 +6491,6 @@ app.post('/api/auth/forgot-password', strictLimiter, async (req, res) => {
   }
 });
 
-// ---- نسيت كلمة المرور: تحقّق من الرمز دون استهلاكه ----
-// الواجهة تنادي هذا المسار عند الضغط على «التالي» للتأكد أن الرمز صحيح
-// قبل السماح بالانقال لشاشة كلمة المرور. المحاولة الخاطئة تُحسَب ضمن maxTries.
-app.post('/api/auth/reset-password/check', strictLimiter, async (req, res) => {
-  try {
-    const email = String((req.body || {}).email || '').trim().toLowerCase();
-    const code = String((req.body || {}).code || '').trim();
-    if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'bad_email' });
-    if (!/^[0-9]{4,8}$/.test(code)) return res.status(400).json({ error: 'bad_code' });
-    const rec = passwordResetOtps.peek(email);
-    if (!rec) return res.status(400).json({ error: 'otp_required' });
-    if (Date.now() > rec.exp) { passwordResetOtps.clear(email); return res.status(400).json({ error: 'otp_expired' }); }
-    if (rec.tries >= 5) { passwordResetOtps.clear(email); return res.status(400).json({ error: 'otp_locked' }); }
-    if (String(rec.code) !== code) {
-      // نحسب المحاولة الخاطئة فعلياً (دون حذف الرمز) — unlockOtpTries تعيد السجل بعد زيادة العدّاد
-      passwordResetOtps.registerFailedTry(email);
-      const left = Math.max(0, 5 - rec.tries);
-      return res.status(400).json({ error: left > 0 ? 'otp_invalid' : 'otp_locked', triesLeft: left });
-    }
-    return res.json({ ok: true, expiresInSec: Math.max(0, Math.round((rec.exp - Date.now()) / 1000)) });
-  } catch (err) {
-    console.error('reset-password check error:', err.message);
-    res.status(500).json({ error: 'check_failed' });
-  }
-});
-
 // ---- نسيت كلمة المرور: الخطوة 2 — التحقق من الرمز وتعيين كلمة مرور جديدة ----
 app.post('/api/auth/reset-password', strictLimiter, async (req, res) => {
   try {
@@ -6457,10 +6499,6 @@ app.post('/api/auth/reset-password', strictLimiter, async (req, res) => {
     const newPassword = String((req.body || {}).newPassword || '');
     if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'bad_email' });
     if (newPassword.length < 6 || newPassword.length > 200) return res.status(400).json({ error: 'weak_password' });
-    // حماية إضافية: الرمز صالح 59 ثانية فقط — لا نقبل أي رمز بعد انتهاء الـTTL حتى لو بقي بالسجل
-    const rec = passwordResetOtps.peek(email);
-    if (!rec) return res.status(400).json({ error: 'otp_required' });
-    if (Date.now() > rec.exp) { passwordResetOtps.clear(email); return res.status(400).json({ error: 'otp_expired' }); }
     const vr = passwordResetOtps.verify(email, code);
     if (!vr.ok) return res.status(400).json({ error: vr.error });
     const user = await dbGetUserByEmail(email);
@@ -6492,7 +6530,7 @@ app.post('/api/wallet/withdraw/request-otp', strictLimiter, requireUser, require
   try { sendOtp({ to: req.user.email, code, amount, currency }); } catch (e) {}
   // في وضع الاختبار فقط (بلا بريد مُعدّ) نضع الرمز داخل إشعار بالتطبيق لتيسير التجربة؛
   // أمّا عند تفعيل البريد الحقيقي فلا نكشف الرمز داخل التطبيق إطلاقاً (يصل للإيميل فقط).
-  const emailOn = hasMailerKey() && process.env.OTP_DEBUG !== 'true';
+  const emailOn = isMailerConfigured() && process.env.OTP_DEBUG !== 'true';
   try {
     store.addNotification(req.user.id, {
       title: 'رمز تأكيد السحب',
@@ -6504,7 +6542,7 @@ app.post('/api/wallet/withdraw/request-otp', strictLimiter, requireUser, require
   } catch (e) {}
 
   // في بيئة العرض/الاختبار دون بريد مُعدّ نعيد devCode لتيسير التجربة.
-  const devMode = !hasMailerKey() || process.env.OTP_DEBUG === 'true';
+  const devMode = !isMailerConfigured() || process.env.OTP_DEBUG === 'true';
   res.json({ ok: true, sent: true, expiresInSec,
     email: req.user.email || '', devCode: devMode ? code : undefined });
 });
