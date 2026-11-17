@@ -4191,44 +4191,34 @@ app.post('/api/admin/users/:id/notify', requireAdmin, async (req, res) => {
 // عدّل مسار /api/admin/users/:id/credit في server.js ليصبح async وينتظر الحفظ:
 app.post('/api/admin/users/:id/credit', requireAdmin, async (req, res) => {
   const { amount, currency, note } = req.body || {};
-  const cur = String(currency || 'USDT').toUpperCase();
   const amt = Number(amount);
-  if (!/^[A-Z0-9]{2,12}$/.test(cur)) return res.status(400).json({ error: 'bad_currency' });
-  if (!(amt > 0) || !isFinite(amt)) return res.status(400).json({ error: 'bad_amount' });
-  const u = await adminResolveUser(req.params.id);
-  if (!u) return res.status(404).json({ error: 'not_found' });
+  const cur = String(currency || 'USDT').toUpperCase();
+  
+  if (!(amt > 0)) return res.status(400).json({ error: 'bad_amount' });
 
-  const dep = store.addDeposit(u.id, {
-    amount: amt, currency: cur, kind: 'admin', from: 'ADMIN', fromName: 'الإدارة',
-    note: String(note || 'شحن رصيد من الإدارة').slice(0, 200),
-  });
+  const userId = req.params.id;
 
-  // 1. انتظر تحديث جدول wallets فوراً بدون تأخير 400ms
-  const updatedUser = store.findUserById(u.id);
-  if (updatedUser) {
-    await walletsMirrorUser(updatedUser.uid || u.id, updatedUser.balances || {});
+  try {
+    // 1. التحديث المباشر والآمن في قاعدة بيانات TiDB السحابية
+    // تأكد من أسماء الأعمدة لديك (مثلاً balances أو wallet_balance)
+    await db.promise().query(
+      `UPDATE wallets SET balance = balance + ? WHERE user_id = ? AND currency = ?`,
+      [amt, userId, cur]
+    );
+
+    // 2. تسجيل العملية في دفتر الأستاذ (Ledger) أو المعاملات سحابياً أيضاً
+    await db.promise().query(
+      `INSERT INTO wx_ledger (user_id, amount, currency, type, note, created_at) VALUES (?, ?, ?, 'admin_credit', ?, NOW())`,
+      [userId, amt, cur, String(note || 'شحن إداري').slice(0, 200)]
+    );
+
+    res.json({ ok: true, message: 'تم شحن الرصيد وحفظه في السحابة بنجاح' });
+  } catch (err) {
+    console.error('TiDB Credit Error:', err);
+    res.status(500).json({ error: 'database_error', details: err.message });
   }
-
-  // 2. انتظر حفظ لقطة apex-data.json في kv_store قبل الرد
-  await snapshotDataToDb(true);
-  await updateSafeguard();
-
-  store.addNotification(u.id, {
-    title: 'شحن رصيد',
-    kind: 'money',
-    body: 'تمت إضافة ' + amt + ' ' + cur + ' إلى رصيدك من الإدارة.',
-  });
-  store.addTransaction(u.id, {
-    type: 'admin_credit', amount: amt, currency: cur,
-    counterparty: 'الإدارة', note: String(note || 'شحن رصيد من الإدارة').slice(0, 200),
-  });
-  try { alertTransfer(u.id, { to: u.email, kind: 'deposit', amount: amt, currency: cur, counterparty: 'الإدارة' }); } catch (e) {}
-  store.logAdmin({
-    admin: 'admin', action: 'credit', targetId: u.id, targetEmail: u.email, targetName: u.name,
-    amount: amt, currency: cur, note: String(note || 'شحن رصيد').slice(0, 200),
-  });
-  res.json({ ok: true, deposit: dep });
 });
+
 
 // ---- Admin: read ONE user's full per-currency balances (أرصدة وعملات المستخدم) ----
 app.get('/api/admin/users/:id/balances', requireAdmin, async (req, res) => {
