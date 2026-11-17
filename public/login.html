@@ -14,7 +14,8 @@ body{margin:0;font-family:'Segoe UI',Tahoma,system-ui,-apple-system,sans-serif;b
 .wrap{width:100%;max-width:430px;min-height:100vh;display:flex;flex-direction:column;padding:0 22px}
 .topbar{flex:0 0 auto}
 .brand{flex:0 0 auto}
-#credBox,#otpBox{flex:1 1 auto;display:flex;flex-direction:column;justify-content:center;padding:10px 0}
+#credBox{flex:1 1 auto;display:flex;flex-direction:column;justify-content:center;padding:10px 0}
+#otpBox{flex:1 1 auto;flex-direction:column;justify-content:center;padding:10px 0}
 #step1,#step2,.step2.on{width:100%}
 .legal{flex:0 0 auto;margin-top:0;padding:18px 0 22px}
 
@@ -98,20 +99,63 @@ h1{font-size:24px;font-weight:800;margin:0 0 18px;letter-spacing:-.2px;animation
 .hide{display:none!important}
 @media(max-width:380px){h1{font-size:21px}.wrap{padding:14px 16px 22px}}
 </style>
-  <style id="devStyle">
-  /* ===== بطاقة رمز التطوير ===== */
-  #devCard{margin:0 0 16px;padding:18px 16px;border-radius:16px;background:#16130a;
-    border:2px solid #f0b90b;text-align:center;box-shadow:0 0 0 4px rgba(240,185,11,.10)}
-  #devCard .dc-h{font-size:12.5px;font-weight:800;color:#f0b90b;line-height:1.8;margin-bottom:10px}
-  #devCard .dc-row{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap}
-  #devCard .dc-code{font:800 34px/1.1 ui-monospace,Menlo,Consolas,monospace;letter-spacing:10px;
-    color:#fff;background:#000;border:1px dashed #555;border-radius:12px;padding:10px 8px 10px 18px;user-select:all;display:inline-block}
-  #devCard .dc-b{display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap}
-  #devCard button{border:0;border-radius:10px;padding:10px 16px;font-weight:800;font-size:13px;cursor:pointer}
-  #devCard .dc-go{background:#f0b90b;color:#1e1e1e}
-  #devCard .dc-cp{background:#2a2a2a;color:#eee}
-  #devCard .dc-x{background:transparent;color:#777;font-size:11.5px;padding:4px 8px;margin-top:6px}
-  #devRoute{font-size:12px;color:#8a8a8a;margin:-4px 0 12px;text-align:center;line-height:1.7}
+  <style id="otpStyle">
+  /* ================= شاشة تأكيد الرمز (6 خانات) ================= */
+  #otpBox:not(.hide){display:flex}
+  #otpBox.hide{display:none!important}
+  #otpBox h1{margin-bottom:6px}
+  #otpSub{font-size:13px;color:var(--muted);line-height:1.9;margin:0 0 18px}
+  #otpSub b{color:var(--gold2);font-weight:800;direction:ltr;display:inline-block;max-width:100%;overflow-wrap:anywhere}
+
+  .otp-row{display:flex;gap:9px;justify-content:center;margin:2px 0 0;direction:ltr}
+  .otp-row input{width:100%;height:62px;flex:1 1 0;min-width:0;text-align:center;
+    font:800 26px/1 ui-monospace,Menlo,Consolas,monospace;color:#fff;background:var(--panel2);
+    border:1.5px solid var(--border);border-radius:12px;outline:none;padding:0;
+    transition:border-color .15s,box-shadow .15s,background .15s,transform .1s}
+  .otp-row input:focus{border-color:var(--gold2);box-shadow:0 0 0 3px rgba(240,185,11,.14);background:#232830}
+  .otp-row input.filled{border-color:rgba(240,185,11,.5);background:#1b2229}
+  .otp-row input.bad{border-color:var(--red)!important;background:rgba(246,70,93,.10);animation:otpShake .38s}
+  .otp-row input:disabled{opacity:.45;cursor:not-allowed}
+  @keyframes otpShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
+
+  #otpCard{display:none;margin:18px 0 4px;padding:16px 14px 12px;border-radius:16px;
+    background:linear-gradient(180deg,#1a1508,#12100a);border:1.5px solid var(--gold2);
+    box-shadow:0 0 0 4px rgba(240,185,11,.07),inset 0 1px 0 rgba(255,255,255,.04)}
+  #otpCard.on{display:block;animation:fadeUp .35s ease both}
+  #otpCard .oc-h{font-size:12px;font-weight:800;color:var(--gold1);text-align:center;line-height:1.9;margin-bottom:12px}
+  #otpCard .oc-h span{display:block;font-weight:600;color:#9a8a5a;font-size:11px;margin-top:3px}
+  #otpCard .oc-code{display:block;font:900 36px/1.15 ui-monospace,Menlo,Consolas,monospace;letter-spacing:11px;
+    padding:11px 6px 11px 17px;margin:0 auto;text-align:center;width:fit-content;max-width:100%;
+    color:#1a1400;background:linear-gradient(135deg,#f8d979,#f0b90b);border-radius:12px;
+    user-select:all;-webkit-user-select:all;cursor:pointer;box-shadow:0 6px 18px rgba(240,185,11,.22)}
+  #otpCard .oc-code:active{transform:scale(.98)}
+  #otpCard .oc-btns{display:flex;gap:8px;justify-content:center;margin-top:13px;flex-wrap:wrap}
+  #otpCard button{border:0;border-radius:10px;padding:10px 16px;font-family:inherit;font-weight:800;font-size:12.5px;cursor:pointer;transition:filter .15s,transform .1s}
+  #otpCard button:active{transform:scale(.97)}
+  #otpCard .oc-fill{background:#f0b90b;color:#1e1e1e}
+  #otpCard .oc-copy{background:#2a3138;color:#eaecef}
+  .oc-done{font-size:11.5px;color:var(--green);text-align:center;margin-top:9px;opacity:0;transition:opacity .2s}
+  .oc-done.on{opacity:1}
+
+  .otp-meta{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:16px 0 0;font-size:12.5px;color:var(--muted)}
+  .otp-meta .tleft{font-variant-numeric:tabular-nums;font-weight:800;color:var(--gold1);font-size:13.5px}
+  .otp-meta .tleft.low{color:var(--red)}
+  .otp-cnt{display:flex;gap:4px;margin-top:9px}
+  .otp-cnt i{height:3px;flex:1;border-radius:3px;background:#2b3139;transition:background .3s}
+  .otp-cnt i.on{background:var(--gold2)}
+  .otp-cnt i.hot{background:var(--red)}
+
+  .otp-links{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:16px;font-size:13px}
+  .otp-links a{color:var(--gold1);text-decoration:none;font-weight:700}
+  .otp-links a.dis{color:#4d5560;pointer-events:none}
+  .otp-links a.mutedlink{color:var(--muted);font-weight:600}
+  .otp-dev{font-size:11px;color:#4d5560;text-align:center;margin-top:16px;line-height:1.8;min-height:1px}
+  .otp-dev a{color:#6d7885}
+  @media(max-width:380px){
+    .otp-row{gap:6px}
+    .otp-row input{height:56px;font-size:22px;border-radius:10px}
+    #otpCard .oc-code{font-size:29px;letter-spacing:9px}
+  }
   </style>
 </head>
 <body>
@@ -128,9 +172,8 @@ h1{font-size:24px;font-weight:800;margin:0 0 18px;letter-spacing:-.2px;animation
 
   <div class="brand"><b>Apex</b></div>
 
-  <div class="msg" id="msg"></div>
-
   <div id="credBox">
+    <div class="msg" id="msg"></div>
     <!-- ============ الشاشة 1: البريد الإلكتروني ============ -->
     <div class="step1" id="step1">
       <h1 data-i18n="loginTitle">تسجيل الدخول</h1>
@@ -190,30 +233,43 @@ h1{font-size:24px;font-weight:800;margin:0 0 18px;letter-spacing:-.2px;animation
   </div>
 
   <div id="otpBox" class="hide">
-    <h1>رمز التحقق</h1>
-    <div class="who" id="otpHint">أدخل رمز التحقق المرسل إلى بريدك.</div>
-    <div class="fld">
-      <label for="otpCode">رمز التحقق</label>
-      <div class="box">
-        <input id="otpCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="000000" dir="ltr" style="text-align:center;letter-spacing:8px;font-size:20px;font-weight:800">
-      </div>
+    <div class="msg" id="msg2"></div>
+    <h1>تأكيد الرمز</h1>
+    <div id="otpSub">أدخل الرمز المكوّن من 6 أرقام المرسل إلى <b id="otpEmail"></b></div>
+
+    <div class="otp-row" id="otpRow">
+      <input type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="1" aria-label="الرقم 1">
+      <input type="text" inputmode="numeric" maxlength="1" aria-label="الرقم 2">
+      <input type="text" inputmode="numeric" maxlength="1" aria-label="الرقم 3">
+      <input type="text" inputmode="numeric" maxlength="1" aria-label="الرقم 4">
+      <input type="text" inputmode="numeric" maxlength="1" aria-label="الرقم 5">
+      <input type="text" inputmode="numeric" maxlength="1" aria-label="الرقم 6">
     </div>
-    <div id="devCard" class="hide">
-      <div class="dc-h">وضع التطوير — البريد غير مُفعّل على الخادم<br>رمز الدخول ظاهر هنا مباشرةً</div>
-      <div class="dc-row"><span class="dc-code" id="devCodeVal">------</span></div>
-      <div class="dc-b">
-        <button type="button" class="dc-go" onclick="useDevCode()">دخول بالرمز</button>
-        <button type="button" class="dc-cp" onclick="copyDevCode()">نسخ</button>
-      </div>
-      <button type="button" class="dc-x" onclick="hideDevCard()">إخفاء البطاقة</button>
-      <div id="dcCopyMsg" style="font-size:11.5px;color:#f0b90b;margin-top:8px;display:none">تم النسخ ✓</div>
+
+    <div class="otp-meta">
+      <span>الرمز فعّال لـ</span>
+      <span class="tleft" id="otpTimer">--:--</span>
     </div>
-    <div id="devRoute"></div>
-    <button class="btn" id="otpBtn" onclick="doVerify()">تأكيد الدخول</button>
-    <div class="links">
-      <a href="#" onclick="doResend();return false;">إعادة إرسال الرمز</a>
+    <div class="otp-cnt" id="otpCnt"><i></i><i></i><i></i><i></i><i></i></div>
+
+    <div id="otpCard">
+      <div class="oc-h">وضع التطوير — البريد غير مُفعّل على الخادم<span>رمزك ظاهر تحت — اضغط «تعبئة الرمز» وأكمل</span></div>
+      <span class="oc-code" id="otpCardVal" onclick="copyOtpCode()">------</span>
+      <div class="oc-btns">
+        <button type="button" class="oc-fill" onclick="fillOtpCode()">تعبئة الرمز</button>
+        <button type="button" class="oc-copy" onclick="copyOtpCode()">نسخ</button>
+      </div>
+      <div class="oc-done" id="otpCopied">تم النسخ ✓</div>
+    </div>
+
+    <button class="btn" id="otpBtn" onclick="doVerify()" disabled>تأكيد الدخول</button>
+
+    <div class="otp-links">
+      <a href="#" id="otpResend" onclick="doResend();return false;">إعادة إرسال الرمز</a>
       <a href="#" class="mutedlink" onclick="otpBack();return false;">رجوع</a>
     </div>
+
+    <div class="otp-dev" id="otpDevNote"></div>
   </div>
 
   <div class="legal">بالمتابعة أنت توافق على <a href="terms.html">شروط الاستخدام</a> و<a href="privacy.html">سياسة الخصوصية</a> الخاصة بـ Apex.</div>
@@ -229,7 +285,13 @@ function getNext(){
   // اسمح بأسماء صفحات بسيطة فقط (منع أي إعادة توجيه خارجية أو javascript:)
   return /^[a-zA-Z0-9_\-]+\.html([?#].*)?$/.test(n) ? n : 'index.html';
 }
-function showMsg(t,cls){const m=$('msg');m.textContent=t;m.className='msg '+(cls||'err');}
+function showMsg(t,cls){
+  const ob=document.getElementById('otpBox');
+  const id=(ob&&!ob.classList.contains('hide'))?'msg2':'msg';
+  ['msg','msg2'].forEach(function(k){var e=document.getElementById(k);if(e&&k!==id){e.textContent='';e.className='msg';}});
+  const m=document.getElementById(id); if(!m)return;
+  m.textContent=t;m.className='msg '+(cls||'err');
+}
 var EMAIL_OK='';
 function setFieldErr(fldId,txId,msg){
   var f=$(fldId);if(!f)return;
@@ -345,10 +407,167 @@ async function socialLogin(provider){
   }catch(e){showMsg('تعذّر الاتصال بالخادم','err');}
 }
 window.checkEmail=checkEmail;window.backToEmail=backToEmail;window.goRegister=goRegister;window.socialLogin=socialLogin;window.clearEmail=clearEmail;window.togglePass=togglePass;window.closeAuth=closeAuth;window.passkeyLogin=passkeyLogin;
+/* ================== شاشة تأكيد الرمز — 6 خانات ================== */
+var OTP_EMAIL='';
+var OTP_CODE='';          // الرمز المعروض بالبطاقة (وضع التطوير)
+var OTP_TTL=600;          // ثواني صلاحية الرمز
+var OTP_LEFT=0, OTP_TIMER=null, OTP_TRIES=0, OTP_MAX_TRIES=5;
+var OTP_BUSY=false;
+
+function otpInputs(){return Array.prototype.slice.call(document.querySelectorAll('#otpRow input'));}
+function otpValue(){return otpInputs().map(function(i){return i.value;}).join('');}
+function otpClear(){
+  otpInputs().forEach(function(i){i.value='';i.classList.remove('filled','bad');});
+  syncOtpBtn();
+}
+function syncOtpBtn(){
+  var b=document.getElementById('otpBtn'); if(!b)return;
+  var v=otpValue();
+  b.disabled = OTP_BUSY || !/^\d{6}$/.test(v);
+}
+function otpSetValue(code){
+  code=String(code||'').replace(/\D/g,'').slice(0,6);
+  var ins=otpInputs();
+  ins.forEach(function(inp,k){
+    inp.value=code[k]||'';
+    inp.classList.toggle('filled',!!code[k]);
+    inp.classList.remove('bad');
+  });
+  syncOtpBtn();
+  if(code.length===6){try{ins[5].blur();}catch(e){}}
+}
+function otpFocusFirst(){
+  var ins=otpInputs(); if(!ins.length)return;
+  try{ins[0].focus();ins[0].select&&ins[0].select();}catch(e){}
+}
+(function bindOtpRow(){
+  var ins=otpInputs();
+  ins.forEach(function(inp,k){
+    inp.addEventListener('input',function(){
+      var v=String(inp.value||'').replace(/\D/g,'');
+      inp.value=v? v.slice(-1) : '';
+      inp.classList.toggle('filled',!!inp.value);
+      inp.classList.remove('bad');
+      otpInputs().forEach(function(x){x.classList.remove('bad');});
+      if(inp.value && k<ins.length-1){try{ins[k+1].focus();ins[k+1].select&&ins[k+1].select();}catch(e){}}
+      syncOtpBtn();
+      if(otpValue().length===6 && k===ins.length-1){ try{inp.blur();}catch(e){} }
+    });
+    inp.addEventListener('keydown',function(e){
+      if(e.key==='Backspace'){
+        if(!inp.value && k>0){e.preventDefault();try{ins[k-1].focus();}catch(x){}ins[k-1].value='';ins[k-1].classList.remove('filled');syncOtpBtn();}
+        else{inp.classList.remove('filled');setTimeout(syncOtpBtn,0);}
+        return;
+      }
+      if(e.key==='ArrowLeft' && k>0){e.preventDefault();try{ins[k-1].focus();}catch(x){}return;}
+      if(e.key==='ArrowRight' && k<ins.length-1){e.preventDefault();try{ins[k+1].focus();}catch(x){}return;}
+      if(e.key==='Enter'){e.preventDefault();doVerify();}
+    });
+    inp.addEventListener('paste',function(e){
+      var t='';
+      try{t=(e.clipboardData||window.clipboardData).getData('text')||'';}catch(x){}
+      t=String(t).replace(/\D/g,'');
+      if(!t)return;
+      e.preventDefault();
+      otpSetValue(t);
+      if(t.length<6){var nx=otpInputs()[Math.min(t.length,5)];try{nx.focus();}catch(x){}}
+    });
+    inp.addEventListener('focus',function(){try{inp.select&&inp.select();}catch(e){}});
+  });
+})();
+
+function otpStartTimer(sec){
+  OTP_TTL = Number(sec)>0? Number(sec) : 600;
+  OTP_LEFT = OTP_TTL;
+  if(OTP_TIMER){clearInterval(OTP_TIMER);OTP_TIMER=null;}
+  otpPaintTimer();
+  OTP_TIMER=setInterval(function(){
+    OTP_LEFT--; otpPaintTimer();
+    if(OTP_LEFT<=0){clearInterval(OTP_TIMER);OTP_TIMER=null;}
+  },1000);
+}
+function otpPaintTimer(){
+  var t=document.getElementById('otpTimer'); if(!t)return;
+  var s=Math.max(0,OTP_LEFT);
+  var m=Math.floor(s/60), r=s%60;
+  t.textContent=m+':'+(r<10?'0':'')+r;
+  t.classList.toggle('low', s<=30);
+}
+function otpPaintTries(){
+  var bars=document.querySelectorAll('#otpCnt i');
+  var left=Math.max(0,OTP_MAX_TRIES-OTP_TRIES);
+  for(var i=0;i<bars.length;i++){
+    bars[i].className = i<left ? (left<=2?'hot':'on') : '';
+  }
+}
+function otpShowCard(code){
+  OTP_CODE=String(code||'').replace(/\D/g,'').slice(0,6);
+  var card=document.getElementById('otpCard'), v=document.getElementById('otpCardVal');
+  var done=document.getElementById('otpCopied');
+  if(done)done.classList.remove('on');
+  if(!card||!v)return;
+  if(!OTP_CODE){card.classList.remove('on');v.textContent='------';return;}
+  v.textContent=OTP_CODE;
+  card.classList.add('on');
+}
+function otpHideCard(){ otpShowCard(''); }
+function fillOtpCode(){
+  if(!OTP_CODE)return;
+  otpSetValue(OTP_CODE);
+  showMsg('تم تعبئة الرمز — اضغط «تأكيد الدخول».','ok');
+  try{document.getElementById('otpBtn').focus();}catch(e){}
+}
+function copyOtpCode(){
+  if(!OTP_CODE)return;
+  var done=function(){var d=document.getElementById('otpCopied');if(d){d.classList.add('on');setTimeout(function(){d.classList.remove('on');},1800);}};
+  try{
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(OTP_CODE).then(done,done);return;}
+  }catch(e){}
+  try{var ta=document.createElement('textarea');ta.value=OTP_CODE;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);done();}catch(e){}
+}
+function otpNote(txt,isLink){
+  var n=document.getElementById('otpDevNote'); if(!n)return;
+  n.innerHTML='';
+  if(!txt)return;
+  if(isLink){
+    var a=document.createElement('a');a.href=txt;a.target='_blank';a.rel='noopener';a.textContent='فتح رابط الرمز (تشخيص)';
+    n.appendChild(document.createTextNode('ما ظهر الرمز؟ '));n.appendChild(a);
+  } else { n.textContent=txt; }
+}
+function openOtpScreen(email){
+  OTP_EMAIL=email||'';
+  var em=document.getElementById('otpEmail'); if(em)em.textContent=OTP_EMAIL||'بريدك';
+  otpClear(); otpHideCard(); OTP_TRIES=0; otpPaintTries();
+  otpNote(''); clearMsgSoft();
+  var cb=document.getElementById('credBox'); if(cb)cb.style.display='none';
+  var ob=document.getElementById('otpBox'); if(ob)ob.classList.remove('hide');
+  var bb=document.getElementById('backBtn'); if(bb)bb.classList.add('hide');
+  var rs=document.getElementById('otpResend'); if(rs)rs.classList.remove('dis');
+  window.scrollTo&&window.scrollTo({top:0,behavior:'smooth'});
+  setTimeout(otpFocusFirst,120);
+}
+function otpBack(){
+  OTP_EMAIL='';OTP_CODE='';
+  if(OTP_TIMER){clearInterval(OTP_TIMER);OTP_TIMER=null;}
+  otpHideCard(); otpClear(); otpNote('');
+  var ob=document.getElementById('otpBox'); if(ob)ob.classList.add('hide');
+  var cb=document.getElementById('credBox'); if(cb)cb.style.display='flex';
+  var bb=document.getElementById('backBtn'); if(bb&&document.getElementById('step2').classList.contains('on'))bb.classList.remove('hide');
+  clearMsgSoft();
+  try{document.getElementById('pass').focus();}catch(e){}
+}
+function fetchDevCode(email, cb){
+  if(!email)return cb&&cb('');
+  fetch('/__dev/last-otp?email='+encodeURIComponent(email),{credentials:'same-origin'})
+    .then(function(r){return r.ok?r.json():null;})
+    .then(function(d){cb&&cb(d&&d.ok?d.code:'',d&&d.expiresInSec);})
+    .catch(function(){cb&&cb('');});
+}
+
 async function doLogin(){
-  const email=EMAIL_OK||$('email').value.trim(),pass=$('pass').value;
+  const email=EMAIL_OK||document.getElementById('email').value.trim(), pass=document.getElementById('pass').value;
   if(!email||!pass)return showMsg('الرجاء إدخال البريد وكلمة المرور');
-  const btn=$('submitBtn');btn.disabled=true;btn.classList.add('loading');btn.setAttribute('aria-busy','true');
+  const btn=document.getElementById('submitBtn'); btn.disabled=true;btn.classList.add('loading');btn.setAttribute('aria-busy','true');
   try{
     const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password:pass})});
     const d=await r.json();
@@ -356,112 +575,101 @@ async function doLogin(){
       if(d.error==='pending')showMsg('حسابك قيد المراجعة من الإدارة. الرجاء الانتظار حتى الموافقة.','warn');
       else if(d.error==='rejected')showMsg('تم رفض طلبك'+(d.reason?(': '+d.reason):'.'),'err');
       else if(d.error==='banned')showMsg('تم حظر هذا الحساب. تواصل مع الدعم.','err');
-      else{showMsg('البريد أو كلمة المرور غير صحيحة','err');var pe=$('passErr');if(pe)pe.textContent='كلمة المرور غير صحيحة';$('fldPass').classList.add('bad');}
+      else{showMsg('البريد أو كلمة المرور غير صحيحة','err');var pe=document.getElementById('passErr');if(pe)pe.textContent='كلمة المرور غير صحيحة';document.getElementById('fldPass').classList.add('bad');}
       btn.disabled=false;btn.classList.remove('loading');btn.removeAttribute('aria-busy');return;
     }
-    // خطوة التحقق بخطوتين: الخادم يطلب رمز بريدي قبل إصدار التوكن
+    btn.disabled=false;btn.classList.remove('loading');btn.removeAttribute('aria-busy');
     if(d.otpRequired){
-      OTP_EMAIL=d.email||email;
-      $('credBox').style.display='none';
-      $('otpBox').style.display='block';
-      $('otpHint').textContent = (d.mailSent===false)
-        ? ('تعذّر إرسال بريد إلى '+(OTP_EMAIL||'بريدك')+' (إعداد البريد غير مكتمل على الخادم). استخدم الرمز الظاهر أدناه.')
-        : ('أدخل رمز التحقق المرسل إلى '+(OTP_EMAIL||'بريدك')+'.');
-      hideDevCard();showDevRoute();
-      if(d.devCode){showDevCode(d.devCode);showMsg('البريد غير مُفعّل — الرمز ظاهر بالبطاقة تحت.','warn');}
-      else{
-        showDevCode('');showMsg('تم إرسال رمز التحقق إلى بريدك.','ok');
-        // نقطة تطوير: لو ما وصلك الرمز على البريد نجيبه من الخادم ونعرضه
-        fetchDevCode(OTP_EMAIL, function(c){
+      openOtpScreen(d.email||email);
+      otpStartTimer(d.expiresInSec||d.ttl||600);
+      otpPaintTries();
+      if(d.devCode){
+        otpShowCard(d.devCode);
+        showMsg('البريد غير مُفعّل على الخادم — رمزك ظاهر بالبطاقة تحت، اضغط «تعبئة الرمز».','warn');
+      } else if(d.mailSent===false){
+        showMsg('تعذّر إرسال البريد. اسحب الرمز من زر التشخيص تحت، أو اطلب رمزاً جديداً.','warn');
+      } else {
+        showMsg('تم إرسال رمز التحقق إلى بريدك.','ok');
+      }
+      // احتياط: لو ما رجع الرمز مع الرد، نجيبه من نقطة التطوير ونعرضه
+      if(!d.devCode){
+        fetchDevCode(OTP_EMAIL,function(c,ttl){
           if(!c)return;
-          showDevCode(c);
+          otpShowCard(c);
+          if(ttl)otpStartTimer(ttl);
           showMsg('الرمز جاهز — ظاهر بالبطاقة تحت (وضع التطوير).','warn');
         });
       }
-      btn.disabled=false;btn.classList.remove('loading');btn.removeAttribute('aria-busy');
-      setTimeout(function(){$('otpCode').focus();},80);
       return;
     }
     finishLogin(d);
   }catch(e){showMsg('خطأ في الاتصال بالخادم','err');btn.disabled=false;btn.classList.remove('loading');btn.removeAttribute('aria-busy');}
 }
+
 function mapOtpErr(e){
-  if(e==='bad_code'||e==='invalid')return 'رمز التحقق غير صحيح.';
-  if(e==='expired'||e==='otp_expired')return 'انتهت صلاحية الرمز، اطلب رمزاً جديداً.';
-  if(e==='too_many'||e==='locked')return 'محاولات كثيرة، اطلب رمزاً جديداً.';
+  if(e==='bad_code'||e==='invalid'||e==='wrong_code')return 'رمز التحقق غير صحيح.';
+  if(e==='expired'||e==='otp_expired'||e==='code_expired')return 'انتهت صلاحية الرمز، اطلب رمزاً جديداً.';
+  if(e==='too_many'||e==='locked'||e==='too_many_attempts')return 'محاولات كثيرة، اطلب رمزاً جديداً.';
+  if(e==='no_code'||e==='not_found')return 'ما في رمز فعّال لهذا الحساب، اطلب رمزاً جديداً.';
   if(e==='banned')return 'تم حظر هذا الحساب. تواصل مع الدعم.';
   return 'تعذّر التحقق، حاول مجدداً.';
 }
-function fetchDevCode(email, cb){
-  if(!email)return cb&&cb('');
-  fetch('/__dev/last-otp?email='+encodeURIComponent(email),{credentials:'same-origin'})
-    .then(function(r){return r.ok?r.json():null;})
-    .then(function(d){cb&&cb(d&&d.ok?d.code:'');})
-    .catch(function(){cb&&cb('');});
+function otpMarkBad(){
+  otpInputs().forEach(function(i){i.classList.add('bad');});
+  setTimeout(function(){otpInputs().forEach(function(i){i.classList.remove('bad','filled');i.value='';});otpFocusFirst();},420);
 }
+
 async function doVerify(){
-  const code=($('otpCode').value||'').trim();
-  if(!code)return showMsg('أدخل رمز التحقق');
-  const btn=$('otpBtn');btn.disabled=true;btn.textContent='جارٍ التحقق...';
+  if(OTP_BUSY)return;
+  var code=otpValue();
+  if(!/^\d{6}$/.test(code))return showMsg('أدخل الرمز المكوّن من 6 أرقام');
+  var btn=document.getElementById('otpBtn');
+  OTP_BUSY=true; btn.disabled=true; var old=btn.textContent; btn.textContent='جارٍ التحقق...';
   try{
     const r=await fetch('/api/auth/login/verify-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:OTP_EMAIL,code:code})});
-    const d=await r.json();
-    if(!r.ok){showMsg(mapOtpErr(d.error),'err');btn.disabled=false;btn.textContent='تأكيد الدخول';return;}
+    const d=await r.json().catch(function(){return{};});
+    if(!r.ok){
+      OTP_TRIES++;otpPaintTries();
+      showMsg(mapOtpErr(d.error),'err');
+      otpMarkBad();
+      if(OTP_TRIES>=OTP_MAX_TRIES){var rs=document.getElementById('otpResend');if(rs)rs.classList.remove('dis');}
+      OTP_BUSY=false;btn.textContent=old;syncOtpBtn();
+      return;
+    }
     finishLogin(d);
-  }catch(e){showMsg('خطأ في الاتصال بالخادم','err');btn.disabled=false;btn.textContent='تأكيد الدخول';}
+  }catch(e){
+    showMsg('خطأ في الاتصال بالخادم','err');
+    OTP_BUSY=false;btn.textContent=old;syncOtpBtn();
+  }
 }
+
 async function doResend(){
   if(!OTP_EMAIL)return;
-  showMsg('جارٍ إعادة الإرسال...','ok');
+  var rs=document.getElementById('otpResend'); if(rs)rs.classList.add('dis');
+  showMsg('جارٍ إرسال رمز جديد...','ok');
   try{
     const r=await fetch('/api/auth/login/resend-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:OTP_EMAIL})});
     const d=await r.json().catch(function(){return{};});
-    if(d.devCode){showDevCode(d.devCode);showMsg('وضع التطوير: الرمز الجديد ظاهر أسفل الحقل.','warn');}
-      else{showDevCode('');showMsg('تم إرسال رمز جديد إلى بريدك.','ok');}
-  }catch(e){showMsg('تعذّر إعادة الإرسال، حاول مجدداً.','err');}
+    if(!r.ok){
+      if(rs)rs.classList.remove('dis');
+      showMsg(d.error==='too_many'?'طلبت رموز كثيرة — انتظر شوي وحاول مجدداً.':'تعذّر إعادة الإرسال، حاول مجدداً.','err');
+      return;
+    }
+    otpClear(); OTP_TRIES=0; otpPaintTries();
+    otpStartTimer(d.expiresInSec||d.ttl||600);
+    if(d.devCode){ otpShowCard(d.devCode); showMsg('وضع التطوير: الرمز الجديد ظاهر بالبطاقة — اضغط «تعبئة الرمز».','warn'); }
+    else {
+      otpShowCard('');
+      showMsg('تم إرسال رمز جديد إلى بريدك.','ok');
+      fetchDevCode(OTP_EMAIL,function(c,ttl){ if(!c)return; otpShowCard(c); if(ttl)otpStartTimer(ttl); });
+    }
+    otpFocusFirst();
+  }catch(e){ if(rs)rs.classList.remove('dis'); showMsg('تعذّر إعادة الإرسال، حاول مجدداً.','err'); }
 }
-var OTP_DEV='';
-function devLink(){return '/__dev/last-otp?email='+encodeURIComponent(OTP_EMAIL||'');}
-function showDevRoute(){
-  var r=$('devRoute'); if(!r)return;
-  r.innerHTML='رابط الرمز للتشخيص: <a href="'+devLink()+'" target="_blank" rel="noopener" style="color:#f0b90b">'+devLink()+'</a>';
-}
-function showDevCode(code){
-  OTP_DEV=String(code||'');
-  var box=$('devCard'),v=$('devCodeVal');
-  if(!box||!v)return;
-  var cm=$('dcCopyMsg'); if(cm) cm.style.display='none';
-  if(!OTP_DEV){box.classList.add('hide');return;}
-  v.textContent=OTP_DEV;
-  box.classList.remove('hide');
-  var inp=$('otpCode');
-  if(inp){inp.value='';}  // لا نعبّئه تلقائياً — أنت من يضغط «دخول بالرمز»
-}
-function hideDevCard(){var b=$('devCard');if(b)b.classList.add('hide');}
-function copyDevCode(){
-  if(!OTP_DEV)return;
-  var done=function(){var m=$('dcCopyMsg');if(m){m.style.display='block';setTimeout(function(){m.style.display='none';},1600);}};
-  try{
-    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(OTP_DEV).then(done,done);return;}
-  }catch(e){}
-  try{var ta=document.createElement('textarea');ta.value=OTP_DEV;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);done();}catch(e){}
-}
-function useDevCode(){
-  if(!OTP_DEV)return;
-  var inp=$('otpCode');if(inp){inp.value=OTP_DEV;}
-  doVerify();
-}
-window.copyDevCode=copyDevCode;window.hideDevCard=hideDevCard;
-window.showDevCode=showDevCode;window.useDevCode=useDevCode;
-function otpBack(){
-  OTP_EMAIL='';showDevCode('');hideDevCard();var _r=$('devRoute');if(_r)_r.innerHTML='';
-  var bb=$('backBtn');if(bb&&$('step2').classList.contains('on'))bb.classList.remove('hide');
-  $('otpBox').style.display='none';
-  $('credBox').style.display='block';
-  $('otpCode').value='';
-  clearMsgSoft();
-}
-function clearMsgSoft(){const m=$('msg');m.textContent='';m.className='msg';}
+window.doVerify=doVerify;window.doResend=doResend;window.otpBack=otpBack;
+window.fillOtpCode=fillOtpCode;window.copyOtpCode=copyOtpCode;
+
+function clearMsgSoft(){['msg','msg2'].forEach(function(k){var m=document.getElementById(k);if(m){m.textContent='';m.className='msg';}});}
 function finishLogin(d){
   const sess = {
       id: d.user.id,
@@ -483,13 +691,11 @@ function finishLogin(d){
 
     location.replace(getNext());
 }
-var OTP_EMAIL='';
 $('pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
 $('email').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();checkEmail();}});
 $('email').addEventListener('input',function(){setFieldErr('fldEmail','emailErr','');clearMsgSoft();syncClear();});
 (function(){syncClear();})();
 $('email').setAttribute('placeholder','name@email.com');
-$('otpCode').addEventListener('keydown',e=>{if(e.key==='Enter')doVerify();});
 
 /* ===== الدخول السريع بالبصمة/الوجه (WebAuthn) =====
    إن وجد رمز بيومتري محفوظ على هذا الجهاز نعرض زر الدخول السريع.

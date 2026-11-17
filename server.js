@@ -6271,7 +6271,6 @@ const PUBLIC_PAGES = new Set([
   'guide.html', 'quick-start.html', 'markets.html', 'square-guide.html',
   'square-stats.html', 'reset-password.html', 'verify.html', 'terms.html',
   'privacy.html', '404.html', 'offline.html', 'trast.html', 'favicon.ico', 'robots.txt',
-  'dev-unlock.html', // صفحة تطوير مؤقتة — أزلها بعد التطوير
 ]);
 // تنبيه: أي صفحة جديدة تُضاف لاحقاً تُعتبر محمية تلقائياً إلا إذا أُدرجت هنا.
 // الصفحات المحمية الحالية: wallet, trading, futures, admin, settings, profile,
