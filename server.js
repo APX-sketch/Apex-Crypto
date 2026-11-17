@@ -4188,7 +4188,7 @@ app.post('/api/admin/users/:id/notify', requireAdmin, async (req, res) => {
   res.json({ ok: true, notification: n });
 });
 
-// ---- Admin: credit an account (records a deposit + notifies the user) ----
+// عدّل مسار /api/admin/users/:id/credit في server.js ليصبح async وينتظر الحفظ:
 app.post('/api/admin/users/:id/credit', requireAdmin, async (req, res) => {
   const { amount, currency, note } = req.body || {};
   const cur = String(currency || 'USDT').toUpperCase();
@@ -4197,10 +4197,22 @@ app.post('/api/admin/users/:id/credit', requireAdmin, async (req, res) => {
   if (!(amt > 0) || !isFinite(amt)) return res.status(400).json({ error: 'bad_amount' });
   const u = await adminResolveUser(req.params.id);
   if (!u) return res.status(404).json({ error: 'not_found' });
+
   const dep = store.addDeposit(u.id, {
     amount: amt, currency: cur, kind: 'admin', from: 'ADMIN', fromName: 'الإدارة',
     note: String(note || 'شحن رصيد من الإدارة').slice(0, 200),
   });
+
+  // 1. انتظر تحديث جدول wallets فوراً بدون تأخير 400ms
+  const updatedUser = store.findUserById(u.id);
+  if (updatedUser) {
+    await walletsMirrorUser(updatedUser.uid || u.id, updatedUser.balances || {});
+  }
+
+  // 2. انتظر حفظ لقطة apex-data.json في kv_store قبل الرد
+  await snapshotDataToDb(true);
+  await updateSafeguard();
+
   store.addNotification(u.id, {
     title: 'شحن رصيد',
     kind: 'money',
@@ -4210,7 +4222,6 @@ app.post('/api/admin/users/:id/credit', requireAdmin, async (req, res) => {
     type: 'admin_credit', amount: amt, currency: cur,
     counterparty: 'الإدارة', note: String(note || 'شحن رصيد من الإدارة').slice(0, 200),
   });
-  // تنبيه بريدي فوري بالإيداع
   try { alertTransfer(u.id, { to: u.email, kind: 'deposit', amount: amt, currency: cur, counterparty: 'الإدارة' }); } catch (e) {}
   store.logAdmin({
     admin: 'admin', action: 'credit', targetId: u.id, targetEmail: u.email, targetName: u.name,
