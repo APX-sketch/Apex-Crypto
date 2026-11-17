@@ -276,31 +276,34 @@ async function ensureWalletsUnique() {
   }
 }
 
-// جدول wallets هو مرآة للدفتر الحيّ. الكتابة هنا "قيمة مطلقة" لكل عملة،
-// فأي تغيّر بمقدار 1000$ يحدّث الصف نفسه — لا يضيف صفاً.
-async function walletsMirrorUser(userId, balances) {
-  if (PERSIST_RO) return;
-  const uid = Number(userId);
-  if (!Number.isFinite(uid)) return;
-  await ensureWalletsUnique();
-  const entries = Object.entries(balances || {})
-    .map(function (kv) { return [String(kv[0]).toUpperCase().slice(0, 12), Number(kv[1])]; })
-    .filter(function (e) { return WALLET_CUR_RE.test(e[0]) && isFinite(e[1]); });
-  for (const [cur, amt] of entries) {
-    const val = amt > 0 ? +amt.toFixed(8) : 0;
-    await pool.query(
-      'INSERT INTO wallets (user_id, currency, balance) VALUES (?, ?, ?) ' +
-      'ON DUPLICATE KEY UPDATE balance = ?, updated_at = NOW()',
-      [uid, cur, val, val]);
-  }
-  const keep = entries.map(function (e) { return e[0]; });
-  if (keep.length) {
-    await pool.query(
-      'UPDATE wallets SET balance = 0, updated_at = NOW() WHERE user_id = ? AND currency NOT IN (?)',
-      [uid, keep]);
-  } else {
-    await pool.query('UPDATE wallets SET balance = 0, updated_at = NOW() WHERE user_id = ?', [uid]);
-  }
+// دالة مزامنة المحافظ الآمنة تماماً - بدون أي تصفير للأرصدة
+async function walletsMirrorUser(uid, balances) {
+    if (PERSIST_RO) return;
+    const userId = Number(uid);
+    if (!Number.isFinite(userId)) return;
+    if (!userId || userId === 'undefined') return;
+    
+    try {
+        // تجهيز العمليات والأرصدة القادمة
+        const entries = Object.entries(balances || {})
+            .map(function (kv) { return [String(kv[0]).toUpperCase().slice(0, 12), Number(kv[1]) || 0]; })
+            .filter(function (e) { return WALLET_CUR_RE.test(e[0]) && Number.isFinite(e[1]); });
+
+        for (const [cur, ant] of entries) {
+            const val = ant > 0 ? ant.toFixed(8) : '0';
+            
+            // إدراج أو تحديث الرصيد الحالي للعملة فقط دون المساس بالعملات الأخرى أو التصفير
+            await pool.query(
+                'INSERT INTO wallets (user_id, currency, balance, updated_at) VALUES (?, ?, ?, NOW()) ' +
+                'ON DUPLICATE KEY UPDATE balance = VALUES(balance), updated_at = NOW()',
+                [uid, cur, val]
+            );
+        }
+        
+        console.log(`Wallet mirrored successfully for user ${uid}`);
+    } catch (err) {
+        console.error('Error in walletsMirrorUser:', err);
+    }
 }
 
 // ---- تجميع الكتابات: تغييرات كثيرة خلال 400ms ← كتابة واحدة ----
@@ -2790,7 +2793,49 @@ app.get('/api/auth/me', requireUser, async (req, res) => {
 app.get('/api/user/prefs', requireUser, (req, res) => {
   res.json({ ok: true, prefs: getPrefs(req.user.id) });
 });
+// مسار جلب بيانات المستخدم مع أرصدته الحقيقية مباشرة من قاعدة بيانات TiDB
+app.get('/api/user/me', requireUser, async (req, res) => {
+  try {
+    const userId = req.user.id; // أو حسب مسمى متغير الـ ID عندك في الجلسة Session
 
+    // 1. جلب بيانات المستخدم الأساسية من قاعدة البيانات
+    const [userRows] = await db.promise().query(
+      'SELECT id, email, name, role FROM users WHERE id = ?',
+      [userId]
+    );
+
+    if (!userRows || userRows.length === 0) {
+      return res.status(404).json({ error: 'user_not_found' });
+    }
+
+    const user = userRows[0];
+
+    // 2. جلب الأرصدة الحقيقية مباشرة من جدول wallets في TiDB
+    const [walletRows] = await db.promise().query(
+      'SELECT currency, balance, locked_balance FROM wallets WHERE user_id = ?',
+      [userId]
+    );
+
+    // تحويل الأرصدة إلى كائن (Object) يسهل على الواجهة قراءته مثل: { USDT: 1000, BTC: 0.5 }
+    const balances = {};
+    const lockedBalances = {};
+    
+    walletRows.forEach(row => {
+      balances[row.currency] = Number(row.balance) || 0;
+      lockedBalances[row.currency] = Number(row.locked_balance) || 0;
+    });
+
+    user.balances = balances;
+    user.lockedBalances = lockedBalances;
+
+    // إرجاع البيانات كاملة ونظيفة للواجهة (Frontend)
+    res.json({ ok: true, user });
+
+  } catch (err) {
+    console.error('Error fetching user and wallets from TiDB:', err);
+    res.status(500).json({ error: 'database_error' });
+  }
+});
 // تحديث تفضيلات التنبيهات (حالياً: emailAlerts)
 app.post('/api/user/prefs', requireUser, (req, res) => {
   const body = req.body || {};
