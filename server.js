@@ -22,6 +22,7 @@ import { Store, publicUser } from './lib/store.js';
 import { ApxStore } from './lib/apxStore.js';
 import { initMailer, sendMail, sendTransferAlert, sendOtp, sendEmailChangeOtp, isMailerConfigured, getMailLog, getMailStats } from './lib/mailer.js';
 import { OtpStore } from './lib/otp.js';
+import { LoginGuard, OTP_TTL_MS as LOGIN_OTP_TTL_MS, LOCK_HOURS } from './lib/loginGuard.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -2614,7 +2615,11 @@ app.post('/api/auth/login', strictLimiter, async (req, res) => {
       }
 
       const emailNorm = String(user.email || '').trim().toLowerCase();
+      // مقفول بعد 3 رموز فاشلة؟ → 24 ساعة انتظار
+      const _lk = loginGuard.lockedFor(emailNorm);
+      if (_lk > 0) return res.status(429).json({ error: 'locked_24h', retryAfterSec: _lk });
       const { code, expiresInSec } = loginOtps.issue(emailNorm, { uid: user.id });
+      loginGuard.beginCode(emailNorm);
       try { await sendOtp({ to: user.email, code, purpose: 'login' }); } catch (e) {}
       const devMode = !isMailerConfigured() || process.env.OTP_DEBUG === 'true';
       return res.json({ ok: true, otpRequired: true, email: user.email || '',
@@ -2639,8 +2644,29 @@ app.post('/api/auth/login/verify-otp', strictLimiter, async (req, res) => {
     const email = String((req.body || {}).email || '').trim().toLowerCase();
     const code = String((req.body || {}).code || '').trim();
     if (!email) return res.status(400).json({ error: 'invalid_credentials' });
+    // مقفول؟ ما منقبل ولا محاولة
+    const _lk = loginGuard.lockedFor(email);
+    if (_lk > 0) return res.status(429).json({ error: 'locked_24h', retryAfterSec: _lk });
+
     const vr = loginOtps.verify(email, code);
-    if (!vr.ok) return res.status(400).json({ error: vr.error });
+    if (!vr.ok) {
+      // انتهت صلاحية الرمز (59 ثانية) → نطلب رمزاً جديداً بدون احتساب خطأ
+      if (vr.error === 'otp_expired' || vr.error === 'otp_required') {
+        return res.status(400).json({ error: 'otp_expired', triesLeft: 3, needNewCode: true });
+      }
+      // رمز خاطئ → نحسبها على الحساب
+      const g = loginGuard.fail(email);
+      if (g.locked) {
+        return res.status(429).json({ error: 'locked_24h', retryAfterSec: g.retryAfterSec, triesLeft: 0 });
+      }
+      return res.status(400).json({
+        error: g.needNewCode ? 'otp_locked' : 'otp_invalid',
+        triesLeft: g.triesLeft,
+        codesLeft: g.codesLeft,
+        needNewCode: !!g.needNewCode
+      });
+    }
+    loginGuard.success(email);
 
     const user = await dbGetUserByEmail(email);
     if (!user) return res.status(401).json({ error: 'invalid_credentials' });
@@ -2690,7 +2716,10 @@ app.post('/api/auth/login/resend-otp', strictLimiter, async (req, res) => {
     if (!user || user.status === 'banned') {
       return res.json({ ok: true, sent: true });
     }
+    const _lk = loginGuard.lockedFor(email);
+    if (_lk > 0) return res.status(429).json({ error: 'locked_24h', retryAfterSec: _lk });
     const { code, expiresInSec } = loginOtps.issue(email, { uid: user.id });
+    loginGuard.beginCode(email);
     try { await sendOtp({ to: user.email, code, purpose: 'login' }); } catch (e) {}
     res.json({ ok: true, sent: true, expiresInSec, devCode: devMode ? code : undefined });
   } catch (err) {
@@ -6451,7 +6480,10 @@ app.post('/api/auth/register', strictLimiter, async (req, res) => {
 // ---- OTP تأكيد السحب + تسجيل الدخول ----
 // مخزنان مستقلان (بالذاكرة): رمز 6 خانات، صالح 5 دقائق، 5 محاولات.
 const withdrawOtps = new OtpStore({ ttlMs: 5 * 60 * 1000, maxTries: 5 });
-const loginOtps = new OtpStore({ ttlMs: 5 * 60 * 1000, maxTries: 5 });
+// رمز الدخول: 59 ثانية فقط، و3 محاولات للرمز الواحد (الحماية الحقيقية في loginGuard)
+const loginOtps = new OtpStore({ ttlMs: LOGIN_OTP_TTL_MS, maxTries: 3 });
+// حماية الحساب: 3 أخطاء → رمز جديد، و3 رموز فاشلة → قفل 24 ساعة
+const loginGuard = new LoginGuard();
 // رمز تأكيد تغيير البريد (يُرسَل للبريد الجديد) — مُفتاح بمعرّف المستخدم
 const emailChangeOtps = new OtpStore({ ttlMs: 5 * 60 * 1000, maxTries: 5 });
 // رمز إعادة تعيين كلمة المرور (نسيت كلمة المرور) — مُفتاح بالبريد الإلكتروني
