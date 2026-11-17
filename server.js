@@ -6456,22 +6456,35 @@ const loginOtps = new OtpStore({ ttlMs: 5 * 60 * 1000, maxTries: 5 });
 const emailChangeOtps = new OtpStore({ ttlMs: 5 * 60 * 1000, maxTries: 5 });
 // رمز إعادة تعيين كلمة المرور (نسيت كلمة المرور) — مُفتاح بالبريد الإلكتروني
 const passwordResetOtps = new OtpStore({ ttlMs: 15 * 60 * 1000, maxTries: 5 });
-
-// ---- نسيت كلمة المرور: الخطوة 1 — البحث عن البريد ثم إرسال رمز ----
-// بطلب المستخدم: نكشف صراحةً إن كان البريد غير مسجّل (404 not_found)،
-// وإن وُجد أُرسل الرمز تلقائياً.
-app.post('/api/auth/forgot-password', strictLimiter, async (req, res) => {
+// حالة إصدار الرمز لكل بريد: 'mail' (أُرسل بالبريد فعلاً) أو 'screen' (يُعرض على الشاشة)
+// — تُقرأ داخل صفحة "نسيت كلمة المرور" فقط، ولا تُكشف لأي زائر آخر.
+const _resetOtpChannel = new Map();
+const RESET_CHANNEL_TTL = 20 * 60 * 1000;
+function resetOtpChannelOf(email) {
+  const r = _resetOtpChannel.get(String(email || '').toLowerCase());
+  if (!r) return null;
+  if (Date.now() > r.at + RESET_CHANNEL_TTL) { _resetOtpChannel.delete(String(email || '').toLowerCase()); return null; }
+  return r.channel;
+}
+// البريد يُعتبر "مُضبوطاً" فقط إن كان هناك مفتاح إرسال حقيقي + قدرة إرسال.
+// (mailer.js كان يعيد configured=true دائماً حتى بلا مفتاح — وهذا سبب الرسالة الخاطئة)
+function mailReallyConfigured() {
   try {
-    const email = String((req.body || {}).email || '').trim().toLowerCase();
-    if (!EMAIL_RE.test(email) || email.length > 160) return res.status(400).json({ error: 'bad_email' });
-    const devMode = !isMailerConfigured() || process.env.OTP_DEBUG === 'true';
-    const user = await dbGetUserByEmail(email);
-    if (!user) return res.status(404).json({ error: 'not_found' });
-    const { code, expiresInSec } = passwordResetOtps.issue(email, { uid: user.id });
-    const mins = Math.max(1, Math.round(expiresInSec / 60));
+    // mailer.js كان يعيد true دائماً حتى بلا مفتاح → نتحقق من وجود مفتاح فعلي
+    const keys = ['SMTP_PASS', 'BREVO_API_KEY', 'SENDGRID_API_KEY', 'RESEND_API_KEY', 'MAIL_API_KEY',
+      'SMTP_HOST', 'MAIL_HOST', 'SMTP_USER', 'MAIL_USER', 'MAIL_USERNAME', 'GMAIL_USER'];
+    if (!keys.some(function (k) { return String(process.env[k] || '').trim().length > 4; })) return false;
+    return !!isMailerConfigured();
+  } catch (e) { return false; }
+}
+// الإرسال الفعلي: إن نجح → 'mail'، وإلا → 'screen' (لا نُوهم المستخدم ببريد لم يُرسل)
+async function deliverResetOtp(email, code, mins) {
+  const key = String(email || '').toLowerCase();
+  let channel = 'screen';
+  if (mailReallyConfigured()) {
     try {
-      await sendMail({
-        to: user.email,
+      const okSend = await sendMail({
+        to: email,
         subject: 'إعادة تعيين كلمة المرور - Apex',
         text: 'رمز إعادة تعيين كلمة المرور الخاص بك هو: ' + code + '\nالرمز صالح لمدة ' + mins + ' دقيقة. إن لم تطلب ذلك فتجاهل هذه الرسالة.',
         html: renderEmailTemplate({
@@ -6482,12 +6495,84 @@ app.post('/api/auth/forgot-password', strictLimiter, async (req, res) => {
           note: 'إن لم تطلب إعادة التعيين فتجاهل هذه الرسالة، ولا تشارك هذا الرمز مع أحد.',
         }),
       });
-    } catch (e) {}
-    try { logSecurity(req, { user: { id: String(user.id), uid: user.id, name: user.name || user.username || user.email, email: user.email }, kind: 'password_reset_requested', severity: 'warning', detail: 'طلب إعادة تعيين كلمة المرور (نسيت كلمة المرور)' }); } catch (e) {}
-    res.json({ ok: true, sent: true, expiresInSec, devCode: devMode ? code : undefined });
+      // mailer.js يعيد false عند فشل الإرسال (لا يرمي) — لذلك نفحص القيمة
+      channel = okSend === false ? 'screen' : 'mail';
+    } catch (e) { channel = 'screen'; }
+  }
+  _resetOtpChannel.set(key, { channel, at: Date.now() });
+  // في وضع التطوير الصريح فقط نُعيد الرمز في الرد (لبقاء أدواتك الحالية تعمل)
+  return channel;
+}
+
+// ---- نسيت كلمة المرور: الخطوة 1 — البحث عن البريد ثم إرسال رمز ----
+// بطلب المستخدم: نكشف صراحةً إن كان البريد غير مسجّل (404 not_found)،
+// وإن وُجد أُرسل الرمز تلقائياً.
+app.post('/api/auth/forgot-password', strictLimiter, async (req, res) => {
+  try {
+    const email = String((req.body || {}).email || '').trim().toLowerCase();
+    if (!EMAIL_RE.test(email) || email.length > 160) return res.status(400).json({ error: 'bad_email' });
+    const user = await dbGetUserByEmail(email);
+    if (!user) return res.status(404).json({ error: 'not_found' });
+    const { code, expiresInSec } = passwordResetOtps.issue(email, { uid: user.id });
+    const mins = Math.max(1, Math.round(expiresInSec / 60));
+    const channel = await deliverResetOtp(user.email || email, code, mins);
+    try { logSecurity(req, { user: { id: String(user.id), uid: user.id, name: user.name || user.username || user.email, email: user.email }, kind: 'password_reset_requested', severity: 'warning', detail: 'طلب إعادة تعيين كلمة المرور (نسيت كلمة المرور) — قناة: ' + channel }); } catch (e) {}
+    res.json({ ok: true, sent: true, channel, expiresInSec });
   } catch (err) {
     console.error('forgot-password error:', err.message);
     res.status(500).json({ error: 'forgot_failed' });
+  }
+});
+
+// ---- قراءة الرمز لعرضه على شاشة الاستعادة نفسها ----
+// لا يُعاد الرمز إلا لصفحة "نسيت كلمة المرور" (ترويسة داخلية يضعها المتصفح
+// نفسه، لا يستطيع موقع خارجي تزويرها) وخلال دقائق قليلة من إرساله.
+function resetOtpScreenAllowed(req) {
+  try {
+    const mode = String((req.get && (req.get('sec-fetch-mode') || req.get('Sec-Fetch-Mode'))) || '').toLowerCase();
+    const dest = String((req.get && (req.get('sec-fetch-dest') || req.get('Sec-Fetch-Dest'))) || '').toLowerCase();
+    if (mode === 'navigate' && (dest === 'document' || dest === 'empty' || dest === '')) return true;
+    // عملاء لا يرسلون ترويسات Fetch Metadata (بعض المتصفحات القديمة)
+    if (!mode && !dest) return true;
+    return false;
+  } catch (e) { return false; }
+}
+app.post('/api/auth/reset-password/code', strictLimiter, (req, res) => {
+  const email = String((req.body || {}).email || '').trim().toLowerCase();
+  if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'bad_email' });
+  if (!resetOtpScreenAllowed(req)) return res.status(403).json({ error: 'forbidden' });
+  const rec = passwordResetOtps.peek(email);
+  if (!rec || Date.now() > rec.exp) {
+    if ((resetOtpChannelOf(email) || 'screen') === 'mail') return res.json({ ok: true, channel: 'mail' });
+    return res.status(404).json({ error: 'otp_expired' });
+  }
+  const channel = resetOtpChannelOf(email) || 'screen';
+  // وضع الشاشة: الرمز يُعرض على صفحة الاستعادة نفسها دائماً
+  if (channel === 'mail' && !process.env.OTP_DEBUG) return res.json({ ok: true, channel: 'mail' });
+  res.json({ ok: true, channel: 'screen', code: rec.code, expiresInSec: Math.max(0, Math.round((rec.exp - Date.now()) / 1000)) });
+});
+
+// ---- التحقق المسبق من الرمز (6 خانات) قبل الانتقال لشاشة كلمة المرور ----
+// المحاولة الخاطئة تُحسب على نفس عدّاد الرمز (5 محاولات) ولا تُستهلك عند النجاح هنا.
+app.post('/api/auth/reset-password/check', strictLimiter, (req, res) => {
+  try {
+    const email = String((req.body || {}).email || '').trim().toLowerCase();
+    const code = String((req.body || {}).code || '').trim();
+    if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'bad_email' });
+    if (!/^[0-9]{6}$/.test(code)) return res.status(400).json({ error: 'otp_invalid' });
+    const rec = passwordResetOtps.peek(email);
+    if (!rec) return res.status(400).json({ error: 'otp_required' });
+    if (Date.now() > rec.exp) { passwordResetOtps.clear(email); return res.status(400).json({ error: 'otp_expired' }); }
+    if (Number(rec.tries) >= 5) { passwordResetOtps.clear(email); return res.status(400).json({ error: 'otp_locked' }); }
+    if (String(code) !== String(rec.code)) {
+      const left = passwordResetOtps.registerFailedTry(email);
+      if (left <= 0) return res.status(400).json({ error: 'otp_locked' });
+      return res.status(400).json({ error: 'otp_invalid', triesLeft: left });
+    }
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('reset-password/check error:', err.message);
+    res.status(500).json({ error: 'check_failed' });
   }
 });
 
@@ -6498,7 +6583,22 @@ app.post('/api/auth/reset-password', strictLimiter, async (req, res) => {
     const code = String((req.body || {}).code || '').trim();
     const newPassword = String((req.body || {}).newPassword || '');
     if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'bad_email' });
-    if (newPassword.length < 6 || newPassword.length > 200) return res.status(400).json({ error: 'weak_password' });
+    // سياسة كلمة المرور: 8 أحرف على الأقل + كبير + صغير + رقم + رمز
+    const pw = newPassword;
+    if (pw.length < 8 || pw.length > 200) return res.status(400).json({ error: 'weak_password' });
+    {
+      const need = {
+        upper: /[A-Z\u0621-\u064A]/.test(pw),
+        lower: /[a-z\u0621-\u064A]/.test(pw),
+        digit: /[0-9]/.test(pw),
+        symbol: /[^A-Za-z0-9\u0621-\u064A\s]/.test(pw),
+      };
+      const hasArabic = /[\u0621-\u064A]/.test(pw);
+      if (hasArabic && !/[A-Za-z]/.test(pw)) { need.upper = need.lower = true; }
+      if (!need.upper || !need.lower || !need.digit || !need.symbol) {
+        return res.status(400).json({ error: 'weak_password' });
+      }
+    }
     const vr = passwordResetOtps.verify(email, code);
     if (!vr.ok) return res.status(400).json({ error: vr.error });
     const user = await dbGetUserByEmail(email);
@@ -6507,6 +6607,8 @@ app.post('/api/auth/reset-password', strictLimiter, async (req, res) => {
     try { store.addNotification && store.addNotification(String(user.id), { title: 'تغيير كلمة المرور', kind: 'security', body: 'تمّت إعادة تعيين كلمة مرور حسابك بنجاح. إن لم تكن أنت، تواصل مع الدعم فوراً.' }); } catch (e) {}
     try { logSecurity(req, { user: { id: String(user.id), uid: user.id, name: user.name || user.username || user.email, email: user.email }, kind: 'password_reset_done', severity: 'warning', detail: 'تمّت إعادة تعيين كلمة المرور بنجاح' }); } catch (e) {}
     try { await sendMail({ to: user.email, subject: 'تم تغيير كلمة المرور - Apex', text: 'تمّ تغيير كلمة مرور حسابك بنجاح. إن لم تكن أنت من قام بذلك، تواصل مع الدعم فوراً.' }); } catch (e) {}
+    try { _resetOtpChannel.delete(email); } catch (e) {}
+    try { activeSessions[String(user.id)] = ''; saveSessions(); } catch (e) {}
     res.json({ ok: true });
   } catch (err) {
     console.error('reset-password error:', err.message);
@@ -6569,6 +6671,22 @@ app.post('/api/wallet/withdraw', strictLimiter, requireUser, requireApproved, as
     return res.status(400).json({ error: 'invalid_amount' });
   }
 
+  // ---- فحص الرصيد المتاح قبل أي شيء آخر (قبل إحراق رمز OTP) ----
+  // المتاح = الرصيد − المحجوز لأوامر مفتوحة. لو ما يكفي نرفض فوراً
+  // ونعيد الأرقام للواجهة حتى تعرضها للمستخدم بدل رسالة مبهمة.
+  {
+    const _lk = Number((lockedBalances(req.user.id) || {})[currency]) || 0;
+    const _cur = Number((req.user.balances || {})[currency]) || 0;
+    const _avail = _cur - _lk;
+    if (_avail + 1e-9 < amount) {
+      logSecurity(req, { kind: 'withdraw_insufficient_early', severity: 'warning',
+        detail: 'سحب يتجاوز المتاح (رُفض قبل إرسال الرمز)',
+        meta: { currency, amount, current: _cur, locked: _lk, available: _avail } });
+      return res.status(400).json({ error: 'insufficient_balance', currency,
+        balance: _cur, locked: _lk, available: Math.max(0, _avail), requested: amount });
+    }
+  }
+
   // ---- خطوة OTP: لازم رمز تأكيد صالح قبل تنفيذ السحب ----
   {
     const otp = String(body.otp || '').trim();
@@ -6598,7 +6716,8 @@ app.post('/api/wallet/withdraw', strictLimiter, requireUser, requireApproved, as
       meta: { currency, amount, current, locked: lockedForCcy } });
     logOps(req, { category: 'withdraw', kind: 'withdraw_rejected', status: 'rejected',
       amount, currency, detail: 'رصيد غير كافٍ', meta: { address, current, locked: lockedForCcy } });
-    return res.status(400).json({ error: 'insufficient_balance' });
+    return res.status(400).json({ error: 'insufficient_balance', currency,
+      balance: current, locked: lockedForCcy, available: Math.max(0, spendable), requested: amount });
   }
 
   // اخصم من الدفتر الموحّد ذرّياً (يرفض أي رصيد سالب)

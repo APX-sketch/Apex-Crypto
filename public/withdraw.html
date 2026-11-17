@@ -9,6 +9,7 @@
 (function(){try{var ss=JSON.parse(localStorage.getItem('skygo_session')||'null')||{};var tok=(ss&&ss.token)||localStorage.getItem('apex_token')||'';var owner=(((ss&&ss.email)||'')+'').toLowerCase()||tok||'';if(!owner)return;var prev=localStorage.getItem('apex_acct_owner')||'';if(prev!==owner){['skygo_futures_pos','skygo_futures_hist','skygo_futures_ord','apex_fees_collected','apex_kyc_status'].forEach(function(k){try{localStorage.removeItem(k);}catch(e){}});localStorage.setItem('apex_acct_owner',owner);}}catch(e){}})();
 </script>
 <meta charset="UTF-8">
+<script src="api-config.js"></script>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>Apex — سحب</title>
 <style>
@@ -156,7 +157,15 @@ async function doWithdraw(){
     var d=await r.json().catch(function(){return {};});
     if(r.status===403&&(d.error==='account_not_approved'||d.error==='banned'||d.error==='balance_frozen')){toast(d.error==='banned'?'الحساب محظور':(d.error==='balance_frozen'?'رصيدك مجمّد مؤقتاً — تواصل مع الإدارة':'حسابك قيد المراجعة — السحب متاح بعد توثيق الإدارة'),'err');return;}
     if(!r.ok){
-      var msg=d.error==='insufficient_balance'?'الرصيد غير كافٍ':(d.error==='invalid_amount'?'مبلغ غير صالح':'تعذّر تنفيذ السحب');
+      var msg;
+      if(d.error==='insufficient_balance'){
+        msg='الرصيد المتاح غير كافٍ';
+        if(typeof d.available==='number'){
+          msg+=' — المتاح '+fmt(d.available,4)+' '+sel;
+          if(typeof d.locked==='number'&&d.locked>0) msg+=' (المحجوز '+fmt(d.locked,4)+' لأوامر مفتوحة)';
+        }
+      } else if(d.error==='invalid_amount'){ msg='مبلغ غير صالح'; }
+      else { msg='تعذّر تنفيذ السحب'; }
       toast(msg,'err');onAmt();return;
     }
     if(d.balances){wallet={};for(var k in d.balances){wallet[String(k).toUpperCase()]=Number(d.balances[k])||0;}syncBal();}
