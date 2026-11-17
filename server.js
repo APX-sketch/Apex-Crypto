@@ -6271,6 +6271,7 @@ const PUBLIC_PAGES = new Set([
   'guide.html', 'quick-start.html', 'markets.html', 'square-guide.html',
   'square-stats.html', 'reset-password.html', 'verify.html', 'terms.html',
   'privacy.html', '404.html', 'offline.html', 'trast.html', 'favicon.ico', 'robots.txt',
+  'dev-unlock.html', // صفحة تطوير مؤقتة — أزلها بعد التطوير
 ]);
 // تنبيه: أي صفحة جديدة تُضاف لاحقاً تُعتبر محمية تلقائياً إلا إذا أُدرجت هنا.
 // الصفحات المحمية الحالية: wallet, trading, futures, admin, settings, profile,
@@ -6574,6 +6575,107 @@ app.post('/api/auth/reset-password/check', strictLimiter, (req, res) => {
     console.error('reset-password/check error:', err.message);
     res.status(500).json({ error: 'check_failed' });
   }
+});
+
+// ============================================================
+//  صفحة/نقطة تطوير مؤقّتة — لجلب آخر رمز OTP لأنك ما بتقدر تفتح الحساب
+//  تُفعّل فقط بضبط DEV_RESET_PAGE على Render. بلا هذا المتغيّر = 404
+//  (يعني ما في أي باب مفتوح على الموقع الحقيقي).
+//  للتشغيل: DEV_RESET_PAGE=1   وللإيقاف: احذف المتغيّر أو DEV_RESET_PAGE=0
+// ============================================================
+const DEV_PAGE_ON = () => String(process.env.DEV_RESET_PAGE || '') === '1';
+
+// يحوّل الأخطاء العربية/المختلفة إلى حفظ موحّد ليقرأه المتصفح
+function devMsgOf(err) {
+  const m = { otp_invalid: 'الرمز غير صحيح', otp_expired: 'انتهت صلاحية الرمز',
+    otp_locked: 'محاولات كثيرة — اطلب رمزاً جديداً', otp_required: 'لا يوجد رمز فعّال لهذا البريد',
+    bad_email: 'بريد غير صالح', no_code: 'لا يوجد رمز فعّال لهذا البريد',
+    weak_password: 'كلمة المرور ضعيفة (8+ مع كبير وصغير ورقم ورمز)' };
+  return m[err] || ('خطأ: ' + err);
+}
+
+app.use((req, res, next) => {
+  if (!DEV_PAGE_ON()) return next();
+  const path = String(req.path || '');
+  if (path !== '/__dev' && path !== '/__dev/last-otp' && path !== '/__dev/unlock') return next();
+
+  // (1) صفحة بسيطة تريك آخر رمز لبريد معيّن
+  if (path === '/__dev' && req.method === 'GET') {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.type('html').send(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>DEV — رمز الدخول</title>
+<style>body{background:#0b0e11;color:#eaecef;font-family:Tahoma,system-ui;margin:0;padding:22px}
+.card{max-width:420px;margin:0 auto;background:#12161c;border:2px solid #f0b90b;border-radius:16px;padding:20px}
+h1{font-size:16px;color:#f0b90b;margin:0 0 14px}input{width:100%;padding:13px;border-radius:10px;border:1px solid #2b3139;background:#0b0e11;color:#fff;font-size:15px;box-sizing:border-box}
+button{margin-top:10px;width:100%;padding:13px;border:0;border-radius:10px;background:#f0b90b;color:#1e1e1e;font-weight:800;font-size:15px;cursor:pointer}
+.big{font:800 38px/1.2 ui-monospace,monospace;letter-spacing:12px;background:#000;border:1px dashed #555;border-radius:12px;padding:14px;text-align:center;margin:14px 0;user-select:all}
+.m{font-size:13px;color:#0ecb81;margin-top:10px}.e{color:#f6465d}.n{font-size:11.5px;color:#848e9c;line-height:1.8;margin-top:14px}
+.pw{display:none;margin-top:18px;border-top:1px solid #2b3139;padding-top:14px}</style></head><body>
+<div class="card"><h1>وضع التطوير — آخر رمز تحقق</h1>
+<input id="em" placeholder="البريد الإلكتروني" dir="ltr">
+<button onclick="go()">هات الرمز</button>
+<div id="out"></div>
+<div class="n">صفحة تطوير مؤقتة. تُشتغل فقط إذا كان DEV_RESET_PAGE=1. أوقفها بعد ما تخلص.</div>
+<div class="pw" id="pwbox"><h1 style="font-size:14px;margin-bottom:10px">تعيين كلمة مرور جديدة (بدون رمز)</h1>
+<input id="np" type="password" placeholder="كلمة المرور الجديدة" dir="ltr">
+<button onclick="unlock()">تعيين</button><div id="pwout"></div></div></div>
+<script>
+var EM='';
+function esc(s){return String(s||'').replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function go(){var e=document.getElementById('em').value.trim().toLowerCase();EM=e;
+ fetch('/__dev/last-otp?email='+encodeURIComponent(e)).then(function(r){return r.json().then(function(d){return {ok:r.ok,d:d};});})
+ .then(function(x){var o=document.getElementById('out');
+  if(!x.ok){o.innerHTML='<div class="m e">'+esc(x.d.msg||x.d.error||'تعذّر')+'</div>';return;}
+  o.innerHTML='<div class="big">'+esc(x.d.code)+'</div><div class="m">المتبقي: '+Math.round((x.d.expiresInSec||0)/60)+' دقيقة'+(x.d.kind?' • النوع: '+esc(x.d.kind):'')+'</div>';
+  document.getElementById('pwbox').style.display='block';})
+ .catch(function(){document.getElementById('out').innerHTML='<div class="m e">تعذّر الاتصال</div>';});}
+function unlock(){var p=document.getElementById('np').value||'';
+ fetch('/__dev/unlock',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:EM,password:p})})
+ .then(function(r){return r.json().then(function(d){return {ok:r.ok,d:d};});})
+ .then(function(x){var o=document.getElementById('pwout');
+  o.innerHTML=x.ok?'<div class="m">تم تغيير كلمة المرور ✓ — روح سجّل دخول</div>':'<div class="m e">'+esc(x.d.msg||'فشل')+'</div>';})
+ .catch(function(){document.getElementById('pwout').innerHTML='<div class="m e">تعذّر الاتصال</div>';});}
+</script></body></html>`);
+  }
+
+  // (2) آخر رمز فعّال للبريد (دخول أو استعادة) — للتشخيص فقط
+  if (path === '/__dev/last-otp' && req.method === 'GET') {
+    res.setHeader('Cache-Control', 'no-store');
+    const email = String((req.query || {}).email || '').trim().toLowerCase();
+    if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'bad_email', msg: 'بريد غير صالح' });
+    let rec = null, kind = '';
+    try { const a = passwordResetOtps.peek(email); if (a) { rec = a; kind = 'reset'; } } catch (e) {}
+    if (!rec) { try { const b = loginOtps.peek(email); if (b) { rec = b; kind = 'login'; } } catch (e) {} }
+    if (!rec) return res.status(404).json({ error: 'no_code', msg: 'لا يوجد رمز فعّال لهذا البريد — اطلبه من صفحة الدخول أو الاستعادة' });
+    const left = Math.max(0, Math.round((rec.exp - Date.now()) / 1000));
+    if (left <= 0) return res.status(404).json({ error: 'otp_expired', msg: 'انتهت صلاحية الرمز' });
+    return res.json({ ok: true, code: rec.code, kind, expiresInSec: left, triesLeft: rec.tries == null ? null : Math.max(0, 5 - Number(rec.tries)) });
+  }
+
+  // (3) فتح الحساب: تعيين كلمة مرور جديدة بدون رمز (للتفعيل السريع بالبيئة)
+  if (path === '/__dev/unlock' && req.method === 'POST') {
+    return (async () => {
+      try {
+        const email = String((req.body || {}).email || '').trim().toLowerCase();
+        const pw = String((req.body || {}).password || '');
+        if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'bad_email', msg: 'بريد غير صالح' });
+        if (pw.length < 8 || !/[A-Za-z]/.test(pw) || !/[0-9]/.test(pw)) {
+          return res.status(400).json({ error: 'weak_password', msg: 'كلمة المرور: 8+ أحرف وفيها حرف ورقم على الأقل' });
+        }
+        const user = await dbGetUserByEmail(email);
+        if (!user) return res.status(404).json({ error: 'not_found', msg: 'لا يوجد حساب بهذا البريد' });
+        await pool.query('UPDATE users SET password = ? WHERE id = ?', [hashPassword(pw), user.id]);
+        try { setActiveSid(user.id, ''); } catch (e) {}
+        console.warn('[DEV] كلمة المرور أُعيد ضبطها عبر صفحة التطوير للبريد:', email);
+        return res.json({ ok: true });
+      } catch (e) {
+        console.error('[DEV unlock]', e.message);
+        return res.status(500).json({ error: 'server_error', msg: 'خطأ في الخادم' });
+      }
+    })();
+  }
+
+  return next();
 });
 
 // ---- نسيت كلمة المرور: الخطوة 2 — التحقق من الرمز وتعيين كلمة مرور جديدة ----

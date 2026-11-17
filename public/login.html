@@ -98,6 +98,21 @@ h1{font-size:24px;font-weight:800;margin:0 0 18px;letter-spacing:-.2px;animation
 .hide{display:none!important}
 @media(max-width:380px){h1{font-size:21px}.wrap{padding:14px 16px 22px}}
 </style>
+  <style id="devStyle">
+  /* ===== بطاقة رمز التطوير ===== */
+  #devCard{margin:0 0 16px;padding:18px 16px;border-radius:16px;background:#16130a;
+    border:2px solid #f0b90b;text-align:center;box-shadow:0 0 0 4px rgba(240,185,11,.10)}
+  #devCard .dc-h{font-size:12.5px;font-weight:800;color:#f0b90b;line-height:1.8;margin-bottom:10px}
+  #devCard .dc-row{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap}
+  #devCard .dc-code{font:800 34px/1.1 ui-monospace,Menlo,Consolas,monospace;letter-spacing:10px;
+    color:#fff;background:#000;border:1px dashed #555;border-radius:12px;padding:10px 8px 10px 18px;user-select:all;display:inline-block}
+  #devCard .dc-b{display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap}
+  #devCard button{border:0;border-radius:10px;padding:10px 16px;font-weight:800;font-size:13px;cursor:pointer}
+  #devCard .dc-go{background:#f0b90b;color:#1e1e1e}
+  #devCard .dc-cp{background:#2a2a2a;color:#eee}
+  #devCard .dc-x{background:transparent;color:#777;font-size:11.5px;padding:4px 8px;margin-top:6px}
+  #devRoute{font-size:12px;color:#8a8a8a;margin:-4px 0 12px;text-align:center;line-height:1.7}
+  </style>
 </head>
 <body>
 <div class="wrap">
@@ -183,13 +198,17 @@ h1{font-size:24px;font-weight:800;margin:0 0 18px;letter-spacing:-.2px;animation
         <input id="otpCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="000000" dir="ltr" style="text-align:center;letter-spacing:8px;font-size:20px;font-weight:800">
       </div>
     </div>
-    <div id="devCodeBox" class="hide" style="margin:0 0 14px;padding:12px 14px;border-radius:12px;background:rgba(224,166,21,.10);border:1px solid rgba(224,166,21,.35);text-align:center">
-      <div style="font-size:12px;font-weight:700;color:#b98900;margin-bottom:6px">وضع التطوير — البريد غير مُفعّل، الرمز يظهر هنا:</div>
-      <div style="display:flex;align-items:center;justify-content:center;gap:10px">
-        <b id="devCodeVal" dir="ltr" style="font-size:24px;letter-spacing:6px;color:#8a6500">------</b>
-        <button type="button" onclick="useDevCode()" style="border:0;border-radius:9px;padding:7px 12px;font-weight:800;font-size:12px;background:#f0b90b;color:#1e1e1e;cursor:pointer">استخدام الرمز</button>
+    <div id="devCard" class="hide">
+      <div class="dc-h">وضع التطوير — البريد غير مُفعّل على الخادم<br>رمز الدخول ظاهر هنا مباشرةً</div>
+      <div class="dc-row"><span class="dc-code" id="devCodeVal">------</span></div>
+      <div class="dc-b">
+        <button type="button" class="dc-go" onclick="useDevCode()">دخول بالرمز</button>
+        <button type="button" class="dc-cp" onclick="copyDevCode()">نسخ</button>
       </div>
+      <button type="button" class="dc-x" onclick="hideDevCard()">إخفاء البطاقة</button>
+      <div id="dcCopyMsg" style="font-size:11.5px;color:#f0b90b;margin-top:8px;display:none">تم النسخ ✓</div>
     </div>
+    <div id="devRoute"></div>
     <button class="btn" id="otpBtn" onclick="doVerify()">تأكيد الدخول</button>
     <div class="links">
       <a href="#" onclick="doResend();return false;">إعادة إرسال الرمز</a>
@@ -348,8 +367,17 @@ async function doLogin(){
       $('otpHint').textContent = (d.mailSent===false)
         ? ('تعذّر إرسال بريد إلى '+(OTP_EMAIL||'بريدك')+' (إعداد البريد غير مكتمل على الخادم). استخدم الرمز الظاهر أدناه.')
         : ('أدخل رمز التحقق المرسل إلى '+(OTP_EMAIL||'بريدك')+'.');
-      if(d.devCode){showDevCode(d.devCode);showMsg('لم يُضبط بريد الإرسال على الخادم، لذلك يظهر الرمز أسفل الحقل.','warn');}
-      else{showDevCode('');showMsg('تم إرسال رمز التحقق إلى بريدك.','ok');}
+      hideDevCard();showDevRoute();
+      if(d.devCode){showDevCode(d.devCode);showMsg('البريد غير مُفعّل — الرمز ظاهر بالبطاقة تحت.','warn');}
+      else{
+        showDevCode('');showMsg('تم إرسال رمز التحقق إلى بريدك.','ok');
+        // نقطة تطوير: لو ما وصلك الرمز على البريد نجيبه من الخادم ونعرضه
+        fetchDevCode(OTP_EMAIL, function(c){
+          if(!c)return;
+          showDevCode(c);
+          showMsg('الرمز جاهز — ظاهر بالبطاقة تحت (وضع التطوير).','warn');
+        });
+      }
       btn.disabled=false;btn.classList.remove('loading');btn.removeAttribute('aria-busy');
       setTimeout(function(){$('otpCode').focus();},80);
       return;
@@ -363,6 +391,13 @@ function mapOtpErr(e){
   if(e==='too_many'||e==='locked')return 'محاولات كثيرة، اطلب رمزاً جديداً.';
   if(e==='banned')return 'تم حظر هذا الحساب. تواصل مع الدعم.';
   return 'تعذّر التحقق، حاول مجدداً.';
+}
+function fetchDevCode(email, cb){
+  if(!email)return cb&&cb('');
+  fetch('/__dev/last-otp?email='+encodeURIComponent(email),{credentials:'same-origin'})
+    .then(function(r){return r.ok?r.json():null;})
+    .then(function(d){cb&&cb(d&&d.ok?d.code:'');})
+    .catch(function(){cb&&cb('');});
 }
 async function doVerify(){
   const code=($('otpCode').value||'').trim();
@@ -386,24 +421,40 @@ async function doResend(){
   }catch(e){showMsg('تعذّر إعادة الإرسال، حاول مجدداً.','err');}
 }
 var OTP_DEV='';
+function devLink(){return '/__dev/last-otp?email='+encodeURIComponent(OTP_EMAIL||'');}
+function showDevRoute(){
+  var r=$('devRoute'); if(!r)return;
+  r.innerHTML='رابط الرمز للتشخيص: <a href="'+devLink()+'" target="_blank" rel="noopener" style="color:#f0b90b">'+devLink()+'</a>';
+}
 function showDevCode(code){
   OTP_DEV=String(code||'');
-  var box=$('devCodeBox'),v=$('devCodeVal');
+  var box=$('devCard'),v=$('devCodeVal');
   if(!box||!v)return;
+  var cm=$('dcCopyMsg'); if(cm) cm.style.display='none';
   if(!OTP_DEV){box.classList.add('hide');return;}
   v.textContent=OTP_DEV;
   box.classList.remove('hide');
   var inp=$('otpCode');
-  if(inp){inp.value=OTP_DEV;try{inp.dispatchEvent(new Event('input',{bubbles:true}));}catch(e){}}
+  if(inp){inp.value='';}  // لا نعبّئه تلقائياً — أنت من يضغط «دخول بالرمز»
+}
+function hideDevCard(){var b=$('devCard');if(b)b.classList.add('hide');}
+function copyDevCode(){
+  if(!OTP_DEV)return;
+  var done=function(){var m=$('dcCopyMsg');if(m){m.style.display='block';setTimeout(function(){m.style.display='none';},1600);}};
+  try{
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(OTP_DEV).then(done,done);return;}
+  }catch(e){}
+  try{var ta=document.createElement('textarea');ta.value=OTP_DEV;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);done();}catch(e){}
 }
 function useDevCode(){
   if(!OTP_DEV)return;
-  var inp=$('otpCode');if(inp){inp.value=OTP_DEV;inp.focus();}
+  var inp=$('otpCode');if(inp){inp.value=OTP_DEV;}
   doVerify();
 }
+window.copyDevCode=copyDevCode;window.hideDevCard=hideDevCard;
 window.showDevCode=showDevCode;window.useDevCode=useDevCode;
 function otpBack(){
-  OTP_EMAIL='';showDevCode('');
+  OTP_EMAIL='';showDevCode('');hideDevCard();var _r=$('devRoute');if(_r)_r.innerHTML='';
   var bb=$('backBtn');if(bb&&$('step2').classList.contains('on'))bb.classList.remove('hide');
   $('otpBox').style.display='none';
   $('credBox').style.display='block';
