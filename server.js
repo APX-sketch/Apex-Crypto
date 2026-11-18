@@ -212,6 +212,39 @@ const apx = new ApxStore(join(__dirname, 'data', 'apex-apx.json'), {
 });
 import mysql from 'mysql2/promise';
 import * as ledger from './lib/ledger.js';
+import { AsyncLocalStorage } from 'node:async_hooks';
+// سياق الطلب الحالي: نعرف منه أي مسار سبّب تغيير الرصيد، فنصنّف الحركة
+// في سجل المحفظة (إيداع/سحب/تحويل/تداول/عمولة...) بدل تسمية عامة.
+const reqCtx = new AsyncLocalStorage();
+
+// خرائط تصنيف الحركة حسب المسار الذي أنتجها (كود قصير يُخزَّن في الدفتر)
+const TX_PATH_CODES = [
+  ['/api/wallet/withdraw', 'wd'], ['/api/wallet/deposit', 'dep'],
+  ['/api/wallet/convert', 'conv'], ['/api/wallet/transfer', 'xfer'],
+  ['/api/wallet/internal', 'xfer'], ['/api/wallet/swap', 'conv'],
+  ['/api/wallet/futures', 'fut'], ['/api/futures', 'fut'],
+  ['/api/wallet/order', 'trade'], ['/api/orders', 'trade'], ['/api/trade', 'trade'],
+  ['/api/copy', 'copy'], ['/api/wallet/fee', 'fee'], ['/api/admin', 'adm'],
+];
+function txCodeForPath(p, d) {
+  const path = String(p || '');
+  for (const pair of TX_PATH_CODES) {
+    if (path === pair[0] || path.startsWith(pair[0] + '/') || path.startsWith(pair[0] + '?')) {
+      if (pair[1] === 'adm') return d >= 0 ? 'adm_c' : 'adm_d';
+      return pair[1];
+    }
+  }
+  return '';
+}
+function ledgerKind(d, method) {
+  let st = null;
+  try { st = reqCtx.getStore(); } catch (e) { st = null; }
+  const byPath = txCodeForPath(st && st.path, d);
+  if (byPath) return byPath;
+  if (method === 'addDeposit') return 'dep';
+  if (method === 'debitBalance') return 'wd';
+  return 'adj';
+}
 
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
@@ -369,7 +402,7 @@ async function flushWalletMirror() {
             const a = Number(after[cur]) || 0;
             const d = a - b;
             if (Math.abs(d) > 1e-10) {
-              ledger.record(String(args[0]), cur, d, m, null, null).catch(function () {});
+              ledger.record(String(args[0]), cur, d, ledgerKind(d, m), null, null).catch(function () {});
             }
           }
         } catch (e) {}
@@ -1958,6 +1991,12 @@ app.use((req, res, next) => {
 app.use(cors({
   origin: ALLOWED_ORIGINS.includes('*') ? true : ALLOWED_ORIGINS,
 }));
+// نحفظ مسار كل طلب في سياق غير متزامن، فتعرف "هوك الرصيد" أي عملية أنتجت
+// الحركة (سحب/تحويل/تداول...) وتُسجّلها في السجل بالاسم الصحيح.
+app.use((req, res, next) => {
+  try { reqCtx.run({ path: String(req.path || ''), method: String(req.method || '') }, () => next()); }
+  catch (e) { next(); }
+});
 
 // ---- ضغط gzip مدمج (بلا حزم خارجية) ----
 // يضغط ردود JSON والـHTML/CSS/JS النصّية قبل إرسالها، فيوفّر حتى ~70-80%
@@ -3595,6 +3634,81 @@ app.get('/api/wallet/transactions', requireUser, (req, res) => {
   let rows = [];
   try { rows = store.getTransactions(req.user.id) || []; } catch (e) { rows = []; }
   res.json({ ok: true, transactions: rows });
+});
+
+// ---- سجل حركة المحفظة (كل ما يلمس الرصيد) ----
+// يُبنى من دفتر الأستاذ الدائم wx_ledger (كل فرق رصيد يُكتب صفّاً هناك)
+// ويُدمج مع سجل المعاملات الغنيّ (store.getTransactions) الذي يحمل نوع
+// العملية والطرف الآخر والملاحظة. المطابقة بينهما بالعملة والمبلغ والوقت
+// حتى لا تظهر العملية الواحدة مرّتين.
+const WX_KIND_TYPE = {
+  dep: 'deposit', wd: 'withdraw', conv: 'convert', xfer: 'transfer',
+  trade: 'trade', fut: 'futures', fee: 'fee', copy: 'copy',
+  adm_c: 'admin', adm_d: 'admin', adj: 'adjust',
+  addDeposit: 'deposit', debitBalance: 'withdraw',
+  applyDeltas: 'adjust', setBalances: 'adjust',
+};
+function wxSignedAmount(type, amount) {
+  const a = Math.abs(Number(amount) || 0);
+  const t = String(type || '').toLowerCase();
+  if (/withdraw|debit|sell|loss|fee|_out$/.test(t)) return -a;
+  return Number(amount) < 0 ? -a : a;
+}
+app.get('/api/wallet/activity', requireUser, async (req, res) => {
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 200, 1), 400);
+  const uid = String(req.user.id);
+  let lrows = [];
+  try { await ledger.ensure(); lrows = await ledger.historyOf(uid, Math.min(limit + 80, 800)); } catch (e) { lrows = []; }
+  let trs = [];
+  try { trs = store.getTransactions(uid) || []; } catch (e) { trs = []; }
+
+  const used = new Set();
+  const out = [];
+  for (const t of trs.slice(0, limit)) {
+    const cur = String(t.currency || '').toUpperCase();
+    if (!cur) continue;
+    const tamt = Math.abs(Number(t.amount) || 0);
+    const ts = Number(t.at) || 0;
+    let mi = -1;
+    for (let i = 0; i < lrows.length; i++) {
+      if (used.has(i)) continue;
+      const l = lrows[i];
+      if (String(l.currency).toUpperCase() !== cur) continue;
+      if (Math.abs(Math.abs(Number(l.amount)) - tamt) > 1e-6) continue;
+      if (Math.abs(Number(l.created_at) - ts) > 25000) continue;
+      mi = i; break;
+    }
+    if (mi >= 0) used.add(mi);
+    out.push({
+      id: 'T' + (t.id != null ? t.id : ts + cur),
+      type: String(t.type || 'other'),
+      currency: cur,
+      amount: wxSignedAmount(t.type, t.amount),
+      time: ts || Date.now(),
+      status: String(t.status || 'done'),
+      note: String(t.note || ''),
+      counterparty: String(t.counterparty || ''),
+    });
+  }
+  for (let i = 0; i < lrows.length; i++) {
+    if (used.has(i)) continue;
+    const l = lrows[i];
+    const kind = String(l.kind || '');
+    const type = WX_KIND_TYPE[kind] || 'adjust';
+    out.push({
+      id: 'L' + l.id,
+      type,
+      currency: String(l.currency || 'USDT').toUpperCase(),
+      amount: Number(l.amount) || 0,
+      time: Number(l.created_at) || Date.now(),
+      status: 'done',
+      note: String(l.note || ''),
+      counterparty: '',
+      rawKind: kind,
+    });
+  }
+  out.sort((a, b) => b.time - a.time);
+  res.json({ ok: true, activity: out.slice(0, limit), limit });
 });
 
 // ---- Convert one currency to another (server-computed, money-safe) ----
@@ -5874,7 +5988,11 @@ app.get('/api/square/posts', requireUser, async (req, res) => {
     let where = '1=1';
     // ترتيب البارامترات: (liked, reposted, following, saved, voted, reported) قبل شروط WHERE
     const params = [me, me, me, me, me, me];
-    if (filter === 'mine') { where = 'p.user_id = ?'; params.push(me); }
+    if (filter === 'mine') {
+      // «منشوراتي» = منشوراتي + ما أعدت نشره (تظهر باسمي كما لو نشرتها)
+      where = '(p.user_id = ? OR p.id IN (SELECT post_id FROM square_reposts WHERE user_id = ?))';
+      params.push(me, me);
+    }
     if (q) { where += ' AND (p.content LIKE ? OR p.author LIKE ?)'; params.push('%' + q + '%', '%' + q + '%'); }
     const symbol = String(req.query.symbol || '').trim().toUpperCase().slice(0, 20);
     if (symbol) { where += ' AND p.symbol = ?'; params.push(symbol); }
@@ -5920,7 +6038,7 @@ app.get('/api/square/posts', requireUser, async (req, res) => {
     if (ids.length) {
       try {
         const [rps] = await pool.query(
-          'SELECT r.post_id, r.user_id, COALESCE(r.author, u.name, u.username, u.email, \'مستخدم\') AS reposter, ' +
+          'SELECT r.post_id, r.user_id, COALESCE(u.name, u.username, r.author, u.email, \'مستخدم\') AS reposter, ' +
           ' COALESCE(r.orig_author, p.author, \'مستخدم\') AS orig_author ' +
           'FROM square_reposts r LEFT JOIN users u ON u.id = r.user_id ' +
           'LEFT JOIN square_posts p ON p.id = r.post_id ' +
@@ -5934,17 +6052,23 @@ app.get('/api/square/posts', requireUser, async (req, res) => {
     }
     for (const r of rows) {
       r.reposters = rpByPost[String(r.id)] || [];
-      // «أعيد النشر» = للمنشور إعادات نشر، والاسم الظاهر هو اسم آخر مُعيد نشر،
-      // و«نشرها أصلاً» = اسم صاحب المنشور الأصلي.
-      const rp = r.reposters;
-      if (rp.length) {
-        const latest = rp[0];
-        r.reposted_by = latest.name || null;
-        r.reposter_uid = latest.uid || null;
-        r.orig_author = latest.orig || r.author || null;
+      // إعادة النشر تُعرض كمنشور عادي باسم مَن أعاد النشر (بلا أي شريط
+      // «نشرها أصلاً»). أولوية الاسم: أنا إن كنتُ من أعاد النشر، ثم آخر مُعيد
+      // نشر، ثم صاحب المنشور الأصلي. الاسم الأصلي يبقى في author للمرجعية.
+      const rpList = r.reposters;
+      const mineRp = rpList.find((x) => Number(x.uid) === me);
+      const shown = mineRp || rpList[0] || null;
+      if (shown) {
+        r.display_author = shown.name || r.author || 'مستخدم';
+        r.display_uid = shown.uid || null;
+        r.is_repost = 1;
       } else {
-        r.reposted_by = null; r.reposter_uid = null; r.orig_author = null;
+        r.display_author = r.author || 'مستخدم';
+        r.display_uid = r.user_id || null;
+        r.is_repost = 0;
       }
+      r.reposted_by = null;
+      r.orig_author = null;
     }
     res.json({ ok: true, posts: rows });
   } catch (e) { console.error('[square/posts]', e.message); res.status(500).json({ error: 'server_error' }); }

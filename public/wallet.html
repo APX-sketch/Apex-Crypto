@@ -246,9 +246,6 @@ body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);col
   <button class="icobtn" onclick="location.href='index.html'" aria-label="رجوع">
     <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
   <div class="ttl" data-i18n="walletTitle">المحفظة</div>
-  <button class="icobtn" onclick="openNotif()" aria-label="الإشعارات" title="الإشعارات" style="position:relative">
-    <svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0"/></svg>
-    <span id="notifBadge" style="position:absolute;top:-3px;left:-3px;min-width:16px;height:16px;padding:0 4px;background:var(--red,#f6465d);color:#fff;border-radius:999px;font-size:10px;font-weight:800;display:none;align-items:center;justify-content:center;line-height:1"></span></button>
   <button class="icobtn" onclick="openRecords()" aria-label="السجلات" title="السجلات">
     <svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6"/></svg></button>
 </div>
@@ -392,6 +389,10 @@ body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);col
     <button data-f="deposit" onclick="recFilter('deposit')">الإيداعات</button>
     <button data-f="withdraw" onclick="recFilter('withdraw')">السحوبات</button>
     <button data-f="transfer" onclick="recFilter('transfer')">التحويلات</button>
+    <button data-f="trade" onclick="recFilter('trade')">التداول</button>
+    <button data-f="futures" onclick="recFilter('futures')">العقود</button>
+    <button data-f="fee" onclick="recFilter('fee')">العمولات</button>
+    <button data-f="admin" onclick="recFilter('admin')">إداري</button>
   </div>
   <div class="recbody" id="recBody"><div class="recempty">—</div></div>
 </div>
@@ -742,6 +743,49 @@ function switchAccView(v){
   if(v==='funding')openXfer();
 }
 window.switchAccView=switchAccView;
+/* ===== السحب بالإصبع بين تبويبات الحساب =====
+   سحب لليمين ينتقل للتبويب التالي (نظرة عامة ← فورية ← العقود الآجلة ← التمويل)
+   وسحب لليسار يرجع للتبويب السابق. الضغط على التابات يبقى شغّالاً كما هو. */
+var ACC_ORDER=['overview','spot','futures','funding'];
+function curAccView(){
+  var b=document.querySelector('.accnav button.on');
+  return (b&&b.dataset.v)||'overview';
+}
+function accStep(dir){
+  var i=ACC_ORDER.indexOf(curAccView());if(i<0)i=0;
+  var j=i+dir;if(j<0)j=0;if(j>ACC_ORDER.length-1)j=ACC_ORDER.length-1;
+  if(j===i)return false;
+  switchAccView(ACC_ORDER[j]);return true;
+}
+function swipeBlocked(t){
+  try{
+    if(!t||!t.closest)return true;
+    if(t.closest('input,textarea,select,button,a,canvas,.recfilters,.recbody,.list,.recdetail.show,.recsheet.show'))return true;
+    var ns=document.getElementById('notifSheet');
+    if(ns&&ns.style.display&&ns.style.display!=='none')return true;
+  }catch(e){return true;}
+  return false;
+}
+(function(){
+  var sx=0,sy=0,st=0,act=false,lock=false;
+  document.addEventListener('touchstart',function(e){
+    if(e.touches.length!==1){act=false;return;}
+    var t=e.target;
+    lock=swipeBlocked(t);
+    if(lock){act=false;return;}
+    act=true;sx=e.touches[0].clientX;sy=e.touches[0].clientY;st=Date.now();
+  },{passive:true});
+  document.addEventListener('touchend',function(e){
+    if(!act)return;act=false;
+    var t=e.changedTouches&&e.changedTouches[0];if(!t)return;
+    var dx=t.clientX-sx,dy=t.clientY-sy;
+    if(Date.now()-st>900)return;
+    if(Math.abs(dx)<60)return;
+    if(Math.abs(dy)>Math.abs(dx)*0.8)return;
+    if(accStep(dx>0?1:-1)){try{navigator.vibrate&&navigator.vibrate(6);}catch(err){}}
+  },{passive:true});
+  document.addEventListener('touchcancel',function(){act=false;},{passive:true});
+})();
 async function fetchFutures(){if(!TOK)return;try{var r=await fetch('/api/wallet/futures',{headers:{'Authorization':'Bearer '+TOK}});if(!r.ok)return;var d=await r.json();var b=d.balances||{};var m={};for(var k in b){m[String(k).toUpperCase()]=Number(b[k])||0;}FUT.bal=m;renderOverview();renderFutures();if($('view-funding').classList.contains('on'))updateXferAvail();}catch(e){}}
 function spotTotal(){var t=0;for(var c in wallet){var a=+wallet[c]||0;if(a>0)t+=usdValue(c,a);}return t;}
 function futTotal(){var t=0;for(var c in FUT.bal){if(c==='USDT')continue;var a=+FUT.bal[c]||0;if(a>0)t+=usdValue(c,a);}var eq=futEquityUSDT();if(eq>0)t+=eq;return t;}
@@ -889,29 +933,52 @@ renderOverview();
 <script>
 /* ===== سجلات المعاملات: إيداع / سحب / تحويل =====
    تقرأ من السيرفر (عدّة مسارات محتملة) وتدمج مع سجل محلي للتحويلات الداخلية. */
-var REC_FILTER='all',REC_DATA=[];
+var REC_FILTER='all',REC_DATA=[],REC_TIMER=null;
 var LEDGER_KEY='apex_ledger_'+UID;
 function loadLedger(){try{return JSON.parse(localStorage.getItem(LEDGER_KEY)||'[]')||[];}catch(e){return[];}}
 function saveLedger(a){try{localStorage.setItem(LEDGER_KEY,JSON.stringify(a.slice(-200)));}catch(e){}}
 function addLedger(rec){var a=loadLedger();rec.id=rec.id||('L'+Date.now()+Math.random().toString(36).slice(2,7));a.push(rec);saveLedger(a);}
 window.addLedger=addLedger;
-function normType(t){t=String(t||'').toLowerCase();
-  if(/withdraw|سحب|debit/.test(t))return 'withdraw';
+/* تصنيف الحركة إلى نوع واحد موحّد — يغطّي أسماء السيرفر الجديدة
+   (deposit/withdraw/convert/transfer/trade/futures/fee/copy/admin/adjust)
+   والأسماء القديمة (order_buy/transfer_out/admin_debit...). */
+var TYPE_SHORT={wd:'withdraw',dep:'deposit',xf:'transfer',xfer:'transfer',conv:'convert',trade:'trade',fut:'futures',fee:'fee',copy:'copy',adm_c:'admin',adm_d:'admin',adj:'adjust',setbalances:'admin',applydeltas:'admin'};
+function normType(t){t=String(t||'').toLowerCase().trim();
+  if(TYPE_SHORT[t])return TYPE_SHORT[t];
+  if(/futures|future|perp|contract|عقود/.test(t))return 'futures';
+  if(/convert|swap|تحويل عملات/.test(t))return 'convert';
   if(/transfer|تحويل|xfer/.test(t))return 'transfer';
+  if(/fee|commission|عمولة/.test(t))return 'fee';
+  if(/copy|نسخ/.test(t))return 'copy';
+  if(/admin|adjust|settle|correct|تصحيح|تسوية|إداري/.test(t))return 'admin';
+  if(/withdraw|سحب|debit|payout/.test(t))return 'withdraw';
   if(/dep|إيداع|شحن|credit|recharge/.test(t))return 'deposit';
+  if(/trade|order|spot|تداول|buy|sell/.test(t))return 'trade';
   return t||'other';}
-function openRecords(){$('recSheet').classList.add('show');loadRecords();}
-function closeRecords(){$('recSheet').classList.remove('show');}
+/* المبلغ موقّع دائماً: ما خرج من المحفظة سالب، وما دخل موجب */
+function recSign(type,amt){
+  var a=Math.abs(Number(amt)||0);
+  if(Number(amt)<0)return -a;
+  var t=String(type||'').toLowerCase();
+  if(/withdraw|debit|sell|loss|fee|_out$/.test(t))return -a;
+  return a;
+}
+function openRecords(){$('recSheet').classList.add('show');loadRecords();startRecPoll();}
+function closeRecords(){$('recSheet').classList.remove('show');stopRecPoll();}
 window.openRecords=openRecords;window.closeRecords=closeRecords;
-function recFilter(f){REC_FILTER=f;document.querySelectorAll('.recfilters button').forEach(function(b){b.classList.toggle('on',b.dataset.f===f);});renderRecords();}
+function startRecPoll(){stopRecPoll();REC_TIMER=setInterval(function(){if(!document.hidden&&$('recSheet').classList.contains('show'))loadRecords();},20000);}
+function stopRecPoll(){if(REC_TIMER){clearInterval(REC_TIMER);REC_TIMER=null;}}
+function recFilter(f){REC_FILTER=f;document.querySelectorAll('#recSheet .recfilters button').forEach(function(b){b.classList.toggle('on',b.dataset.f===f);});renderRecords();}
 window.recFilter=recFilter;
-var REC_ENDPOINTS=['/api/wallet/transactions','/api/wallet/history','/api/wallet/ledger','/api/transactions','/api/history'];
+/* /api/wallet/activity هو المصدر الكامل: يبني السجل من دفتر الأستاذ الدائم
+   (كل حركة رصيد) ويدمجه مع سجل المعاملات الغنيّ. البقية احتياطية فقط. */
+var REC_ENDPOINTS=['/api/wallet/activity','/api/wallet/transactions','/api/wallet/history','/api/wallet/ledger','/api/transactions','/api/history'];
 async function fetchServerRecords(){
   if(!TOK)return [];
   for(var i=0;i<REC_ENDPOINTS.length;i++){
     try{var r=await fetch(REC_ENDPOINTS[i],{headers:{'Authorization':'Bearer '+TOK}});
       if(!r.ok)continue;var d=await r.json();
-      var arr=Array.isArray(d)?d:(Array.isArray(d.transactions)?d.transactions:(Array.isArray(d.records)?d.records:(Array.isArray(d.history)?d.history:(Array.isArray(d.data)?d.data:null))));
+      var arr=Array.isArray(d)?d:(Array.isArray(d.activity)?d.activity:(Array.isArray(d.transactions)?d.transactions:(Array.isArray(d.records)?d.records:(Array.isArray(d.history)?d.history:(Array.isArray(d.data)?d.data:null)))));
       if(arr)return arr;
     }catch(e){}
   }
@@ -920,43 +987,75 @@ async function fetchServerRecords(){
 function normRecord(x){
   var type=normType(x.type||x.kind||x.category||x.action);
   var cur=String(x.currency||x.coin||x.asset||x.symbol||'USDT').toUpperCase();
-  var amt=Number(x.amount!=null?x.amount:(x.value!=null?x.value:x.qty))||0;
+  var raw=Number(x.amount!=null?x.amount:(x.value!=null?x.value:x.qty))||0;
+  var amt=recSign(type,raw);
   var ts=x.time||x.timestamp||x.createdAt||x.date||x.ts||Date.now();
   if(typeof ts==='string'&&/^\d+$/.test(ts))ts=+ts;
   var tnum=(typeof ts==='number')?(ts<1e12?ts*1000:ts):(Date.parse(ts)||Date.now());
   var status=String(x.status||x.state||'').toLowerCase();
   var note=x.note||x.memo||x.remark||((x.from&&x.to)?((x.from||'')+' ← '+(x.to||'')):'');
   var counterparty=x.counterparty||x.fromName||x.toName||x.from||x.to||'';
-  var direction=x.direction||'';
-  var txid=x.txid||x.hash||x.txHash||x.reference||x.ref||'';
+  var dir=x.direction||'';
+  var txid=(x.txid||x.hash||x.txHash||x.reference||x.ref||'');
+  if(/^\//.test(String(txid)))txid='';
   var addr=x.address||x.toAddress||x.to||x.depositAddress||'';
-  return {id:String(x.id||x._id||('S'+tnum+'_'+amt)),type:type,cur:cur,amt:amt,ts:tnum,status:status,note:note,counterparty:counterparty,direction:direction,txid:txid,addr:addr,rawType:String(x.type||x.kind||x.category||x.action||'')};
+  return {id:String(x.id||x._id||('S'+tnum+'_'+amt)),type:type,cur:cur,amt:amt,ts:tnum,status:status,note:note,counterparty:counterparty,direction:dir,txid:txid,addr:addr,rawType:String(x.type||x.kind||x.category||x.action||'')};
 }
 async function loadRecords(){
-  var body=$('recBody');if(body)body.innerHTML='<div class="recempty">… جارِ التحميل</div>';
+  var body=$('recBody');if(body&&!body.querySelector('.recrow'))body.innerHTML='<div class="recempty">… جارِ التحميل</div>';
   var srv=await fetchServerRecords();
-  var merged=srv.map(normRecord).concat(loadLedger().map(normRecord));
+  var rows=srv.map(normRecord);
+  /* سجل محلي للتحويلات الداخلية — لا نكرّره إذا وصل نفسها من السيرفر */
+  var locals=loadLedger().map(normRecord).filter(function(l){
+    return !rows.some(function(r){
+      return r.type===l.type&&r.cur===l.cur&&Math.abs(Math.abs(r.amt)-Math.abs(l.amt))<1e-8&&Math.abs(r.ts-l.ts)<120000;
+    });
+  });
+  var merged=rows.concat(locals);
   var seen={};merged=merged.filter(function(r){if(seen[r.id])return false;seen[r.id]=1;return true;});
   merged.sort(function(a,b){return b.ts-a.ts;});
   REC_DATA=merged;renderRecords();
 }
 window.loadRecords=loadRecords;
+var REC_META={
+  deposit:{label:'إيداع',svg:'<path d="M12 3v13M7 11l5 5 5-5M5 21h14"/>'},
+  withdraw:{label:'سحب',svg:'<path d="M12 21V8M7 13l5-5 5 5M5 3h14"/>'},
+  transfer:{label:'تحويل',svg:'<path d="M4 7h13l-3-3M20 17H7l3 3"/>'},
+  convert:{label:'تحويل عملات',svg:'<path d="M4 7h13l-3-3M20 17H7l3 3"/>'},
+  trade:{label:'تداول',svg:'<path d="M3 17l6-6 4 4 8-8M21 7v5h-5"/>'},
+  futures:{label:'عقود آجلة',svg:'<path d="M3 3v18h18M8 14l3-3 3 3 4-5"/>'},
+  fee:{label:'عمولة',svg:'<path d="M6 18L18 6M8.5 8.5h.01M15.5 15.5h.01"/>'},
+  copy:{label:'نسخ التداول',svg:'<path d="M8 8h11v11H8zM5 16V5h11"/>'},
+  admin:{label:'تعديل إداري',svg:'<path d="M12 3l8 4v6c0 5-4 7-8 8-4-1-8-3-8-8V7z"/>'},
+  adjust:{label:'تسوية رصيد',svg:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'}
+};
 function recMeta(type){
-  if(type==='deposit')return {cls:'dep',sign:'+',label:'إيداع',svg:'<path d="M12 3v13M7 11l5 5 5-5M5 21h14"/>'};
-  if(type==='withdraw')return {cls:'wd',sign:'-',label:'سحب',svg:'<path d="M12 21V8M7 13l5-5 5 5M5 3h14"/>'};
-  if(type==='transfer')return {cls:'xf',sign:'',label:'تحويل',svg:'<path d="M4 7h13l-3-3M20 17H7l3 3"/>'};
-  return {cls:'xf',sign:'',label:'عملية',svg:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'};
+  var m=REC_META[type]||REC_META.adjust;
+  return {label:m.label,svg:m.svg};
+}
+/* الفلتر يجمع الأنواع المتقاربة في قسم واحد */
+function recMatch(r){
+  if(REC_FILTER==='all')return true;
+  if(REC_FILTER==='transfer')return r.type==='transfer'||r.type==='convert';
+  if(REC_FILTER==='admin')return r.type==='admin'||r.type==='adjust';
+  if(REC_FILTER==='trade')return r.type==='trade'||r.type==='copy';
+  return r.type===REC_FILTER;
+}
+function recCls(r){if(Math.abs(r.amt)<1e-12)return 'xf';return r.amt>0?'dep':'wd';}
+function recAmtStr(r,dp){
+  var neg=r.amt<0;
+  return (neg?'-':'+')+fmt(Math.abs(r.amt),dp)+' '+esc(r.cur);
 }
 function fmtTime(ts){try{return new Date(ts).toLocaleString('en-GB',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return '';}}
 function statusTxt(s){if(/done|success|complete|ok|approved|confirm/.test(s))return {t:'مكتمل',c:'ok'};if(/pend|wait|review|process/.test(s))return {t:'قيد المعالجة',c:'pend'};if(/reject|fail|cancel|decline/.test(s))return {t:'مرفوض',c:''};return {t:'',c:''};}
 function renderRecords(){
   var body=$('recBody');if(!body)return;
-  var rows=REC_DATA.filter(function(r){return REC_FILTER==='all'||r.type===REC_FILTER;});
+  var rows=REC_DATA.filter(recMatch);
   if(!rows.length){body.innerHTML='<div class="recempty">لا توجد سجلات '+(REC_FILTER==='all'?'بعد':'في هذا القسم')+'</div>';return;}
   body.innerHTML=rows.map(function(r){
     var m=recMeta(r.type),st=statusTxt(r.status);
-    var amtStr=m.sign+fmt(Math.abs(r.amt),r.cur==='USDT'?2:6)+' '+esc(r.cur);
-    return '<div class="recrow '+m.cls+'" onclick="showRecDetail(\''+esc(String(r.id).replace(/'/g,''))+'\')"><span class="ri"><svg viewBox="0 0 24 24" stroke="currentColor">'+m.svg+'</svg></span>'+
+    var amtStr=recAmtStr(r,r.cur==='USDT'?2:6);
+    return '<div class="recrow '+recCls(r)+'" onclick="showRecDetail(\''+esc(String(r.id).replace(/'/g,''))+'\')"><span class="ri"><svg viewBox="0 0 24 24" stroke="currentColor">'+m.svg+'</svg></span>'+
       '<div class="rt"><b>'+m.label+'</b><span>'+(r.note?esc(r.note)+' · ':'')+fmtTime(r.ts)+'</span></div>'+
       '<div class="rv"><div class="amt">'+mask(amtStr)+'</div>'+(st.t?'<div class="st '+st.c+'">'+st.t+'</div>':'')+'</div></div>';
   }).join('');
@@ -965,8 +1064,8 @@ function renderRecords(){
 function showRecDetail(id){
   var r=null;for(var i=0;i<REC_DATA.length;i++){if(String(REC_DATA[i].id).replace(/'/g,'')===id){r=REC_DATA[i];break;}}
   if(!r)return;var m=recMeta(r.type),st=statusTxt(r.status);
-  var sign=m.sign,cls=sign==='+'?'pos':(sign==='-'?'neg':'');
-  var amtStr=sign+fmt(Math.abs(r.amt),r.cur==='USDT'?2:8)+' '+esc(r.cur);
+  var cls=r.amt>0?'pos':(r.amt<0?'neg':'');
+  var amtStr=recAmtStr(r,r.cur==='USDT'?2:8);
   var rows=[['النوع',esc(m.label),''],['المبلغ',mask(amtStr),cls],['العملة',esc(r.cur),''],['الحالة',st.t||'—',st.c==='ok'?'pos':''],['التاريخ والوقت',fmtTime(r.ts),'']];
   if(r.counterparty)rows.push(['الطرف الآخر',esc(r.counterparty),'']);
   if(r.addr)rows.push(['العنوان',esc(r.addr),'']);
@@ -982,12 +1081,12 @@ window.showRecDetail=showRecDetail;window.closeRecDetail=closeRecDetail;
 /* ===== تصدير السجل (CSV) ===== */
 function csvCell(v){v=String(v==null?'':v);if(/[",\n]/.test(v))v='"'+v.replace(/"/g,'""')+'"';return v;}
 function exportRecords(){
-  var rows=REC_DATA.filter(function(r){return REC_FILTER==='all'||r.type===REC_FILTER;});
+  var rows=REC_DATA.filter(recMatch);
   if(!rows.length){toast('لا توجد سجلات للتصدير');return;}
   var head=['التاريخ','النوع','المبلغ','العملة','الحالة','الطرف الآخر','العنوان','ملاحظة','المعرّف'];
   var lines=[head.map(csvCell).join(',')];
   rows.forEach(function(r){var m=recMeta(r.type),st=statusTxt(r.status);
-    lines.push([fmtTime(r.ts),m.label,(m.sign||'')+fmt(Math.abs(r.amt),r.cur==='USDT'?2:8),r.cur,st.t||'',r.counterparty||'',r.addr||'',r.note||'',r.id].map(csvCell).join(','));});
+    lines.push([fmtTime(r.ts),m.label,(r.amt<0?'-':'+')+fmt(Math.abs(r.amt),r.cur==='USDT'?2:8),r.cur,st.t||'',r.counterparty||'',r.addr||'',r.note||'',r.id].map(csvCell).join(','));});
   var csv='\ufeff'+lines.join('\r\n');
   var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
   var url=URL.createObjectURL(blob);var a=document.createElement('a');

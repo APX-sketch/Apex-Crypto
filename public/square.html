@@ -272,7 +272,7 @@ function listFor(){
   else if(FILTER==='hot')out.sort((a,b)=>(b.likes+b.shares*2)-(a.likes+a.shares*2));
   else if(FILTER==='news')out=out.filter(p=>p.news);
   else if(FILTER==='mine')out=out.filter(p=>p.handle==='@'+ME||p.mine);
-  if(QSTR){const s=QSTR.toLowerCase();out=out.filter(p=>p.text.toLowerCase().includes(s)||(p.author||'').toLowerCase().includes(s));}
+  if(QSTR){const s=QSTR.toLowerCase();out=out.filter(p=>p.text.toLowerCase().includes(s)||(p.display_author||p.author||'').toLowerCase().includes(s));}
   return out;
 }
 function render(){
@@ -425,15 +425,15 @@ function render(){var feed=$('feed');
   if(!list.length){feed.innerHTML='<div style="padding:54px 24px;text-align:center;color:var(--muted)"><div style="font-size:40px;margin-bottom:10px">📝</div><b style="display:block;color:var(--txt);margin-bottom:6px">لا منشورات بعد</b><p style="font-size:12.5px">كن أول من ينشر — اضغط زر +</p></div>';return;}
   feed.innerHTML=list.map(function(p){
     var liked=+p.liked>0,reposted=+p.reposted>0,saved=+p.saved>0,voted=+p.my_vote||0;
-    var rp='';
-    if(p.reposted_by){rp='<div class="rpbar">'+reicon()+'<span>أعاد النشر بواسطة <b>'+esc(p.reposted_by)+'</b>'+(p.orig_author?' • نشرها أصلاً <b>'+esc(p.orig_author)+'</b>':'')+(+p.reposts>1?' <span class="rpn">+'+(+p.reposts-1)+'</span>':'')+'</span></div>';}
     var vb='';
     if(voted===1)vb+='<span class="vbadge up">مهتم</span>';
     else if(voted===-1)vb+='<span class="vbadge down">غير مهتم</span>';
     if(saved)vb+='<span class="vbadge sv">محفوظ</span>';
-    return '<div class="post" data-pid="'+p.id+'">'+rp+
-      '<div class="phead">'+avatar(p.author)+
-      '<div class="who"><b>'+esc(p.author)+'</b><span>'+timeAgo(p.created_at)+(p.tag?(' • $'+esc(p.tag)):'')+'</span>'+vb+'</div>'+
+    // إعادة النشر تظهر كمنشور عادي باسم مَن أعاد النشر (بلا شريط إضافي)
+    var dname=p.display_author||p.author||'مستخدم';
+    return '<div class="post" data-pid="'+p.id+'">'+
+      '<div class="phead">'+avatar(dname)+
+      '<div class="who"><b>'+esc(dname)+'</b><span>'+timeAgo(p.created_at)+(p.tag?(' • $'+esc(p.tag)):'')+'</span>'+vb+'</div>'+
       '<button class="morebtn" title="خيارات المنشور" onclick="toggleMenu('+p.id+',event)">'+moreIco()+'</button>'+
       '</div>'+
       '<div class="ptext">'+fmtText(p.content)+'</div>'+
@@ -448,7 +448,7 @@ function render(){var feed=$('feed');
       '</div></div>';
   }).join('');observeViews();}
 function like(id){api('/api/square/posts/'+id+'/like',{method:'POST'}).then(function(d){var p=POSTS.find(function(x){return +x.id===+id;});if(p){p.likes=d.likes;p.liked=d.liked?1:0;}render();}).catch(function(){});}
-function repost(id){api('/api/square/posts/'+id+'/repost',{method:'POST'}).then(function(d){var p=POSTS.find(function(x){return +x.id===+id;});if(p){p.reposts=d.reposts;p.reposted=d.reposted?1:0;}render();toast(d.reposted?'تمت إعادة النشر 🔁':'أُلغيت إعادة النشر');}).catch(function(){});}
+function repost(id){api('/api/square/posts/'+id+'/repost',{method:'POST'}).then(function(d){var p=POSTS.find(function(x){return +x.id===+id;});if(p){p.reposts=d.reposts;p.reposted=d.reposted?1:0;}render();toast(d.reposted?'تمت إعادة النشر 🔁 — صارت في منشوراتك':'أُلغيت إعادة النشر');load();}).catch(function(){});}
 function statRow(ic,label,n){return '<div class="statrow"><span class="si">'+ic+'</span><span class="sl">'+label+'</span><b class="sn">'+fmtNum(n)+'</b></div>';}
 function openStats(id){$('statBody').innerHTML='<div style="color:var(--muted);text-align:center;padding:20px 0;font-size:13px">...جارٍ التحميل</div>';$('statMask').classList.add('on');api('/api/square/posts/'+id+'/stats').then(function(d){var s=d.stats||{};$('statBody').innerHTML=statRow('👁️','المشاهدات',s.views)+statRow('❤️','الإعجابات',s.likes)+statRow('💬','التعليقات',s.comments)+statRow('🔁','إعادة النشر',s.reposts);}).catch(function(){$('statBody').innerHTML='<div style="color:var(--muted);text-align:center;padding:16px">تعذّر جلب الإحصائيات</div>';});}
 function closeStats(){$('statMask').classList.remove('on');}
