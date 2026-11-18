@@ -23,6 +23,7 @@ import { ApxStore } from './lib/apxStore.js';
 import { initMailer, sendMail, sendTransferAlert, sendOtp, sendEmailChangeOtp, isMailerConfigured, getMailLog, getMailStats } from './lib/mailer.js';
 import { OtpStore } from './lib/otp.js';
 import { LoginGuard, OTP_TTL_MS as LOGIN_OTP_TTL_MS, LOCK_HOURS } from './lib/loginGuard.js';
+import { DbOtpStore, DbLoginGuard, ensureOtpSchema } from './lib/otpDb.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -276,34 +277,40 @@ async function ensureWalletsUnique() {
   }
 }
 
-// دالة مزامنة المحافظ الآمنة تماماً - بدون أي تصفير للأرصدة
+// مزامنة جدول wallets — مرآة للقراءة فقط، لا مصدر للأرصدة أبداً.
+//  • ensureWalletsUnique أولاً: بلا UNIQUE(user_id,currency) كل كتابة
+//    تُنشئ صفاً جديداً → صفوف مكرّرة وتضخيم في التقارير.
+//  • نكتب القيمة الحالية لكل عملة (upsert)، ثم نصفّر أي عملة لم تبق
+//    موجودة حتى لا تبقى "عملات شبح" في الجدول.
 async function walletsMirrorUser(uid, balances) {
-    if (PERSIST_RO) return;
-    const userId = Number(uid);
-    if (!Number.isFinite(userId)) return;
-    if (!userId || userId === 'undefined') return;
-    
-    try {
-        // تجهيز العمليات والأرصدة القادمة
-        const entries = Object.entries(balances || {})
-            .map(function (kv) { return [String(kv[0]).toUpperCase().slice(0, 12), Number(kv[1]) || 0]; })
-            .filter(function (e) { return WALLET_CUR_RE.test(e[0]) && Number.isFinite(e[1]); });
+  if (PERSIST_RO) return;
+  const userId = Number(uid);
+  if (!Number.isFinite(userId) || !userId) return;
+  try {
+    await ensureWalletsUnique();
+    const entries = Object.entries(balances || {})
+      .map(function (kv) { return [String(kv[0]).toUpperCase().slice(0, 12), Number(kv[1]) || 0]; })
+      .filter(function (e) { return WALLET_CUR_RE.test(e[0]) && Number.isFinite(e[1]); });
 
-        for (const [cur, ant] of entries) {
-            const val = ant > 0 ? ant.toFixed(8) : '0';
-            
-            // إدراج أو تحديث الرصيد الحالي للعملة فقط دون المساس بالعملات الأخرى أو التصفير
-            await pool.query(
-                'INSERT INTO wallets (user_id, currency, balance, updated_at) VALUES (?, ?, ?, NOW()) ' +
-                'ON DUPLICATE KEY UPDATE balance = VALUES(balance), updated_at = NOW()',
-                [uid, cur, val]
-            );
-        }
-        
-        console.log(`Wallet mirrored successfully for user ${uid}`);
-    } catch (err) {
-        console.error('Error in walletsMirrorUser:', err);
+    for (const [cur, amt] of entries) {
+      const val = amt > 0 ? +amt.toFixed(8) : 0;
+      await pool.query(
+        'INSERT INTO wallets (user_id, currency, balance, locked_balance, updated_at) VALUES (?, ?, ?, 0, NOW()) ' +
+        'ON DUPLICATE KEY UPDATE balance = VALUES(balance), updated_at = NOW()',
+        [userId, cur, val]
+      );
     }
+    const keep = entries.map(function (e) { return e[0]; });
+    if (keep.length) {
+      await pool.query(
+        'UPDATE wallets SET balance = 0, updated_at = NOW() WHERE user_id = ? AND currency NOT IN (?)',
+        [userId, keep]);
+    } else {
+      await pool.query('UPDATE wallets SET balance = 0, updated_at = NOW() WHERE user_id = ?', [userId]);
+    }
+  } catch (err) {
+    console.error('Error in walletsMirrorUser:', err && err.message);
+  }
 }
 
 // ---- تجميع الكتابات: تغييرات كثيرة خلال 400ms ← كتابة واحدة ----
@@ -644,9 +651,13 @@ async function autoRecoverFromSafeguard() {
     const safeTotal = Number(rows[0].total_balance) || 0;
     // (أ) انهيار عدد المستخدمين (فارغ أو أقل من النصف)
     const usersCollapsed = curUsers < safeUsers && (curUsers === 0 || curUsers < safeUsers * 0.5);
-    // (ب) انهيار الأرصدة: المستخدمون موجودون لكن الإجمالي صار صفراً أو أقل من نصف المحفوظ
-    //     هذا هو العطل الحقيقي: الحساب يبقى لكن رصيده يُصفَّر.
-    const balanceCollapsed = safeTotal > 0 && (curTotal === 0 || curTotal < safeTotal * 0.5);
+    // (ب) انهيار الأرصدة: مفعّل فقط بطلب صريح SAFEGUARD_RECOVER_BALANCE=1.
+    //     السبب: انخفاض الإجمالي ليس دليلاً على عطل — السحب وتصحيح رصيد
+    //     خاطئ من الإدارة يُنقص الإجمالي بشكل مشروع. وكانت هذه الحالة
+    //     تُرجع الدفتر القديم "الغني" بعد كل إعادة تشغيل، فيعود الرصيد
+    //     المنتفخ الذي صحّحته الإدارة (والمستخدم يرى "انفجار" جديد).
+    const allowBalRecover = String(process.env.SAFEGUARD_RECOVER_BALANCE || '') === '1';
+    const balanceCollapsed = allowBalRecover && safeTotal > 0 && (curTotal === 0 || curTotal < safeTotal * 0.5);
     if (usersCollapsed || balanceCollapsed) {
       writeFileSync(p, rows[0].v);
       _lastSnapshotHash[SAFEGUARD_KEY] = _persistHash(rows[0].v);
@@ -659,59 +670,43 @@ async function autoRecoverFromSafeguard() {
     }
   } catch (e) { console.warn('[safeguard] تعذّرت الاستعادة التلقائية:', e.message); }
 }
-// ═══ مزامنة دفتر الأستاذ عند الإقلاع (حماية قصوى) ═══
-// يقرأ الأرصدة الحقيقية من wx_balances (المبنية من كل حركة مسجّلة)
-// ويطبقها على دفتر الذاكرة، فيستعيد أي رصيد ضاع بسبب إعادة تشغيل مفاجئة.
+// ═══ استعادة الأرصدة عند الإقلاع — محافظة جداً ═══
+//  القاعدة الذهبية: لا نخمّن ولا نستبدل رصيداً موجوداً.
+//  سابقاً كانت هذه الدالة تجمع "أرقاماً خام" لكل المصادر وتختار
+//  "الأغنى" ثم تدهس رصيد المستخدم بالكامل — وهذا بالتحديد سبب
+//  انفجار الأرصدة: 343 مليون وحدة PEPE تُحسب "أغنى" من 22,000 USDT،
+//  وأي صف قديم/صفّ مكرّر في wallets يتحوّل إلى رصيد حقيقي.
+//  الآن: نستعيد فقط من دفتر الأستاذ الدائم (wx_ledger)، فقط للحساب
+//  الذي رصيده صفر تماماً، ولا نقرأ wallets إطلاقاً.
 async function syncBalancesFromLedger(reason) {
   if (PERSIST_RO) return { applied: 0 };
   try {
     await ledger.ensure();
-    // اجمع كل مصادر الحقيقة: الدفتر الدائم + جدول wallets
-    const sources = [];
     const lg = await ledger.allBalances();
-    if (lg && Object.keys(lg).length) sources.push({ name: 'ledger', data: lg });
-    try {
-      const [wr] = await pool.query('SELECT user_id, currency, balance FROM wallets WHERE balance > 0');
-      const wt = {};
-      for (const r of (wr || [])) {
-        const u = String(r.user_id);
-        wt[u] = wt[u] || {};
-        wt[u][r.currency] = Number(r.balance) || 0;
-      }
-      if (Object.keys(wt).length) sources.push({ name: 'wallets', data: wt });
-    } catch (e) {}
-    if (!sources.length) return { applied: 0, empty: true };
+    if (!lg || !Object.keys(lg).length) return { applied: 0, empty: true };
 
     let applied = 0;
     for (const u of ((store.db && store.db.users) || [])) {
       const uid = String(u.id);
       const cur = u.balances || {};
-      let sumCur = 0;
-      for (const k in cur) if (Number(cur[k]) > 0) sumCur += Number(cur[k]);
-      // اختر أغنى مصدر لهذا المستخدم
-      let best = null, bestTotal = 0, bestName = '';
-      for (const s of sources) {
-        const d = s.data[uid];
-        if (!d) continue;
-        let t = 0;
-        for (const k in d) t += Number(d[k]) || 0;
-        if (t > bestTotal) { bestTotal = t; best = d; bestName = s.name; }
-      }
-      if (!best) continue;
-      // طبّق فقط إذا المصدر أغنى بوضوح من الدفتر الحالي (لا ندهس تعديلاً أحدث)
-      if (bestTotal > sumCur + 1e-6) {
-        u.balances = Object.assign({}, best);
-        applied++;
-        console.warn('[ledger] استُعيد رصيد المستخدم', uid, 'من ' + bestName + ': $' + sumCur.toFixed(2) + ' → $' + bestTotal.toFixed(2));
-        // أعِد مزامنة الجدول بالذاكرة إلى القاعدة حتى يتوحّد الجميع
-        try { queueWalletMirror(u.uid || uid); } catch (e) {}
-      }
+      let hasAny = false;
+      for (const k in cur) { if (Math.abs(Number(cur[k]) || 0) > 1e-8) { hasAny = true; break; } }
+      if (hasAny) continue;              // عنده رصيد → لا نلمسه
+      const d = lg[uid];
+      if (!d) continue;                  // لا سجل دائم له → لا نخترع رصيداً
+      let t = 0;
+      for (const k in d) t += Number(d[k]) || 0;
+      if (!(t > 0)) continue;
+      u.balances = Object.assign({}, d);
+      applied++;
+      console.warn('[ledger] استُعيد رصيد فارغ للمستخدم', uid, 'من دفتر الأستاذ (القيمة الخام:', t.toFixed(2) + ')');
+      try { queueWalletMirror(u.uid || uid); } catch (e) {}
     }
     if (applied > 0) {
       try { store._save(); } catch (e) {}
       console.warn('[ledger] مزامنة الإقلاع: أُصلح', applied, 'حساب/حسابات (السبب:', reason + ')');
     } else {
-      console.log('[ledger] مزامنة الإقلاع: كل الأرصدة مطابقة (' + sources.map(s => s.name).join('+') + ')');
+      console.log('[ledger] مزامنة الإقلاع: لا تغيير — الأرصدة الحالية هي المرجع');
     }
     return { applied };
   } catch (e) {
@@ -721,7 +716,9 @@ async function syncBalancesFromLedger(reason) {
 }
 
 // تسلسل الإقلاع: مزامنة الدفتر ← استعد من الحفظ ← سجّل فحص 'boot' ← حدّث الحفظ
+// جداول OTP/القفل تُنشأ عند الإقلاع (idempotent) حتى لا يعتمد الدخول على يد.
 if (!PERSIST_RO) {
+  ensureOtpSchema(pool).catch(function () {});
   syncBalancesFromLedger('boot')
     .then(function () { return autoRecoverFromSafeguard(); })
     .then(function () { return syncBalancesFromLedger('post-recover'); })
@@ -2619,10 +2616,10 @@ app.post('/api/auth/login', strictLimiter, async (req, res) => {
 
       const emailNorm = String(user.email || '').trim().toLowerCase();
       // مقفول بعد 3 رموز فاشلة؟ → 24 ساعة انتظار
-      const _lk = loginGuard.lockedFor(emailNorm);
+      const _lk = await loginGuard.lockedFor(emailNorm);
       if (_lk > 0) return res.status(429).json({ error: 'locked_24h', retryAfterSec: _lk });
-      const { code, expiresInSec } = loginOtps.issue(emailNorm, { uid: user.id });
-      loginGuard.beginCode(emailNorm);
+      const { code, expiresInSec } = await loginOtps.issue(emailNorm, { uid: user.id });
+      await loginGuard.beginCode(emailNorm);
       try { await sendOtp({ to: user.email, code, purpose: 'login' }); } catch (e) {}
       const devMode = !isMailerConfigured() || process.env.OTP_DEBUG === 'true';
       return res.json({ ok: true, otpRequired: true, email: user.email || '',
@@ -2648,17 +2645,17 @@ app.post('/api/auth/login/verify-otp', strictLimiter, async (req, res) => {
     const code = String((req.body || {}).code || '').trim();
     if (!email) return res.status(400).json({ error: 'invalid_credentials' });
     // مقفول؟ ما منقبل ولا محاولة
-    const _lk = loginGuard.lockedFor(email);
+    const _lk = await loginGuard.lockedFor(email);
     if (_lk > 0) return res.status(429).json({ error: 'locked_24h', retryAfterSec: _lk });
 
-    const vr = loginOtps.verify(email, code);
+    const vr = await loginOtps.verify(email, code);
     if (!vr.ok) {
       // انتهت صلاحية الرمز (59 ثانية) → نطلب رمزاً جديداً بدون احتساب خطأ
       if (vr.error === 'otp_expired' || vr.error === 'otp_required') {
         return res.status(400).json({ error: 'otp_expired', triesLeft: 3, needNewCode: true });
       }
       // رمز خاطئ → نحسبها على الحساب
-      const g = loginGuard.fail(email);
+      const g = await loginGuard.fail(email);
       if (g.locked) {
         return res.status(429).json({ error: 'locked_24h', retryAfterSec: g.retryAfterSec, triesLeft: 0 });
       }
@@ -2669,7 +2666,7 @@ app.post('/api/auth/login/verify-otp', strictLimiter, async (req, res) => {
         needNewCode: !!g.needNewCode
       });
     }
-    loginGuard.success(email);
+    await loginGuard.success(email);
 
     const user = await dbGetUserByEmail(email);
     if (!user) return res.status(401).json({ error: 'invalid_credentials' });
@@ -2719,10 +2716,10 @@ app.post('/api/auth/login/resend-otp', strictLimiter, async (req, res) => {
     if (!user || user.status === 'banned') {
       return res.json({ ok: true, sent: true });
     }
-    const _lk = loginGuard.lockedFor(email);
+    const _lk = await loginGuard.lockedFor(email);
     if (_lk > 0) return res.status(429).json({ error: 'locked_24h', retryAfterSec: _lk });
-    const { code, expiresInSec } = loginOtps.issue(email, { uid: user.id });
-    loginGuard.beginCode(email);
+    const { code, expiresInSec } = await loginOtps.issue(email, { uid: user.id });
+    await loginGuard.beginCode(email);
     try { await sendOtp({ to: user.email, code, purpose: 'login' }); } catch (e) {}
     res.json({ ok: true, sent: true, expiresInSec, devCode: devMode ? code : undefined });
   } catch (err) {
@@ -2793,47 +2790,30 @@ app.get('/api/auth/me', requireUser, async (req, res) => {
 app.get('/api/user/prefs', requireUser, (req, res) => {
   res.json({ ok: true, prefs: getPrefs(req.user.id) });
 });
-// مسار جلب بيانات المستخدم مع أرصدته الحقيقية مباشرة من قاعدة بيانات TiDB
+// بيانات المستخدم + أرصدته من المصدر الرسمي الوحيد (دفتر الخادم).
+//  ملاحظة مهمة: كان هذا المسار يقرأ جدول wallets مباشرةً، وwallets مجرد
+//  مرآة للعرض — فكانت الواجهة تُظهر رقماً والقاعدة تعرف رقماً آخر،
+//  ومع الصفوف المكرّرة كان "آخر صف" هو الذي يفوز. الآن: مصدر واحد.
 app.get('/api/user/me', requireUser, async (req, res) => {
   try {
-    const userId = req.user.id; // أو حسب مسمى متغير الـ ID عندك في الجلسة Session
-
-    // 1. جلب بيانات المستخدم الأساسية من قاعدة البيانات
-    const [userRows] = await db.promise().query(
-      'SELECT id, email, name, role FROM users WHERE id = ?',
-      [userId]
-    );
-
-    if (!userRows || userRows.length === 0) {
-      return res.status(404).json({ error: 'user_not_found' });
-    }
-
-    const user = userRows[0];
-
-    // 2. جلب الأرصدة الحقيقية مباشرة من جدول wallets في TiDB
-    const [walletRows] = await db.promise().query(
-      'SELECT currency, balance, locked_balance FROM wallets WHERE user_id = ?',
-      [userId]
-    );
-
-    // تحويل الأرصدة إلى كائن (Object) يسهل على الواجهة قراءته مثل: { USDT: 1000, BTC: 0.5 }
-    const balances = {};
-    const lockedBalances = {};
-    
-    walletRows.forEach(row => {
-      balances[row.currency] = Number(row.balance) || 0;
-      lockedBalances[row.currency] = Number(row.locked_balance) || 0;
+    const dbu = await dbGetUserById(req.user.uid);
+    if (!dbu) return res.status(404).json({ error: 'user_not_found' });
+    let su = null;
+    try { su = store.findUserById(String(req.user.id)); } catch (e) {}
+    if (!su) { try { su = store.ensureUser(String(req.user.id), { uid: dbu.id, name: dbu.name, email: dbu.email, status: dbu.status }); } catch (e) {} }
+    const balances = Object.assign({}, (su && su.balances) || {});
+    let locked = {};
+    try { locked = lockedBalances(req.user.id) || {}; } catch (e) {}
+    const user = Object.assign({}, dbPublicUser(dbu), {
+      balances,
+      lockedBalances: locked,
     });
-
-    user.balances = balances;
-    user.lockedBalances = lockedBalances;
-
-    // إرجاع البيانات كاملة ونظيفة للواجهة (Frontend)
-    res.json({ ok: true, user });
-
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ ok: true, source: 'ledger', user, balances, lockedBalances: locked,
+      balancesUsd: +(valueUsd(balances)).toFixed(2) });
   } catch (err) {
-    console.error('Error fetching user and wallets from TiDB:', err);
-    res.status(500).json({ error: 'database_error' });
+    console.error('user/me error:', err && err.message);
+    res.status(500).json({ error: 'me_failed' });
   }
 });
 // تحديث تفضيلات التنبيهات (حالياً: emailAlerts)
@@ -4238,32 +4218,90 @@ app.post('/api/admin/users/:id/credit', requireAdmin, async (req, res) => {
   const { amount, currency, note } = req.body || {};
   const amt = Number(amount);
   const cur = String(currency || 'USDT').toUpperCase();
-  
-  if (!(amt > 0)) return res.status(400).json({ error: 'bad_amount' });
-
-  const userId = req.params.id;
-
-  try {
-    // 1. التحديث المباشر والآمن في قاعدة بيانات TiDB السحابية
-    // تأكد من أسماء الأعمدة لديك (مثلاً balances أو wallet_balance)
-    await db.promise().query(
-      `UPDATE wallets SET balance = balance + ? WHERE user_id = ? AND currency = ?`,
-      [amt, userId, cur]
-    );
-
-    // 2. تسجيل العملية في دفتر الأستاذ (Ledger) أو المعاملات سحابياً أيضاً
-    await db.promise().query(
-      `INSERT INTO wx_ledger (user_id, amount, currency, type, note, created_at) VALUES (?, ?, ?, 'admin_credit', ?, NOW())`,
-      [userId, amt, cur, String(note || 'شحن إداري').slice(0, 200)]
-    );
-
-    res.json({ ok: true, message: 'تم شحن الرصيد وحفظه في السحابة بنجاح' });
-  } catch (err) {
-    console.error('TiDB Credit Error:', err);
-    res.status(500).json({ error: 'database_error', details: err.message });
-  }
+  if (!/^[A-Z0-9]{2,12}$/.test(cur)) return res.status(400).json({ error: 'bad_currency' });
+  if (!(amt > 0) || !isFinite(amt)) return res.status(400).json({ error: 'bad_amount' });
+  const u = await adminResolveUser(req.params.id);
+  if (!u) return res.status(404).json({ error: 'not_found' });
+  // الشحن يمرّ من نفس بوابة كل حركة مالية (addDeposit): يحدّث الدفتر،
+  // ويكتب في دفتر الأستاذ، ويُزامن wallets — لا كتابة مباشرة على wallets
+  // (الكتابة المباشرة كانت تُنشئ مالاً خارج الدفتر ثم تعود وتُعتمد عند الإقلاع).
+  const dep = store.addDeposit(u.id, {
+    amount: amt, currency: cur, kind: 'admin', from: 'ADMIN', fromName: 'الإدارة',
+    note: String(note || 'شحن رصيد من الإدارة').slice(0, 200),
+  });
+  store.addNotification(u.id, {
+    title: 'شحن رصيد',
+    kind: 'money',
+    body: 'تمت إضافة ' + amt + ' ' + cur + ' إلى رصيدك من الإدارة.',
+  });
+  store.addTransaction(u.id, {
+    type: 'admin_credit', amount: amt, currency: cur,
+    counterparty: 'الإدارة', note: String(note || 'شحن رصيد من الإدارة').slice(0, 200),
+  });
+  try { alertTransfer(u.id, { to: u.email, kind: 'deposit', amount: amt, currency: cur, counterparty: 'الإدارة' }); } catch (e) {}
+  store.logAdmin({
+    admin: 'admin', action: 'credit', targetId: u.id, targetEmail: u.email, targetName: u.name,
+    amount: amt, currency: cur, note: String(note || 'شحن رصيد').slice(0, 200),
+  });
+  res.json({ ok: true, deposit: dep, balances: (store.findUserById(u.id) || {}).balances || {} });
 });
 
+// ---- Admin: تعيين محفظة كاملة (خريطة أرصدة) بدل تعديل عملة واحدة ----
+//  يُستخدم لتصحيح حساب تضخّم رصيده: ترسل الأرصدة الصحيحة كما هي،
+//  فتُكتب في الدفتر الرسمي مرة واحدة، وتُسجَّل في سجل الإدارة.
+app.post('/api/admin/users/:id/portfolio', requireAdmin, async (req, res) => {
+  const b = req.body || {};
+  const map = (b.balances && typeof b.balances === 'object') ? b.balances : null;
+  if (!map) return res.status(400).json({ error: 'bad_balances' });
+  const u = await adminResolveUser(req.params.id);
+  if (!u) return res.status(404).json({ error: 'not_found' });
+  const clean = {};
+  for (const k in map) {
+    const cur = String(k).toUpperCase().slice(0, 12);
+    const n = Number(map[k]);
+    if (!/^[A-Z0-9]{2,12}$/.test(cur)) continue;
+    if (!isFinite(n) || n < 0) return res.status(400).json({ error: 'bad_amount' });
+    if (n > 0) clean[cur] = n;
+  }
+  const before = Object.assign({}, u.balances || {});
+  store.setBalances(u.id, clean);
+  try {
+    const after = (store.findUserById(u.id) || {}).balances || {};
+    const curs = new Set([].concat(Object.keys(before), Object.keys(after)));
+    for (const cur of curs) {
+      const d = +(Number(after[cur]) || 0) - (Number(before[cur]) || 0);
+      if (Math.abs(d) > 1e-10) {
+        store.addTransaction(u.id, { type: d >= 0 ? 'admin_credit' : 'admin_debit', amount: Math.abs(d),
+          currency: cur, counterparty: 'الإدارة', note: 'تصحيح محفظة من الإدارة' });
+      }
+    }
+  } catch (e) {}
+  store.logAdmin({
+    admin: 'admin', action: 'portfolio_set', targetId: u.id, targetEmail: u.email, targetName: u.name,
+    amount: null, currency: '', note: String((b.reason || 'تصحيح محفظة').slice(0, 200)),
+  });
+  res.json({ ok: true, balances: (store.findUserById(u.id) || {}).balances || {} });
+});
+
+// ---- Admin: إعادة بناء جدول wallets من الدفتر الرسمي (اتجاه واحد) ----
+//  بعد أي خلل، هذا المسار يجعل الجدول يطابق الدفتر تماماً: لا صفوف
+//  مكرّرة، ولا عملات شبح، ولا أرقام تختلف بين الواجهة والقاعدة.
+app.post('/api/admin/wallets/rebuild', requireAdmin, async (req, res) => {
+  try {
+    await ensureWalletsUnique();
+    const list = (store && store.db && Array.isArray(store.db.users)) ? store.db.users : [];
+    let n = 0, failed = 0;
+    for (const u of list) {
+      try {
+        await walletsMirrorUser(u.uid || u.id, u.balances || {});
+        n++;
+      } catch (e) { failed++; }
+    }
+    res.json({ ok: true, users: n, failed });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
 
 // ---- Admin: read ONE user's full per-currency balances (أرصدة وعملات المستخدم) ----
 app.get('/api/admin/users/:id/balances', requireAdmin, async (req, res) => {
@@ -6527,9 +6565,9 @@ app.post('/api/auth/register', strictLimiter, async (req, res) => {
 // مخزنان مستقلان (بالذاكرة): رمز 6 خانات، صالح 5 دقائق، 5 محاولات.
 const withdrawOtps = new OtpStore({ ttlMs: 5 * 60 * 1000, maxTries: 5 });
 // رمز الدخول: 59 ثانية فقط، و3 محاولات للرمز الواحد (الحماية الحقيقية في loginGuard)
-const loginOtps = new OtpStore({ ttlMs: LOGIN_OTP_TTL_MS, maxTries: 3 });
+const loginOtps = new DbOtpStore({ pool, scope: 'login', ttlMs: LOGIN_OTP_TTL_MS, maxTries: 3 });
 // حماية الحساب: 3 أخطاء → رمز جديد، و3 رموز فاشلة → قفل 24 ساعة
-const loginGuard = new LoginGuard();
+const loginGuard = new DbLoginGuard({ pool });
 // رمز تأكيد تغيير البريد (يُرسَل للبريد الجديد) — مُفتاح بمعرّف المستخدم
 const emailChangeOtps = new OtpStore({ ttlMs: 5 * 60 * 1000, maxTries: 5 });
 // رمز إعادة تعيين كلمة المرور (نسيت كلمة المرور) — مُفتاح بالبريد الإلكتروني
@@ -6717,16 +6755,22 @@ function unlock(){var p=document.getElementById('np').value||'';
 
   // (2) آخر رمز فعّال للبريد (دخول أو استعادة) — للتشخيص فقط
   if (path === '/__dev/last-otp' && req.method === 'GET') {
+   return (async () => {
     res.setHeader('Cache-Control', 'no-store');
     const email = String((req.query || {}).email || '').trim().toLowerCase();
     if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'bad_email', msg: 'بريد غير صالح' });
     let rec = null, kind = '';
     try { const a = passwordResetOtps.peek(email); if (a) { rec = a; kind = 'reset'; } } catch (e) {}
-    if (!rec) { try { const b = loginOtps.peek(email); if (b) { rec = b; kind = 'login'; } } catch (e) {} }
+    if (!rec) { try { const b = await loginOtps.peek(email); if (b) { rec = b; kind = 'login'; } } catch (e) {} }
     if (!rec) return res.status(404).json({ error: 'no_code', msg: 'لا يوجد رمز فعّال لهذا البريد — اطلبه من صفحة الدخول أو الاستعادة' });
     const left = Math.max(0, Math.round((rec.exp - Date.now()) / 1000));
     if (left <= 0) return res.status(404).json({ error: 'otp_expired', msg: 'انتهت صلاحية الرمز' });
-    return res.json({ ok: true, code: rec.code, kind, expiresInSec: left, triesLeft: rec.tries == null ? null : Math.max(0, 5 - Number(rec.tries)) });
+    if (!rec.code) {
+      return res.status(409).json({ error: 'code_hashed', kind, expiresInSec: left,
+        msg: 'الرموز صارت مُخزّنة مشفّرة في القاعدة ولا يمكن استرجاعها — استخدم رمز التطوير الظاهر على شاشة الدخول.' });
+    }
+    return res.json({ ok: true, code: rec.code, kind, expiresInSec: left, triesLeft: rec.tries == null ? null : Math.max(0, 3 - Number(rec.tries)) });
+   })().catch(() => res.status(500).json({ error: 'server_error' }));
   }
 
   // (3) فتح الحساب: تعيين كلمة مرور جديدة بدون رمز (للتفعيل السريع بالبيئة)
