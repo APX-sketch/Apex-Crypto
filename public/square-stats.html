@@ -21,11 +21,6 @@ html[data-theme=light] .hdr{background:linear-gradient(135deg,#fff,#eef1f6)}
 .hdr .ttl b{background:linear-gradient(90deg,var(--gold1),var(--gold2));-webkit-background-clip:text;background-clip:text;color:transparent}
 .hdr .sub{font-size:11px;color:var(--muted);font-weight:700;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wrap{padding:14px}
-.owner{display:flex;align-items:center;gap:9px;background:linear-gradient(135deg,rgba(224,166,21,.14),rgba(224,166,21,.04));border:1px solid rgba(224,166,21,.32);border-radius:14px;padding:11px 13px;margin-bottom:12px}
-.owner .ok{width:22px;height:22px;border-radius:50%;background:var(--gold2);display:flex;align-items:center;justify-content:center;flex:0 0 auto}
-.owner .ok svg{width:12px;height:12px;stroke:#231a02;stroke-width:3;fill:none;stroke-linecap:round;stroke-linejoin:round}
-.owner .ot{flex:1;min-width:0;font-size:11.5px;line-height:1.65;color:var(--txt)}
-.owner .ot b{color:var(--gold1)}
 .kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:8px}
 .kpi{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:13px 14px}
 .kpi .k{font-size:11.5px;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:6px;margin-bottom:6px}
@@ -82,8 +77,6 @@ function barChart(data){data=data||[];var n=data.length||1;var W=448,H=150,pad=1
 function render(d){
   var t=d.totals||{},av=d.avg||{},me=(d.me&&d.me.name)||SESS.name||'';
   var html='';
-  html+='<div class="owner"><span class="ok"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span>'+
-        '<div class="ot">هذه الأرقام تخصّ <b>'+esc(me||'منشوراتك')+'</b> فقط — منشوراتك التي نشرتها أنت، بلا إعادات نشر وبلا حسابات أخرى.</div></div>';
   html+='<div class="kpis">'+kpi('','📝 المنشورات',t.posts)+kpi('b','👁️ المشاهدات',t.views)+'</div>';
   html+='<div class="kpis">'+kpi('r','❤️ الإعجابات',t.likes)+kpi('','💬 التعليقات',t.comments)+'</div>';
   html+='<div class="kpis"><div class="kpi gr" style="grid-column:1 / -1"><div class="k">🔁 إعادات النشر</div><div class="v">'+fmtNum(t.reposts)+'</div></div></div>';
