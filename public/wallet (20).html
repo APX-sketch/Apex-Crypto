@@ -1,0 +1,1136 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<script src="apx-ico.js"></script>
+<script>
+(function(){
+  try{
+    var s=JSON.parse(localStorage.getItem('skygo_session')||'null');
+    if(!s||!s.email){location.replace('login.html?next=wallet.html');}
+  }catch(e){location.replace('login.html');}
+})();
+</script>
+<script>
+/* عزل الحسابات: عند تبديل الحساب على نفس المتصفح نمسح أي حالة محلية قديمة (صفقات/سجل/أوامر/عمولات/توثيق) حتى يبدأ كل حساب من الصفر ولا تتسرّب بيانات بين الحسابات */
+(function(){try{var s=JSON.parse(localStorage.getItem('skygo_session')||'null')||{};var tok=(s&&s.token)||localStorage.getItem('apex_token')||'';var owner=(((s&&s.email)||'')+'').toLowerCase()||tok||'';if(!owner)return;var prev=localStorage.getItem('apex_acct_owner')||'';if(prev!==owner){var KEEP={'apex_lang':1,'apex_acct_owner':1,'apex_admin_token':1,'skygo_session':1,'apex_token':1,'apex_2fa':1,'apex_bio':1,'apex_hidebal':1,'apex_anti':1};var PFX=['skygo_wallet_','skygo_futures_','apex_apx','apex_fees_collected','apex_kyc_status','apex_favs_','apex_alerts_','apex_scan_addr','apex_sup_'];var kill=[];for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(!k||KEEP[k])continue;for(var j=0;j<PFX.length;j++){if(k.indexOf(PFX[j])===0){kill.push(k);break;}}}kill.forEach(function(k){try{localStorage.removeItem(k);}catch(e){}});localStorage.setItem('apex_acct_owner',owner);}}catch(e){}})();
+</script>
+<meta charset="UTF-8">
+<script src="i18n.js"></script>
+<script src="apx-coin.js"></script>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Apex — المحفظة</title>
+<style>
+:root{
+  --bg:#0b0e11;--panel:#141920;--panel2:#1c232c;--border:#252d38;
+  --txt:#eef2f6;--muted:#8a94a3;--gold1:#f8d979;--gold2:#e0a615;
+  --green:#0ecb81;--red:#f6465d;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);color:var(--txt);
+  max-width:480px;margin:0 auto;padding-bottom:84px;min-height:100vh;position:relative;overflow-x:hidden}
+.hdr{display:flex;align-items:center;gap:10px;padding:calc(12px + env(safe-area-inset-top)) 14px 12px;
+  background:linear-gradient(135deg,#1b1f24,#0f1216);position:sticky;top:0;z-index:20;border-bottom:1px solid var(--border)}
+.hdr .ttl{font-size:17px;font-weight:900;flex:1}
+.icobtn{width:38px;height:38px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;
+  background:var(--panel2);border:1px solid var(--border);border-radius:11px;cursor:pointer;color:var(--txt)}
+.icobtn svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.9}
+/* hero balance */
+.hero{margin:16px 14px 10px;padding:20px 18px;border-radius:18px;background:linear-gradient(135deg,#1b1f24,#12151a);border:1px solid var(--border)}
+.hero .lbl{color:var(--muted);font-size:12.5px;font-weight:700;display:flex;align-items:center;gap:7px}
+.hero .eye{cursor:pointer;display:inline-flex}
+.hero .eye svg{width:16px;height:16px;stroke:var(--muted);fill:none;stroke-width:1.8}
+.hero .big{font-size:33px;font-weight:900;margin-top:9px;direction:ltr;letter-spacing:-.5px}
+.hero .big small{font-size:16px;font-weight:800;color:var(--muted);margin-inline-start:4px}
+.hero .pnl{font-size:12.5px;font-weight:800;margin-top:7px;direction:ltr;display:inline-flex;align-items:center;gap:6px}
+.hero .pnl.up{color:var(--green)} .hero .pnl.dn{color:var(--red)}
+.hero .pnl .cur{color:var(--muted);font-weight:700}
+/* action circles */
+.acts{display:flex;justify-content:space-around;margin:4px 10px 14px;padding:0 6px}
+.acts .act{display:flex;flex-direction:column;align-items:center;gap:7px;cursor:pointer;background:none;border:0;font-family:inherit}
+.acts .act .circ{width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,var(--panel2),#161c24);border:1px solid var(--border)}
+.acts .act .circ svg{width:22px;height:22px;stroke:var(--gold2);fill:none;stroke-width:1.9}
+.acts .act span{font-size:11.5px;font-weight:700;color:var(--txt)}
+.acts .act:active .circ{background:var(--panel)}
+/* tabs */
+.tabs{display:flex;gap:4px;margin:0 14px 10px;border-bottom:1px solid var(--border)}
+.tabs button{background:none;border:0;color:var(--muted);font-family:inherit;font-size:14px;font-weight:800;
+  padding:11px 10px;cursor:pointer;position:relative}
+.tabs button.on{color:var(--txt)}
+.tabs button.on::after{content:'';position:absolute;bottom:-1px;inset-inline:8px;height:3px;border-radius:3px;
+  background:linear-gradient(90deg,var(--gold1),var(--gold2))}
+.pane{display:none}.pane.on{display:block}
+/* list header + rows */
+.lsthead{display:flex;align-items:center;gap:11px;padding:4px 20px 8px;color:var(--muted);font-size:11px;font-weight:800}
+.lsthead .h1{flex:1}.lsthead .h2{text-align:end;direction:ltr}
+.minirow{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin:0 18px 10px}
+.minirow label{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);font-weight:700;cursor:pointer}
+.minirow input{width:16px;height:16px;accent-color:var(--gold2)}
+.list{margin:0 14px 6px;background:var(--panel);border:1px solid var(--border);border-radius:16px;overflow:hidden}
+.row{display:flex;align-items:center;gap:11px;padding:13px 14px;border-bottom:1px solid var(--border)}
+.row:last-child{border-bottom:0}
+.row img{width:32px;height:32px;border-radius:50%;flex:0 0 auto}
+.row .apxlogo{width:32px;height:32px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:17px;color:#231a02;background:linear-gradient(135deg,var(--gold1),var(--gold2))}
+.row .nm{flex:1;min-width:0}
+.row .nm b{font-size:14.5px;font-weight:800}
+.row .nm .px{display:block;font-size:11.5px;color:var(--muted);direction:ltr;margin-top:2px}
+.row .nm .px .pc{font-weight:800;margin-inline-start:5px}
+.pc.up{color:var(--green)} .pc.dn{color:var(--red)}
+.row .rt{text-align:end;direction:ltr}
+.row .rt .qty{font-size:14.5px;font-weight:800}
+.row .rt .val{font-size:11.5px;color:var(--muted);margin-top:3px}
+/* favorite / alert */
+.favrow{display:flex;flex-direction:column;padding:12px 14px;border-bottom:1px solid var(--border);gap:10px}
+.favrow:last-child{border-bottom:0}
+.favtop{display:flex;align-items:center;gap:11px}
+.star{flex:0 0 auto;width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.star svg{width:19px;height:19px;stroke:var(--gold2);fill:var(--gold2)}
+.favtop .nm{flex:1;min-width:0}
+.favtop .nm b{font-size:14px;font-weight:800}
+.favtop .nm span{display:block;font-size:11px;color:var(--muted);direction:ltr}
+.favtop .rt{text-align:end;direction:ltr}
+.favtop .rt .fpx{font-size:14px;font-weight:800;border-radius:6px;padding:2px 6px}
+@keyframes pxUp{0%{background:rgba(14,203,129,.28)}100%{background:transparent}}
+@keyframes pxDn{0%{background:rgba(246,70,93,.28)}100%{background:transparent}}
+.fpx.up{color:var(--green);animation:pxUp .7s ease-out}
+.fpx.dn{color:var(--red);animation:pxDn .7s ease-out}
+.fpx.eq{color:var(--txt)}
+.tagpc{font-size:11px;font-weight:800;direction:ltr;padding:2px 7px;border-radius:6px;display:inline-block;margin-top:3px}
+.tagpc.up{color:#04180f;background:linear-gradient(90deg,#0ecb81,#0a9d64)}
+.tagpc.dn{color:#fff;background:linear-gradient(90deg,#f6465d,#c62b40)}
+.alertbox{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.alertbox .seg{display:flex;border:1px solid var(--border);border-radius:9px;overflow:hidden}
+.alertbox .seg button{background:var(--panel2);color:var(--muted);border:0;padding:7px 11px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit}
+.alertbox .seg button.on{background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#231a02}
+.alertbox input{flex:1;min-width:90px;background:var(--panel2);border:1px solid var(--border);border-radius:9px;color:var(--txt);
+  font-family:inherit;font-size:13px;padding:8px 10px;outline:none;direction:ltr;text-align:left}
+.alertbox .setbtn{background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#231a02;border:0;border-radius:9px;
+  padding:8px 14px;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit}
+.alertbox .clrbtn{background:rgba(246,70,93,.14);color:var(--red);border:1px solid rgba(246,70,93,.3);border-radius:9px;
+  padding:8px 12px;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit}
+.alerttag{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:800;color:var(--gold2);
+  background:rgba(224,166,21,.12);border:1px solid rgba(224,166,21,.3);border-radius:8px;padding:5px 9px;direction:rtl}
+.alerttag.done{color:var(--green);background:rgba(14,203,129,.12);border-color:rgba(14,203,129,.3)}
+.empty{padding:34px 14px;text-align:center;color:var(--muted);font-size:13px}
+.permbar{margin:12px 14px;padding:11px 14px;border-radius:12px;background:var(--panel);border:1px solid var(--border);
+  display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--muted)}
+.permbar button{margin-inline-start:auto;background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#231a02;
+  border:0;border-radius:9px;padding:7px 13px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap}
+.secttl{padding:14px 18px 6px;font-size:13px;font-weight:800;color:var(--muted)}
+/* account view nav (Overview / Spot / Funding / Futures) — text pills like Binance */
+.accnav{display:flex;gap:8px;overflow-x:auto;margin:12px 14px 2px;padding-bottom:2px;-webkit-overflow-scrolling:touch}
+.accnav::-webkit-scrollbar{display:none}
+.accnav button{flex:0 0 auto;background:var(--panel);border:1px solid var(--border);
+  border-radius:999px;padding:9px 16px;cursor:pointer;color:var(--muted);font-family:inherit;font-size:13px;font-weight:800;white-space:nowrap}
+.accnav button.on{color:#231a02;background:linear-gradient(135deg,var(--gold1),var(--gold2));border-color:transparent}
+.accview{display:none}.accview.on{display:block}
+/* summary cards (overview) */
+.sumcard{display:flex;align-items:center;gap:13px;margin:12px 14px;padding:16px;border-radius:16px;background:var(--panel);border:1px solid var(--border);cursor:pointer}
+.sumcard .ic{width:46px;height:46px;flex:0 0 auto;border-radius:13px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--panel2),#161c24);border:1px solid var(--border)}
+.sumcard .ic svg{width:23px;height:23px;stroke:var(--gold2);fill:none;stroke-width:1.8}
+.sumcard .nm{flex:1;min-width:0}
+.sumcard .nm b{font-size:14.5px;font-weight:800;display:block}
+.sumcard .nm span{font-size:11.5px;color:var(--muted)}
+.sumcard .amt{font-size:16px;font-weight:900;direction:ltr}
+/* internal transfer panel */
+.xfer{margin:14px;padding:18px;border-radius:18px;background:var(--panel);border:1px solid var(--border)}
+.xfer h3{font-size:15px;font-weight:900;margin-bottom:14px}
+.xfer .dirbox{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.xfer .side{flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:12px;padding:12px;text-align:center}
+.xfer .side small{display:block;color:var(--muted);font-size:11px;font-weight:700;margin-bottom:4px}
+.xfer .side b{font-size:14px;font-weight:800}
+.xfer .swap{width:42px;height:42px;flex:0 0 auto;border-radius:50%;border:1px solid var(--border);background:var(--panel2);
+  color:var(--gold2);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.xfer .swap svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2}
+.xfer .fld{margin-bottom:13px}
+.xfer .fld label{display:block;font-size:12px;color:var(--muted);font-weight:700;margin-bottom:6px}
+.xfer select,.xfer .amtwrap input{width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:11px;color:var(--txt);
+  font-family:inherit;font-size:14px;padding:12px;outline:none}
+.xfer .amtwrap{position:relative}
+.xfer .amtwrap input{direction:ltr;text-align:left;padding-inline-end:62px}
+.xfer .amtwrap .mx{position:absolute;inset-inline-end:10px;top:50%;transform:translateY(-50%);background:none;border:0;
+  color:var(--gold2);font-weight:800;font-size:12.5px;cursor:pointer;font-family:inherit}
+.xfer .avail{font-size:11.5px;color:var(--muted);margin-top:6px;direction:ltr}
+.xfer .go{width:100%;margin-top:6px;background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#231a02;border:0;
+  border-radius:12px;padding:14px;font-size:15px;font-weight:900;cursor:pointer;font-family:inherit}
+.xfer .go:disabled{opacity:.5;cursor:default}
+/* overview (Binance-style) */
+.ovloc{font-size:13px;color:var(--muted);margin-top:4px;direction:ltr}
+.todaypnl{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:12px 14px;padding:14px 16px;
+  border-radius:16px;background:var(--panel);border:1px solid var(--border)}
+.todaypnl .tl small{display:block;color:var(--muted);font-size:11.5px;font-weight:700;margin-bottom:5px}
+.todaypnl .tl b{font-size:15px;font-weight:900;direction:ltr}
+.todaypnl .tl.up b,.todaypnl .tl.up .pc{color:var(--green)}
+.todaypnl .tl.dn b,.todaypnl .tl.dn .pc{color:var(--red)}
+.todaypnl .tl .pc{font-size:12.5px;font-weight:800;margin-inline-start:6px}
+.todaypnl .spark{width:92px;height:40px;flex:0 0 auto}
+.todaypnl .spark path{fill:none;stroke-width:2;vector-effect:non-scaling-stroke}
+/* asset distribution bar */
+.distwrap{margin:4px 14px 2px}
+.distbar{display:flex;height:10px;border-radius:6px;overflow:hidden;background:var(--panel2);border:1px solid var(--border)}
+.distbar span{height:100%}
+.distlegend{display:flex;flex-wrap:wrap;gap:12px;margin-top:10px}
+.distlegend .lg{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);font-weight:700}
+.distlegend .lg i{width:9px;height:9px;border-radius:2px;display:inline-block}
+/* compact spot/futures chips */
+.ovchips{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 14px}
+.ovchips .chip{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:13px;cursor:pointer}
+.ovchips .chip small{display:block;color:var(--muted);font-size:11.5px;font-weight:700;margin-bottom:6px}
+.ovchips .chip b{font-size:15px;font-weight:900;direction:ltr}
+/* bottom nav */
+.bnav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;
+  display:grid;grid-template-columns:repeat(6,1fr);background:#0f1216;border-top:1px solid var(--border);
+  padding:8px 0 calc(8px + env(safe-area-inset-bottom));z-index:30}
+.bnav a{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--muted);text-decoration:none;font-size:10px;font-weight:700}
+.bnav a svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8}
+.bnav a.active{color:var(--gold2)}
+.toast{position:fixed;bottom:92px;left:50%;transform:translate(-50%,20px);background:#20272f;color:#fff;
+  padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;opacity:0;transition:.3s;z-index:99;
+  border:1px solid var(--border);box-shadow:0 10px 30px rgba(0,0,0,.5);max-width:88%;text-align:center}
+.toast.show{transform:translate(-50%,0);opacity:1}
+/* ===== سجلات المعاملات (إيداع/سحب/تحويل) ===== */
+.recsheet{position:fixed;top:0;left:50%;transform:translateX(-50%) translateY(100%);width:100%;max-width:480px;height:100%;
+  background:var(--bg);z-index:70;transition:.3s cubic-bezier(.2,.7,.2,1);display:flex;flex-direction:column;visibility:hidden;opacity:0}
+.recsheet.show{transform:translateX(-50%) translateY(0);visibility:visible;opacity:1}
+.recsheet .rhead{display:flex;align-items:center;gap:12px;padding:calc(14px + env(safe-area-inset-top)) 14px 12px;
+  background:linear-gradient(135deg,#1b1f24,#0f1216);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:2}
+.recsheet .rhead b{font-size:16px;font-weight:900;flex:1}
+.recfilters{display:flex;gap:8px;overflow-x:auto;padding:12px 14px 4px;-webkit-overflow-scrolling:touch}
+.recfilters::-webkit-scrollbar{display:none}
+.recfilters button{flex:0 0 auto;background:var(--panel);border:1px solid var(--border);border-radius:999px;
+  padding:9px 16px;color:var(--muted);font-family:inherit;font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap}
+.recfilters button.on{color:#231a02;background:linear-gradient(135deg,var(--gold1),var(--gold2));border-color:transparent}
+.recbody{flex:1;overflow-y:auto;padding:8px 14px calc(24px + env(safe-area-inset-bottom))}
+.recrow{display:flex;align-items:center;gap:12px;padding:13px 4px;border-bottom:1px solid var(--border)}
+.recrow:last-child{border-bottom:0}
+.recrow .ri{width:42px;height:42px;flex:0 0 auto;border-radius:12px;display:flex;align-items:center;justify-content:center;background:var(--panel2);border:1px solid var(--border)}
+.recrow .ri svg{width:20px;height:20px;fill:none;stroke-width:1.9}
+.recrow.dep .ri svg{stroke:var(--green)} .recrow.wd .ri svg{stroke:var(--red)} .recrow.xf .ri svg{stroke:var(--gold2)}
+.recrow .rt{flex:1;min-width:0}
+.recrow .rt b{font-size:14px;font-weight:800;display:block}
+.recrow .rt span{font-size:11.5px;color:var(--muted);direction:ltr;display:block;margin-top:2px}
+.recrow .rv{text-align:end;direction:ltr}
+.recrow .rv .amt{font-size:14px;font-weight:800}
+.recrow.dep .rv .amt{color:var(--green)} .recrow.wd .rv .amt{color:var(--red)}
+.recrow .rv .st{font-size:10.5px;color:var(--muted);margin-top:3px}
+.recrow .rv .st.ok{color:var(--green)} .recrow .rv .st.pend{color:var(--gold2)}
+.recempty{padding:50px 20px;text-align:center;color:var(--muted);font-size:13.5px;line-height:1.7}
+.recrow{cursor:pointer}
+.recdetail{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.55);display:none;align-items:flex-end;justify-content:center}
+.recdetail.show{display:flex}
+.recdetail .rdcard{width:100%;max-width:480px;background:var(--panel);border-top-left-radius:20px;border-top-right-radius:20px;border:1px solid var(--border);border-bottom:0;padding:6px 16px calc(22px + env(safe-area-inset-bottom));max-height:80%;overflow-y:auto}
+.recdetail .rdhead{display:flex;align-items:center;gap:10px;padding:12px 0 8px;position:sticky;top:0;background:var(--panel)}
+.recdetail .rdhead b{flex:1;font-size:16px;font-weight:900}
+.recdetail .rdrow{display:flex;justify-content:space-between;gap:14px;padding:12px 2px;border-bottom:1px solid var(--border);font-size:13px}
+.recdetail .rdrow:last-child{border-bottom:0}
+.recdetail .rdrow .k{color:var(--muted);font-weight:700;flex:0 0 auto}
+.recdetail .rdrow .v{text-align:end;word-break:break-all;font-weight:800;direction:ltr}
+.recdetail .rdrow .v.pos{color:var(--green)} .recdetail .rdrow .v.neg{color:var(--red)}
+/* === أنيميشن فتح القوائم — مطابق للتصميم الجديد === */
+@keyframes wlSheetUp{from{opacity:0;transform:translateX(-50%) translateY(100%)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+@keyframes wlPop{from{opacity:0;transform:translateY(34px)}to{opacity:1;transform:translateY(0)}}
+@keyframes wlFade{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.recdetail.show .rdcard{animation:wlPop .3s cubic-bezier(.22,.61,.36,1)}
+.recsheet.show .recfilters,.recsheet.show .recbody{animation:wlFade .34s cubic-bezier(.22,.61,.36,1) both}
+.recsheet.show .recbody{animation-delay:.06s}
+.hero,.acts,.accnav,.sumcard{animation:wlFade .4s cubic-bezier(.22,.61,.36,1) both}
+/* ===== حركة السحب بين الصفحات/التبويبات (ناعمة وبلا تقطيع) ===== */
+.accview{opacity:0;visibility:hidden;display:none}
+.accview.on{opacity:1;visibility:visible;display:block;will-change:transform,opacity}
+.accview.accInNext{animation:accInNext .26s cubic-bezier(.22,.61,.36,1) both}
+.accview.accInPrev{animation:accInPrev .26s cubic-bezier(.22,.61,.36,1) both}
+@keyframes accInNext{from{opacity:.35;transform:translate3d(-16px,0,0) scale(.995)}to{opacity:1;transform:translate3d(0,0,0) scale(1)}}
+@keyframes accInPrev{from{opacity:.35;transform:translate3d(16px,0,0) scale(.995)}to{opacity:1;transform:translate3d(0,0,0) scale(1)}}
+/* التمرير داخل الصفحة الجديدة لا يرث حركة الأب */
+.accview.on .list,.accview.on .sumcard{transform:translateZ(0)}
+.accnav button{transition:color .18s ease,opacity .18s ease,-webkit-tap-highlight-color .2s}
+.accnav button.on{transition:color .18s ease}
+.accnav button:active{opacity:.65}
+@media (prefers-reduced-motion: reduce){
+  .accview.accInNext,.accview.accInPrev{animation:none}
+  .accnav button{transition:none}
+}
+.acts{animation-delay:.05s}.accnav{animation-delay:.08s}.sumcard{animation-delay:.11s}
+/* أيقونات الرأس بلمسة ذهبية لمطابقة الهوية */
+.hdr .ttl{background:linear-gradient(135deg,var(--gold1),var(--gold2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.hdr .icobtn svg{stroke:var(--gold2)}
+</style>
+</head>
+<body>
+<div class="hdr">
+  <button class="icobtn" onclick="location.href='index.html'" aria-label="رجوع">
+    <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
+  <div class="ttl" data-i18n="walletTitle">المحفظة</div>
+  <button class="icobtn" onclick="openRecords()" aria-label="السجلات" title="السجلات">
+    <svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6"/></svg></button>
+</div>
+<div class="permbar" id="permbar" style="display:none">
+  <span>فعّل إشعارات المتصفّح لتصلك تنبيهات الأسعار لحظياً.</span>
+  <button onclick="askPerm()">تفعيل</button>
+</div>
+<!-- ACCOUNT VIEW NAV (نظرة عامة / فورية / التمويل / العقود الآجلة) — نصّي فقط مثل بينانس -->
+<div class="accnav">
+  <button class="on" data-v="overview" onclick="switchAccView('overview')">نظرة عامة</button>
+  <button data-v="spot" onclick="switchAccView('spot')">فورية</button>
+  <button data-v="futures" onclick="switchAccView('futures')">العقود الآجلة</button>
+    <button data-v="funding" onclick="switchAccView('funding')">التمويل</button>
+
+</div>
+<!-- ===== OVERVIEW VIEW ===== -->
+<div class="accview on" id="view-overview">
+  <div class="hero">
+    <div class="lbl"><span>القيمة الإجمالية المقدرة</span>
+      <span class="eye" onclick="toggleEye()"><svg viewBox="0 0 24 24"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></span></div>
+    <div class="big" id="ovBig">$0.00 <small>USDT</small></div>
+    <div class="ovloc" id="ovLoc">≈ 0.00 USDT</div>
+    <div id="ovFrozen" style="display:none;margin-top:10px;background:rgba(246,70,93,.14);border:1px solid rgba(246,70,93,.5);color:#f6465d;font-weight:900;font-size:13px;padding:9px 12px;border-radius:12px">⛔ الرصيد مجمّد</div>
+  </div>
+  <!-- today's PnL + mini chart -->
+  <div class="todaypnl">
+    <div class="tl up" id="ovPnlBox"><small>أرباح وخسائر اليوم</small><b id="ovPnlAmt">+0.00 USDT</b><span class="pc" id="ovPnlPct">+0.00%</span></div>
+    <svg class="spark" id="ovSpark" viewBox="0 0 92 40" preserveAspectRatio="none"><path d=""/></svg>
+  </div>
+  <!-- action circles -->
+  <div class="acts">
+    <button class="act" onclick="location.href='deposit.html'"><span class="circ"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></span><span>إضافة الأموال</span></button>
+    <button class="act" onclick="location.href='withdraw.html'"><span class="circ"><svg viewBox="0 0 24 24"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/></svg></span><span>إرسال</span></button>
+    <button class="act" onclick="switchAccView('funding')"><span class="circ"><svg viewBox="0 0 24 24"><path d="M4 7h13l-3-3M20 17H7l3 3"/></svg></span><span>تحويل</span></button>
+
+        <button class="act" onclick="actMsg('aEarn')"><span class="circ"><svg viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M4.2 7.5l2.9 2.9M16.9 13.6l2.9 2.9M3 14h4M17 14h4"/><circle cx="12" cy="13" r="3.2"/></svg></span><span>Earn</span></button>
+
+  
+  </div>
+  <!-- asset distribution bar -->
+  <div class="distwrap">
+    <div class="distbar" id="ovDist"></div>
+    <div class="distlegend" id="ovLegend"></div>
+  </div>
+  <!-- spot / futures split (الأساس: فصل الرصيد) -->
+  <div class="ovchips">
+    <div class="chip" onclick="switchAccView('spot')"><small>المحفظة الفورية</small><b id="ovSpot">$0.00</b></div>
+    <div class="chip" onclick="switchAccView('futures')"><small>العقود الآجلة</small><b id="ovFut">$0.00</b></div>
+  </div>
+  <!-- combined asset list -->
+  <div class="lsthead"><span class="h1">الرصيد</span><span class="h2">الكمية / القيمة</span></div>
+  <div class="list" id="ovList"></div>
+</div>
+<!-- ===== SPOT VIEW ===== -->
+<div class="accview" id="view-spot">
+<!-- HERO BALANCE -->
+<div class="hero">
+  <div class="lbl"><span data-i18n="wEstBalance">الرصيد التقديري</span>
+    <span class="eye" id="eye" onclick="toggleEye()"><svg viewBox="0 0 24 24"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></span></div>
+  <div class="big" id="heroBig">$0.00</div>
+  <div class="pnl" id="heroPnl"><span class="cur">24h PnL</span> <span id="pnlVal">+0.00 (0.00%)</span></div>
+  <div id="heroFrozen" style="display:none;margin:12px 0 0;background:rgba(246,70,93,.14);border:1px solid rgba(246,70,93,.5);color:#f6465d;font-weight:900;font-size:13px;padding:9px 12px;border-radius:12px">⛔ الرصيد مجمّد — لا يمكن تنفيذ عمليات الإيداع أو السحب أو التحويل أو التداول</div>
+</div>
+<!-- ACTION CIRCLES -->
+<div class="acts">
+  <button class="act" onclick="location.href='withdraw.html'"><span class="circ"><svg viewBox="0 0 24 24"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/></svg></span><span data-i18n="aSend">إرسال</span></button>
+  <button class="act" onclick="location.href='deposit.html'"><span class="circ"><svg viewBox="0 0 24 24"><path d="M12 3v14M6 11l6 6 6-6M4 21h16"/></svg></span><span data-i18n="aReceive">استلام</span></button>
+  <button class="act" onclick="switchAccView('funding')"><span class="circ"><svg viewBox="0 0 24 24"><path d="M4 7h13l-3-3M20 17H7l3 3"/></svg></span><span data-i18n="aTransfer">تحويل</span></button>
+  <button class="act" onclick="actMsg('aMore')"><span class="circ"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></span><span data-i18n="aMore">المزيد</span></button>
+</div>
+<!-- TABS -->
+<div class="tabs">
+  <button class="on" data-tab="crypto" onclick="pickTab(this)" data-i18n="tabCrypto">العملات</button>
+  <button data-tab="coll" onclick="pickTab(this)" data-i18n="tabCollectibles">المقتنيات</button>
+  <button data-tab="fav" onclick="pickTab(this)" data-i18n="tabFav">المفضلة</button>
+</div>
+<!-- CRYPTO PANE -->
+<div class="pane on" id="pane-crypto">
+  <div class="minirow"><label><input type="checkbox" id="hideSmall" onchange="renderBalances()"><span data-i18n="wHideSmall">إخفاء الأرصدة الصغيرة</span></label></div>
+  <div class="lsthead"><span class="h1" data-i18n="wAsset">الأصل</span><span class="h2" data-i18n="wValue">الكمية / القيمة</span></div>
+  <div class="list" id="balList"></div>
+</div>
+<!-- COLLECTIBLES PANE -->
+<div class="pane" id="pane-coll">
+  <div class="list"><div class="empty" data-i18n="wNoColl">لا توجد مقتنيات بعد</div></div>
+</div>
+<!-- FAVORITES PANE -->
+<div class="pane" id="pane-fav">
+  <div class="secttl">⭐ <span data-i18n="tabFav">المفضلة</span> — <span data-i18n="tabAlerts">التنبيهات</span></div>
+  <div class="list" id="favList"></div>
+</div>
+<!-- /SPOT VIEW --></div>
+<!-- ===== FUTURES VIEW ===== -->
+<div class="accview" id="view-futures">
+  <div class="hero">
+    <div class="lbl"><span>رصيد العقود الآجلة</span>
+      <span class="eye" onclick="toggleEye()"><svg viewBox="0 0 24 24"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></span></div>
+    <div class="big" id="futBig">$0.00</div>
+    <div class="pnl"><span class="cur">محفظة منفصلة عن الفوري</span></div>
+    <div class="ovloc" id="futBrk" style="margin-top:8px;line-height:1.7"></div>
+  </div>
+  <div class="acts" style="justify-content:center;gap:40px">
+    <button class="act" onclick="switchAccView('funding')"><span class="circ"><svg viewBox="0 0 24 24"><path d="M4 7h13l-3-3M20 17H7l3 3"/></svg></span><span>تحويل</span></button>
+    <button class="act" onclick="location.href='futures.html'"><span class="circ"><svg viewBox="0 0 24 24"><path d="M3 3v18h18M8 14l3-3 3 3 4-5"/></svg></span><span>تداول</span></button>
+  </div>
+  <div class="lsthead"><span class="h1">الأصل</span><span class="h2">الكمية / القيمة</span></div>
+  <div class="list" id="futList"></div>
+</div>
+<!-- ===== FUNDING / TRANSFER VIEW ===== -->
+<div class="accview" id="view-funding">
+  <div class="xfer">
+    <h3>تحويل داخلي بين المحفظتين</h3>
+    <div class="dirbox">
+      <div class="side"><small>من</small><b id="xFromLbl">المحفظة الفورية</b></div>
+      <button class="swap" onclick="xferSwap()" aria-label="تبديل الاتجاه"><svg viewBox="0 0 24 24"><path d="M7 4L3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7"/></svg></button>
+      <div class="side"><small>إلى</small><b id="xToLbl">العقود الآجلة</b></div>
+    </div>
+    <div class="fld"><label>العملة</label><select id="xCur" onchange="updateXferAvail()"></select></div>
+    <div class="fld"><label>المبلغ</label><div class="amtwrap"><input id="xAmt" type="number" step="any" inputmode="decimal" placeholder="0.00"><button class="mx" onclick="xferMax()">الأقصى</button></div><div class="avail" id="xAvail">المتاح: 0.00 USDT</div></div>
+    <button class="go" id="xGo" onclick="doTransfer()">تأكيد التحويل</button>
+  </div>
+</div>
+<nav class="bnav">
+  <a href="index.html"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h14V10"/></svg><span data-i18n="navHome">الرئيسية</span></a>
+  <a href="markets.html"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M21 7v5h-5"/></svg><span data-i18n="navMarkets">الأسواق</span></a>
+  <a href="trading.html"><svg viewBox="0 0 24 24"><path d="M7 8h13l-3-3M17 16H4l3 3"/></svg><span data-i18n="navTrading">التداول</span></a>
+  <a href="futures.html"><svg viewBox="0 0 24 24"><path d="M3 3v18h18M8 14l3-3 3 3 4-5"/></svg><span data-i18n="navFutures">عقود آجلة</span></a>
+  <a href="square.html"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg><span>Square</span></a>
+  <a href="wallet.html" class="active"><svg viewBox="0 0 24 24"><path d="M3 7h16a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2zM16 13h.01"/></svg><span data-i18n="navWallet">المحفظة</span></a>
+</nav>
+<!-- ===== سجلات المعاملات ===== -->
+<div class="recsheet" id="recSheet">
+  <div class="rhead">
+    <button class="icobtn" onclick="closeRecords()" aria-label="رجوع"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
+    <b>السجلات</b>
+    <button class="icobtn" onclick="exportRecords()" aria-label="تصدير" title="تصدير CSV"><svg viewBox="0 0 24 24"><path d="M12 3v12M8 11l4 4 4-4M5 21h14"/></svg></button>
+    <button class="icobtn" onclick="loadRecords()" aria-label="تحديث"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 11-3-6.7M21 4v5h-5"/></svg></button>
+  </div>
+  <div class="recfilters">
+    <button class="on" data-f="all" onclick="recFilter('all')">الكل</button>
+    <button data-f="deposit" onclick="recFilter('deposit')">الإيداعات</button>
+    <button data-f="withdraw" onclick="recFilter('withdraw')">السحوبات</button>
+    <button data-f="transfer" onclick="recFilter('transfer')">التحويلات</button>
+    <button data-f="trade" onclick="recFilter('trade')">التداول</button>
+    <button data-f="futures" onclick="recFilter('futures')">العقود</button>
+    <button data-f="fee" onclick="recFilter('fee')">العمولات</button>
+    <button data-f="admin" onclick="recFilter('admin')">إداري</button>
+  </div>
+  <div class="recbody" id="recBody"><div class="recempty">—</div></div>
+</div>
+<!-- ===== تفاصيل العملية ===== -->
+<div class="recdetail" id="recDetail">
+  <div class="rdcard">
+    <div class="rdhead"><b id="rdTitle">تفاصيل العملية</b><button class="icobtn" onclick="closeRecDetail()" aria-label="إغلاق"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div class="rdbody" id="rdBody"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<!-- ===== لوحة الإشعارات (جرس المحفظة) ===== -->
+<div id="notifSheet" style="position:fixed;inset:0;z-index:120;background:rgba(0,0,0,.55);display:none;justify-content:center;align-items:flex-start">
+  <div style="width:100%;max-width:480px;height:100%;background:var(--bg);display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;gap:10px;padding:calc(12px + env(safe-area-inset-top)) 14px 12px;border-bottom:1px solid var(--border)">
+      <button class="icobtn" onclick="closeNotif()" aria-label="رجوع"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
+      <b style="flex:1;font-size:16px">سجل الإشعارات</b>
+      <button class="icobtn" onclick="markAllNotif()" title="تعليم الكل كمقروء" aria-label="تعليم الكل كمقروء"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></button>
+    </div>
+    <div class="recfilters" style="padding:12px 14px 6px">
+      <button class="on" data-nf="all" onclick="notifFilter('all')">الكل</button>
+      <button data-nf="money" onclick="notifFilter('money')">الأموال</button>
+      <button data-nf="admin" onclick="notifFilter('admin')">النظام</button>
+      <button data-nf="unread" onclick="notifFilter('unread')">غير المقروءة</button>
+    </div>
+    <div id="notifBody" style="flex:1;overflow-y:auto;padding:4px 12px calc(16px + env(safe-area-inset-bottom))"><div style="text-align:center;color:var(--muted);padding:40px 0">—</div></div>
+  </div>
+</div>
+<script>
+const API_BASE='';const MARKETS_PATH='/api/markets';
+const $=id=>document.getElementById(id);
+const fmt=(n,d=2)=>{n=+n;if(!isFinite(n))return'0';return n.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});};
+function pdec(p){p=Math.abs(+p);if(!isFinite(p)||p===0)return 2;if(p>=1)return 2;if(p>=0.1)return 4;if(p>=0.01)return 5;if(p>=0.001)return 6;if(p>=0.0001)return 7;return 8;}
+function icoUrl(b){return 'https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/128/color/'+String(b).toLowerCase()+'.png';}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+const QUOTES=['USDT','USDC','FDUSD','BUSD','TUSD','BTC','ETH','BNB'];
+function splitSym(sym){for(const q of QUOTES){if(sym.endsWith(q)&&sym.length>q.length)return{base:sym.slice(0,-q.length),quote:q};}return{base:sym,quote:'USDT'};}
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),3200);}
+function T(k){return (window.APEX_I18N&&APEX_I18N.t)?APEX_I18N.t(k):k;}
+/* ===== الهوية والتخزين لكل مستخدم ===== */
+const SESS=JSON.parse(localStorage.getItem('skygo_session')||'{}');
+function _uid(e){var h=0;e=(e||'').toLowerCase();for(var i=0;i<e.length;i++){h=(h*31+e.charCodeAt(i))>>>0;}return(100000000+(h%900000000));}
+const UID=_uid(SESS.email);
+const WKEY='skygo_wallet_'+UID,FAVKEY='apex_favs_'+UID,ALKEY='apex_alerts_'+UID;
+function loadWallet(){try{return JSON.parse(localStorage.getItem(WKEY)||'{}')||{};}catch(e){return{};}}
+function loadFavs(){try{return JSON.parse(localStorage.getItem(FAVKEY)||'[]');}catch(e){return[];}}
+function loadAlerts(){try{return JSON.parse(localStorage.getItem(ALKEY)||'{}')||{};}catch(e){return{};}}
+let wallet=loadWallet(),FAVS=loadFavs(),ALERTS=loadAlerts();
+function saveFavs(){localStorage.setItem(FAVKEY,JSON.stringify(FAVS));}
+function saveAlerts(){localStorage.setItem(ALKEY,JSON.stringify(ALERTS));}
+let PRICES={};const pxPrev={};let HIDE=localStorage.getItem('apex_hidebal')==='1';
+const STAR='<svg viewBox="0 0 24 24"><path d="M12 3l2.9 6 6.1.9-4.5 4.4 1.1 6.3L12 18.6 6.4 20.6l1.1-6.3L3 9.9 9.1 9z"/></svg>';
+/* ===== أصوات + إشعارات المتصفح ===== */
+function beep(){try{const a=new (window.AudioContext||window.webkitAudioContext)();const o=a.createOscillator(),g=a.createGain();o.connect(g);g.connect(a.destination);o.type='sine';o.frequency.value=880;g.gain.setValueAtTime(.001,a.currentTime);g.gain.exponentialRampToValueAtTime(.25,a.currentTime+.02);g.gain.exponentialRampToValueAtTime(.001,a.currentTime+.5);o.start();o.stop(a.currentTime+.5);}catch(e){}}
+function askPerm(){if('Notification' in window){Notification.requestPermission().then(()=>{$('permbar').style.display=(Notification.permission==='default')?'flex':'none';});}}
+function notify(title,body){if('Notification' in window&&Notification.permission==='granted'){try{new Notification(title,{body:body});}catch(e){}}toast(title+' — '+body);beep();}
+function actMsg(k){toast(T(k)+' — '+(APEX_I18N.current()==='en'?'coming soon':APEX_I18N.current()==='ar'?'قريباً':'...'));}
+function toggleEye(){HIDE=!HIDE;localStorage.setItem('apex_hidebal',HIDE?'1':'0');renderBalances();}
+function pickTab(btn){document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('on'));btn.classList.add('on');
+  const t=btn.dataset.tab;document.querySelectorAll('.pane').forEach(p=>p.classList.remove('on'));$('pane-'+t).classList.add('on');}
+window.actMsg=actMsg;window.toggleEye=toggleEye;window.pickTab=pickTab;window.askPerm=askPerm;
+</script>
+<script>
+function priceOf(coin){if(coin==='USDT'||coin==='USDC'||coin==='BUSD'||coin==='FDUSD')return 1;if(window.APX&&coin===APX.BASE)return APX.live();const p=PRICES[coin+'USDT'];return p?p.price:0;}
+/* أيقونة العملة: شعار A الذهبي لـAPX */
+/* أيقونة العملة: الحلّ المشترك الثابت — دائرة ملونة بالحرف وتحتها الصورة،
+   فلا يوجد أي لحظة فراغ حتى لو فشل تحميل الصورة أو انقطع الإنترنت. */
+function coinIcon(c,size){return (window.APX&&c===APX.BASE)?'<span class="apxlogo">A</span>':((window.APXICO)?APXICO.html(c,size||30):'<span style="width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#2a3441;color:#fff;font-weight:900">'+String(c||'?').slice(0,1)+'</span>');}
+/* حقن عملة APX ضمن المحفظة (الرصيد محفوظ لكل حساب) + سعرها الحيّ */
+function injectApx(){
+  if(!window.APX)return;
+  var c=APX.cfg();
+  if(c.enabled!==false){var tk=APX.ticker();PRICES[APX.SYM]={price:APX.live(),pct:parseFloat(tk.priceChangePercent)||0};}
+  var h=APX.hold();
+  if(h>0)wallet[APX.BASE]=h; else if(wallet[APX.BASE]!=null)delete wallet[APX.BASE];
+}
+function mask(s){return HIDE?'∗∗∗∗∗∗':s;}
+function renderBalances(){
+  const hideSmall=$('hideSmall')&&$('hideSmall').checked;
+  let rows=Object.keys(wallet).map(c=>({c:c,amt:+wallet[c]||0})).filter(r=>r.amt>0);
+  rows.forEach(r=>{r.val=r.amt*priceOf(r.c);});
+  if(hideSmall)rows=rows.filter(r=>r.val>=1);
+  rows.sort((a,b)=>b.val-a.val);
+  let total=0,pnlUsd=0;
+  Object.keys(wallet).forEach(c=>{const amt=+wallet[c]||0;if(amt<=0)return;const v=amt*priceOf(c);total+=v;const pm=PRICES[c+'USDT'];const pct=pm?pm.pct:0;if(pct)pnlUsd+=v-(v/(1+pct/100));});
+  const base=total-pnlUsd;const pnlPct=base>0?(pnlUsd/base*100):0;const up=pnlUsd>=0;
+  $('heroBig').textContent=mask('$'+fmt(total,2));
+  const hp=$('heroPnl');hp.className='pnl '+(up?'up':'dn');
+  $('pnlVal').textContent=(up?'+':'')+fmt(pnlUsd,2)+' ('+(up?'+':'')+pnlPct.toFixed(2)+'%)';
+  const body=$('balList');
+  if(!rows.length){
+    if(body.dataset.sig!=='empty'){body.dataset.sig='empty';body.innerHTML='<div class="empty">'+T('wNoAssets')+'</div>';}
+    return;
+  }
+  /* بناء مرة واحدة ثم تحديث الأرقام فقط — كان إعادة البناء كل ثانية
+     تحذف أيقونة العملة فتُطلب من جديد وتختفي لحظياً (الوميض). */
+  const sig=rows.map(r=>r.c).join(',');
+  if(body.dataset.sig===sig && body.querySelector('.row[data-c]')){
+    updateBalanceRows(body,rows);
+    return;
+  }
+  body.dataset.sig=sig;
+  body.innerHTML=rows.map(r=>{
+    const pm=PRICES[r.c+'USDT'];const price=pm?pm.price:(r.c==='USDT'?1:null);const pct=pm?pm.pct:null;const u=pct>=0;
+    const pxLine='$'+(price!=null?fmt(price,pdec(price)):'--')+(pct!=null?'<span class="pc '+(u?'up':'dn')+'">'+(u?'+':'')+pct.toFixed(2)+'%</span>':'');
+    return '<div class="row" data-c="'+esc(r.c)+'">'+
+     coinIcon(r.c)+
+     '<div class="nm"><b>'+esc(r.c)+'</b><span class="px">'+pxLine+'</span></div>'+
+     '<div class="rt"><div class="qty">'+mask(fmt(r.amt,r.c==='USDT'?2:6))+'</div><div class="val">≈ '+mask(fmt(r.val,2)+' USDT')+'</div></div>'+
+    '</div>';
+  }).join('');
+}
+
+/* تحديث أرقام صفوف المحفظة الموجودة (الأيقونة لا تُلمس) */
+function updateBalanceRows(body,rows){
+  for(let i=0;i<rows.length;i++){
+    const r=rows[i];
+    const el=body.querySelector('.row[data-c="'+r.c+'"]');
+    if(!el)continue;
+    const pm=PRICES[r.c+'USDT'], price=pm?pm.price:(r.c==='USDT'?1:null), pct=pm?pm.pct:null;
+    const pxEl=el.querySelector('.px');
+    if(pxEl){
+      const html='$'+(price!=null?fmt(price,pdec(price)):'--')+(pct!=null?'<span class="pc '+((pct>=0)?'up':'dn')+'">'+((pct>=0)?'+':'')+pct.toFixed(2)+'%</span>':'');
+      if(pxEl.innerHTML!==html)pxEl.innerHTML=html;
+    }
+    const qEl=el.querySelector('.qty');
+    if(qEl){const t=mask(fmt(r.amt,r.c==='USDT'?2:6));if(qEl.textContent!==t)qEl.textContent=t;}
+    const vEl=el.querySelector('.val');
+    if(vEl){const t='≈ '+mask(fmt(r.val,2)+' USDT');if(vEl.textContent!==t)vEl.textContent=t;}
+  }
+}
+function renderFavs(){
+  const body=$('favList');
+  if(!FAVS.length){
+    if(body.dataset.sig!=='empty'){body.dataset.sig='empty';body.innerHTML='<div class="empty">'+T('wNoAssets')+' — ⭐ '+T('mFav')+'</div>';}
+    return;
+  }
+  const _fsig=FAVS.join(',');
+  if(body.dataset.sig===_fsig && body.querySelector('.favrow[data-sym]')){updateFavRows(body);return;}
+  body.dataset.sig=_fsig;
+  body.innerHTML=FAVS.map(sym=>{
+    const sp=splitSym(sym);const pm=PRICES[sym];const price=pm?pm.price:null;const pct=pm?pm.pct:null;
+    const prev=pxPrev[sym];let dir='eq';if(price!=null&&prev!=null){if(price>prev)dir='up';else if(price<prev)dir='dn';}if(price!=null)pxPrev[sym]=price;
+    const up=pct>=0;const al=ALERTS[sym];let alertHtml;
+    if(al&&al.triggered){alertHtml='<span class="alerttag done">✓ تحقق '+(al.dir==='up'?'≥':'≤')+' '+fmt(al.target,pdec(al.target))+'</span>'+'<button class="setbtn" onclick="rearm(\''+sym+'\')">إعادة تفعيل</button>'+'<button class="clrbtn" onclick="clearAlert(\''+sym+'\')">حذف</button>';}
+    else if(al){alertHtml='<span class="alerttag">🔔 عند '+(al.dir==='up'?'≥':'≤')+' '+fmt(al.target,pdec(al.target))+' '+esc(sp.quote)+'</span>'+'<button class="clrbtn" onclick="clearAlert(\''+sym+'\')">إلغاء</button>';}
+    else{alertHtml='<div class="seg"><button class="on" data-d="up" onclick="segPick(this)">≥</button><button data-d="down" onclick="segPick(this)">≤</button></div>'+'<input id="al_'+sym+'" type="number" step="any" inputmode="decimal" placeholder="السعر المستهدف">'+'<button class="setbtn" onclick="setAlert(\''+sym+'\')">تفعيل التنبيه</button>';}
+    return '<div class="favrow" data-sym="'+sym+'">'+
+      '<div class="favtop">'+
+        '<span class="star" onclick="toggleFav(\''+sym+'\')">'+STAR+'</span>'+
+        coinIcon(sp.base,30)+
+        '<div class="nm" style="cursor:pointer" onclick="location.href=\'trading.html?symbol='+sym.toLowerCase()+'\'"><b>'+esc(sp.base)+'</b><span>'+esc(sp.base)+'/'+esc(sp.quote)+'</span></div>'+
+        '<div class="rt"><div class="fpx '+dir+'">'+(price!=null?fmt(price,pdec(price)):'--')+'</div>'+(pct!=null?'<span class="tagpc '+(up?'up':'dn')+'">'+(up?'+':'')+pct.toFixed(2)+'%</span>':'')+'</div>'+
+      '</div>'+
+      '<div class="alertbox" data-sym="'+sym+'">'+alertHtml+'</div>'+
+    '</div>';
+  }).join('');
+}
+/* تحديث أرقام صفوف المفضلة فقط (الأيقونة والتنبيهات لا تُلمس) */
+function updateFavRows(body){
+  for(let i=0;i<FAVS.length;i++){
+    const sym=FAVS[i];
+    const el=body.querySelector('.favrow[data-sym="'+sym+'"]');
+    if(!el)continue;
+    const pm=PRICES[sym]; if(!pm)continue;
+    const price=pm.price, pct=pm.pct;
+    const pxEl=el.querySelector('.fpx');
+    if(pxEl){
+      const prev=pxPrev[sym];
+      if(price!=null&&prev!==price){
+        pxEl.textContent=price!=null?fmt(price,pdec(price)):'--';
+        pxEl.classList.remove('up','dn','eq');
+        if(prev!=null){void pxEl.offsetWidth;pxEl.classList.add(price>prev?'up':'dn');}
+        pxPrev[sym]=price;
+      }
+    }
+    const pcEl=el.querySelector('.tagpc');
+    if(pcEl&&pct!=null){
+      const up=pct>=0;
+      const t=(up?'+':'')+pct.toFixed(2)+'%';
+      if(pcEl.textContent!==t)pcEl.textContent=t;
+      pcEl.classList.toggle('up',up);
+      pcEl.classList.toggle('dn',!up);
+    }
+  }
+}
+function segPick(btn){const seg=btn.parentElement;[...seg.children].forEach(b=>b.classList.remove('on'));btn.classList.add('on');}
+function setAlert(sym){const inp=$('al_'+sym);const v=parseFloat(inp.value);if(!isFinite(v)||v<=0){toast('أدخل سعراً صالحاً');return;}
+  const box=inp.closest('.alertbox');const on=box.querySelector('.seg button.on');const dir=on?on.dataset.d:'up';
+  ALERTS[sym]={target:v,dir:dir,triggered:false,createdAt:Date.now()};saveAlerts();renderFavs();
+  const sp=splitSym(sym);toast('تم ضبط تنبيه '+sp.base+' عند '+(dir==='up'?'≥':'≤')+' '+fmt(v,pdec(v))+' '+sp.quote);
+  if('Notification' in window&&Notification.permission==='default')askPerm();}
+function clearAlert(sym){delete ALERTS[sym];saveAlerts();renderFavs();}
+function rearm(sym){if(ALERTS[sym]){ALERTS[sym].triggered=false;delete ALERTS[sym].hitPrice;saveAlerts();renderFavs();}}
+function toggleFav(sym){const i=FAVS.indexOf(sym);if(i>=0)FAVS.splice(i,1);saveFavs();renderFavs();}
+window.segPick=segPick;window.setAlert=setAlert;window.clearAlert=clearAlert;window.rearm=rearm;window.toggleFav=toggleFav;
+function checkAlerts(){
+  Object.keys(ALERTS).forEach(sym=>{const al=ALERTS[sym];if(!al||al.triggered)return;const pm=PRICES[sym];if(!pm||pm.price==null)return;
+    const hit=al.dir==='up'?(pm.price>=al.target):(pm.price<=al.target);
+    if(hit){al.triggered=true;al.hitPrice=pm.price;saveAlerts();const sp=splitSym(sym);
+      notify('🔔 تنبيه سعر '+sp.base,sp.base+'/'+sp.quote+' وصل إلى '+fmt(pm.price,pdec(pm.price))+' '+sp.quote);}
+  });
+}
+async function poll(){try{const r=await fetch(API_BASE+MARKETS_PATH,{headers:{'Accept':'application/json'}});if(!r.ok)throw 0;const raw=await r.json();const arr=Array.isArray(raw)?raw:(Array.isArray(raw.data)?raw.data:Object.values(raw));
+  const map={};arr.forEach(d=>{const sym=d.symbol||d.s;if(!sym)return;const last=d.lastPrice!=null?d.lastPrice:(d.c!=null?d.c:(d.price!=null?d.price:d.p));const pct=d.priceChangePercent!=null?d.priceChangePercent:(d.P!=null?d.P:0);map[sym]={price:parseFloat(last),pct:parseFloat(pct)||0};});PRICES=map;injectApx();
+  checkAlerts();renderBalances();renderFavs();
+}catch(e){}}
+if('Notification' in window&&Notification.permission==='default')$('permbar').style.display='flex';
+/* ===== الرصيد يُقرأ من السيرفر (المصدر الموثوق) =====
+   شحن الإدارة والتحويلات تُحدّث الرصيد على السيرفر، وهذه الصفحة تسحبه دورياً
+   وتعكسه محلياً، كما ترسل نبضة نشاط لإظهار حالة "نشط" أثناء التصفّح. */
+var TOK=SESS.token||localStorage.getItem('apex_token')||'';
+/* ===== حالة التجميد (مفروضة خادميّاً — هذه مجرد واجهة تعكسها) ===== */
+var FROZEN=false, FREEZE_UNTIL=null;
+function freezeMsg(){return FREEZE_UNTIL?('⛔ الرصيد مجمّد حتى '+fmtFreezeUntil(FREEZE_UNTIL)):'⛔ الرصيد مجمّد';}
+function fmtFreezeUntil(ts){try{var d=new Date(Number(ts));if(isNaN(d.getTime()))return '';var p=function(n){return(n<10?'0':'')+n;};return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes());}catch(e){return '';}}
+function applyFrozen(fu){FROZEN=!!fu;FREEZE_UNTIL=(fu&&fu.freezeUntil)?fu.freezeUntil:null;renderFrozen();}
+async function loadFrozen(){if(!TOK)return;try{var r=await fetch('/api/auth/me',{headers:{'Authorization':'Bearer '+TOK}});if(!r.ok)return;var d=await r.json();var u=d.user||{};applyFrozen(!!u.frozen);if(u.frozen){FREEZE_UNTIL=u.freezeUntil||null;renderFrozen();}}catch(e){}}
+function renderFrozen(){
+  var msg=freezeMsg();
+  var a=$('ovFrozen'),b=$('heroFrozen');
+  if(a){a.style.display=FROZEN?'block':'none';a.textContent=msg;}
+  if(b){b.style.display=FROZEN?'block':'none';b.textContent=msg+' — لا يمكن تنفيذ عمليات الإيداع أو السحب أو التحويل أو التداول';}
+  document.querySelectorAll('.acts .act').forEach(function(el){el.style.opacity=FROZEN?'0.45':'';el.style.pointerEvents=FROZEN?'none':'';});
+}
+function frozenGuard(msg){if(FROZEN){toast(msg||(freezeMsg()+' — لا يمكن تنفيذ العملية'));return true;}return false;}
+function saveWallet(){try{localStorage.setItem(WKEY,JSON.stringify(wallet));}catch(e){}}
+function mirrorBalances(b){if(!b)return;for(var k in wallet){wallet[k]=0;}for(var k2 in b){wallet[String(k2).toUpperCase()]=Number(b[k2])||0;}injectApx();saveWallet();renderBalances();}
+async function pullWallet(){if(!TOK)return;try{var r=await fetch('/api/wallet/me',{headers:{'Authorization':'Bearer '+TOK}});if(!r.ok)return;var d=await r.json();mirrorBalances(d.balances||{});}catch(e){}}
+function syncSeen(){if(!TOK)return;try{fetch('/api/wallet/sync',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOK}}).then(function(r){return r.ok?r.json():null;}).then(function(d){if(d&&d.balances)mirrorBalances(d.balances);}).catch(function(){});}catch(e){}}
+/* ===== إشعارات المحفظة (الإيداعات/السحوبات/التحويلات) ===== */
+var NOTIFS=[], _notifLastAt=0, _notifFirst=true, NOTIF_FILTER='all';
+function notifTime(ts){try{return new Date(ts).toLocaleString('en-GB',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return '';}}
+function notifDay(ts){try{var d=new Date(ts);var now=new Date();var y=new Date(now);y.setDate(now.getDate()-1);
+  if(d.toDateString()===now.toDateString())return 'اليوم';
+  if(d.toDateString()===y.toDateString())return 'أمس';
+  return d.toLocaleDateString('en-GB',{year:'numeric',month:'2-digit',day:'2-digit'});}catch(e){return '';}}
+function notifFilter(f){NOTIF_FILTER=f;try{document.querySelectorAll('#notifSheet .recfilters button').forEach(function(b){b.classList.toggle('on',b.dataset.nf===f);});}catch(e){}renderNotif();}
+window.notifFilter=notifFilter;
+async function pullNotif(){
+  if(!TOK)return;
+  try{var r=await fetch('/api/notifications',{headers:{'Authorization':'Bearer '+TOK}});if(!r.ok)return;
+    var d=await r.json();NOTIFS=d.notifications||[];var unread=d.unread||0;
+    var b=document.getElementById('notifBadge');
+    if(b){if(unread>0){b.textContent=unread>99?'99+':String(unread);b.style.display='flex';}else{b.style.display='none';}}
+    /* تنبيه صوتي + toast عند وصول إشعار جديد (لا يعمل عند أول تحميل) */
+    var newest=NOTIFS.length?Math.max.apply(null,NOTIFS.map(function(n){return +n.at||0;})):0;
+    if(!_notifFirst && newest>_notifLastAt){
+      var fresh=NOTIFS.filter(function(n){return (+n.at||0)>_notifLastAt;});
+      if(fresh[0]){try{beep();}catch(e){}toast('🔔 '+(fresh[0].title||'إشعار جديد'));}
+    }
+    if(newest>_notifLastAt)_notifLastAt=newest;
+    _notifFirst=false;
+    if(document.getElementById('notifSheet').style.display==='flex')renderNotif();
+  }catch(e){}
+}
+function renderNotif(){
+  var el=document.getElementById('notifBody');if(!el)return;
+  var arr=NOTIFS.slice().sort(function(a,b){return (+b.at||0)-(+a.at||0);});
+  if(NOTIF_FILTER==='unread')arr=arr.filter(function(n){return !n.read;});
+  else if(NOTIF_FILTER!=='all')arr=arr.filter(function(n){return (n.kind||'admin')===NOTIF_FILTER;});
+  if(!arr.length){el.innerHTML='<div style="text-align:center;color:var(--muted);padding:40px 0">لا توجد إشعارات '+(NOTIF_FILTER==='all'?'بعد':'في هذا القسم')+'</div>';return;}
+  var html='',lastDay='';
+  arr.forEach(function(n){
+    var day=notifDay(n.at);
+    if(day!==lastDay){html+='<div style="color:var(--muted);font-size:11.5px;font-weight:800;margin:10px 4px 7px">'+day+'</div>';lastDay=day;}
+    var unread=!n.read;
+    var isMoney=(n.kind||'admin')==='money';
+    var tagTxt=isMoney?'مالي':'نظام';
+    html+='<div style="display:flex;gap:10px;background:'+(unread?'var(--panel2)':'var(--panel)')+';border:1px solid var(--border);border-radius:12px;padding:12px 13px;margin-bottom:9px">'+
+      '<div style="width:34px;height:34px;flex:0 0 auto;border-radius:10px;background:'+(unread?'#f0b90b22':'var(--panel2)')+';display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" style="width:17px;height:17px;stroke:'+(unread?'#f0b90b':'var(--muted)')+';fill:none;stroke-width:2"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0"/></svg></div>'+
+      '<div style="flex:1;min-width:0"><div style="font-weight:800;font-size:13.5px;display:flex;align-items:center;gap:6px">'+esc(n.title||'إشعار')+(unread?'<span style="width:7px;height:7px;border-radius:50%;background:var(--red,#f6465d);display:inline-block"></span>':'')+'<span style="margin-inline-start:auto;font-size:10px;font-weight:800;color:'+(isMoney?'var(--gold2)':'var(--muted)')+';background:'+(isMoney?'rgba(224,166,21,.12)':'var(--panel2)')+';border-radius:6px;padding:2px 7px">'+tagTxt+'</span></div>'+
+      '<div style="color:var(--muted);font-size:12.5px;margin-top:3px;line-height:1.6">'+esc(n.body||'')+'</div>'+
+      '<div style="color:var(--muted);font-size:11px;margin-top:5px">'+notifTime(n.at)+'</div></div></div>';
+  });
+  el.innerHTML=html;
+}
+async function markAllNotif(){
+  if(!TOK)return;
+  var unreadIds=NOTIFS.filter(function(n){return !n.read;}).map(function(n){return n.id;});
+  for(var i=0;i<unreadIds.length;i++){try{await fetch('/api/notifications/read',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOK},body:JSON.stringify({id:unreadIds[i]})});}catch(e){}}
+  NOTIFS.forEach(function(n){n.read=true;});
+  var b=document.getElementById('notifBadge');if(b)b.style.display='none';
+  renderNotif();
+}
+function openNotif(){var s=document.getElementById('notifSheet');if(!s)return;s.style.display='flex';renderNotif();pullNotif();}
+function closeNotif(){var s=document.getElementById('notifSheet');if(s)s.style.display='none';}
+/* للمستخدم المُسجّل: السيرفر هو المصدر الوحيد للرصيد، لذا لا نعرض أي رصيد مخزّن
+   محلياً قديم (لتجنّب ظهوره ثم اختفائه)؛ ننتظر ردّ السيرفر. */
+if(TOK){for(var _k in wallet)wallet[_k]=0;}
+injectApx();renderBalances();renderFavs();poll();
+/* ===== توفير باندويث (خطة Render المجانية) =====
+   كانت الصفحة تطلب 12 مرة/دقيقة لكل زائر مفتوح.
+   الآن 15 ثانية أثناء العرض، وتوقف تام عند إخفاء التبويب. */
+var POLL_MS=15000,_pollTimer=null;
+function _startPoll(){if(_pollTimer)return;_pollTimer=setInterval(function(){if(!document.hidden)poll();},POLL_MS);}
+function _stopPoll(){if(_pollTimer){clearInterval(_pollTimer);_pollTimer=null;}}
+document.addEventListener('visibilitychange',function(){
+  if(document.hidden){_stopPoll();}else{_startPoll();try{poll();}catch(e){}}
+});
+window.addEventListener('pagehide',_stopPoll);
+_startPoll();
+/* تحديث APX لحظياً مع حركة الشارت + أي تغيير من الإدارة */
+/* تحديث حيّ للسعر كل 3 ثوان (بدل ثانية) — renderBalances أصبحت تحدّث
+   الأرقام فقط لا تبني الصفوف، فالأيقونات ثابتة ولا ترمش. */
+/* APX محلي بالكامل (بلا شبكة) — تحديث العرض فقط عند حركته فعلياً */
+if(window.APX){APX.onChange&&APX.onChange(function(){injectApx();renderBalances();});setInterval(function(){if(!document.hidden){injectApx();renderBalances();}},10000);}
+/* مزامنة الحساب: أبطأ + تتوقف عند إخفاء التبويب (كانت 8ث/12ث دائماً) */
+if(TOK){
+  pullWallet();syncSeen();pullNotif();
+  var _wt=[];
+  function _startWt(){
+    if(_wt.length)return;
+    _wt.push(setInterval(function(){if(!document.hidden)pullWallet();},30000));
+    _wt.push(setInterval(function(){if(!document.hidden)syncSeen();},60000));
+    _wt.push(setInterval(function(){if(!document.hidden)pullNotif();},45000));
+  }
+  function _stopWt(){_wt.forEach(clearInterval);_wt=[];}
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden)_stopWt();else{_startWt();pullWallet();}
+  });
+  _startWt();
+}
+</script>
+<script>
+/* ===== محفظة العقود الآجلة (منفصلة عن الفوري) + التحويل الداخلي ===== */
+var FUT={bal:{},dir:'spot2fut'};
+/* هامش الصفقات المفتوحة + الربح/الخسارة غير المحقق (نفس مفتاح صفحة العقود)
+   حتى لا يظهر رصيد العقود منقوصاً: المحجوز يُضاف للرصيد، والربح/الخسارة يتحرك. */
+function futPosStats(){
+  var locked=0,upnl=0;
+  try{var ps=JSON.parse(localStorage.getItem('skygo_futures_pos')||'[]');
+    if(Array.isArray(ps))ps.forEach(function(p){
+      var m=+p.margin||0;locked+=m;
+      var pm=PRICES[p.sym];var px=(pm&&pm.price)?pm.price:(+p.entry||0);
+      if(p.entry>0&&p.notional){var diff=(px-p.entry)/p.entry;upnl+=(p.side==='long'?1:-1)*diff*(+p.notional||0);}
+    });
+  }catch(e){}
+  return {locked:locked,upnl:upnl};
+}
+function futEquityUSDT(){var st=futPosStats();return (+FUT.bal.USDT||0)+st.locked+st.upnl;}
+function usdValue(cur,amt){amt=+amt||0;return amt*priceOf(cur);}
+function switchAccView(v,dir){
+  document.querySelectorAll('.accnav button').forEach(function(b){b.classList.toggle('on',b.dataset.v===v);});
+  document.querySelectorAll('.accview').forEach(function(el){
+    var on=el.id==='view-'+v;
+    el.classList.toggle('on',on);
+    el.classList.remove('accInNext','accInPrev');
+    if(on&&dir){void el.offsetWidth;el.classList.add(dir>0?'accInNext':'accInPrev');}
+  });
+  if(v==='overview')renderOverview();
+  if(v==='futures')renderFutures();
+  if(v==='funding')openXfer();
+}
+window.switchAccView=switchAccView;
+/* ===== السحب بالإصبع بين تبويبات الحساب =====
+   سحب لليمين ينتقل للتبويب التالي (نظرة عامة ← فورية ← العقود الآجلة ← التمويل)
+   وسحب لليسار يرجع للتبويب السابق. الضغط على التابات يبقى شغّالاً كما هو. */
+var ACC_ORDER=['overview','spot','futures','funding'];
+function curAccView(){
+  var b=document.querySelector('.accnav button.on');
+  return (b&&b.dataset.v)||'overview';
+}
+function accStep(dir){
+  var i=ACC_ORDER.indexOf(curAccView());if(i<0)i=0;
+  var j=i+dir;if(j<0)j=0;if(j>ACC_ORDER.length-1)j=ACC_ORDER.length-1;
+  if(j===i)return false;
+  switchAccView(ACC_ORDER[j],dir);return true;
+}
+function swipeBlocked(t){
+  try{
+    if(!t||!t.closest)return true;
+    if(t.closest('input,textarea,select,button,a,canvas,.recfilters,.recbody,.list,.recdetail.show,.recsheet.show'))return true;
+    var ns=document.getElementById('notifSheet');
+    if(ns&&ns.style.display&&ns.style.display!=='none')return true;
+  }catch(e){return true;}
+  return false;
+}
+(function(){
+  var sx=0,sy=0,st=0,act=false,lock=false;
+  document.addEventListener('touchstart',function(e){
+    if(e.touches.length!==1){act=false;return;}
+    var t=e.target;
+    lock=swipeBlocked(t);
+    if(lock){act=false;return;}
+    act=true;sx=e.touches[0].clientX;sy=e.touches[0].clientY;st=Date.now();
+  },{passive:true});
+  document.addEventListener('touchend',function(e){
+    if(!act)return;act=false;
+    var t=e.changedTouches&&e.changedTouches[0];if(!t)return;
+    var dx=t.clientX-sx,dy=t.clientY-sy;
+    if(Date.now()-st>900)return;
+    if(Math.abs(dx)<60)return;
+    if(Math.abs(dy)>Math.abs(dx)*0.8)return;
+    if(accStep(dx>0?1:-1)){try{navigator.vibrate&&navigator.vibrate(6);}catch(err){}}
+  },{passive:true});
+  document.addEventListener('touchcancel',function(){act=false;},{passive:true});
+})();
+async function fetchFutures(){if(!TOK)return;try{var r=await fetch('/api/wallet/futures',{headers:{'Authorization':'Bearer '+TOK}});if(!r.ok)return;var d=await r.json();var b=d.balances||{};var m={};for(var k in b){m[String(k).toUpperCase()]=Number(b[k])||0;}FUT.bal=m;renderOverview();renderFutures();if($('view-funding').classList.contains('on'))updateXferAvail();}catch(e){}}
+function spotTotal(){var t=0;for(var c in wallet){var a=+wallet[c]||0;if(a>0)t+=usdValue(c,a);}return t;}
+function futTotal(){var t=0;for(var c in FUT.bal){if(c==='USDT')continue;var a=+FUT.bal[c]||0;if(a>0)t+=usdValue(c,a);}var eq=futEquityUSDT();if(eq>0)t+=eq;return t;}
+/* ألوان مخطط التوزيع + تاريخ القيمة للرسم المصغّر */
+var DIST_COLORS=['#f0b90b','#2f80ed','#0ecb81','#f6465d','#9b59b6','#1abc9c','#e67e22','#8a94a3'];
+var OV_HIST=[];
+function combinedHoldings(){
+  var m={};
+  for(var c in wallet){var a=+wallet[c]||0;if(a>0)m[c]=(m[c]||0)+a;}
+  for(var f in FUT.bal){if(f==='USDT')continue;var b=+FUT.bal[f]||0;if(b>0)m[f]=(m[f]||0)+b;}
+  var _feq=futEquityUSDT();if(_feq>0)m['USDT']=(m['USDT']||0)+_feq;
+  var rows=Object.keys(m).map(function(c){return{c:c,amt:m[c],val:usdValue(c,m[c])};});
+  rows.sort(function(a,b){return b.val-a.val;});return rows;
+}
+function renderSpark(){
+  var el=$('ovSpark');if(!el)return;var p=el.querySelector('path');if(!p)return;
+  var h=OV_HIST.slice(-40);
+  if(h.length<2){p.setAttribute('d','');return;}
+  var mn=Math.min.apply(null,h),mx=Math.max.apply(null,h),rng=(mx-mn)||1;
+  var W=92,H=40,pad=3;
+  var d=h.map(function(v,i){var x=pad+i*(W-2*pad)/(h.length-1);var y=H-pad-((v-mn)/rng)*(H-2*pad);return (i?'L':'M')+x.toFixed(1)+' '+y.toFixed(1);}).join(' ');
+  var up=h[h.length-1]>=h[0];
+  p.setAttribute('d',d);p.setAttribute('stroke',up?'#0ecb81':'#f6465d');
+}
+function renderOverview(){
+  if(typeof renderFrozen==='function')renderFrozen();
+  var s=spotTotal(),f=futTotal(),total=s+f;
+  if($('ovBig'))$('ovBig').innerHTML=mask('$'+fmt(total,2))+' <small>USDT</small>';
+  if($('ovLoc'))$('ovLoc').textContent=mask('≈ '+fmt(total,2)+' USDT');
+  if($('ovSpot'))$('ovSpot').textContent=mask('$'+fmt(s,2));
+  if($('ovFut'))$('ovFut').textContent=mask('$'+fmt(f,2));
+  // today's PnL across spot+futures combined (24h change from PRICES)
+  var rows=combinedHoldings(),pnlUsd=0;
+  rows.forEach(function(r){var pm=PRICES[r.c+'USDT'];var pct=pm?pm.pct:0;if(pct)pnlUsd+=r.val-(r.val/(1+pct/100));});
+  var base=total-pnlUsd,pnlPct=base>0?(pnlUsd/base*100):0,up=pnlUsd>=0;
+  var box=$('ovPnlBox');if(box)box.className='tl '+(up?'up':'dn');
+  if($('ovPnlAmt'))$('ovPnlAmt').textContent=mask((up?'+':'')+fmt(pnlUsd,2)+' USDT');
+  if($('ovPnlPct'))$('ovPnlPct').textContent=(up?'+':'')+pnlPct.toFixed(2)+'%';
+  // mini chart history (session rolling, builds up as the page runs)
+  if(total>0||OV_HIST.length){OV_HIST.push(total);if(OV_HIST.length>60)OV_HIST.shift();}
+  renderSpark();
+  // distribution bar + legend (top assets by value)
+  var bar=$('ovDist'),leg=$('ovLegend');
+  if(bar&&leg){
+    if(!rows.length||total<=0){bar.innerHTML='<span style="width:100%;background:var(--panel2)"></span>';leg.innerHTML='';}
+    else{
+      var top=rows.slice(0,7),others=rows.slice(7).reduce(function(a,r){return a+r.val;},0);
+      var segs=top.map(function(r,i){return{c:r.c,val:r.val,col:DIST_COLORS[i%DIST_COLORS.length]};});
+      if(others>0)segs.push({c:'أخرى',val:others,col:DIST_COLORS[7]});
+      bar.innerHTML=segs.map(function(x){var w=(x.val/total*100);return '<span style="width:'+w.toFixed(2)+'%;background:'+x.col+'"></span>';}).join('');
+      leg.innerHTML=segs.map(function(x){return '<span class="lg"><i style="background:'+x.col+'"></i>'+esc(x.c)+' '+(x.val/total*100).toFixed(1)+'%</span>';}).join('');
+    }
+  }
+  // combined asset list — يُبنى مرة ثم تُحدَّث أرقامه فقط (بلا وميض أيقونات)
+  var body=$('ovList');
+  if(body){
+    var _osig=rows.map(function(r){return r.c;}).join(',');
+    if(!rows.length){
+      if(body.dataset.sig!=='empty'){body.dataset.sig='empty';body.innerHTML='<div class="empty">لا توجد أصول بعد</div>';}
+    }
+    else if(body.dataset.sig===_osig && body.querySelector('.row[data-c]')){
+      updateBalanceRows(body,rows);
+    }
+    else{body.dataset.sig=_osig;
+    body.innerHTML=rows.map(function(r){
+      var pm=PRICES[r.c+'USDT'];var price=pm?pm.price:(r.c==='USDT'?1:null);var pct=pm?pm.pct:null;var u=pct>=0;
+      var pxLine='$'+(price!=null?fmt(price,pdec(price)):'--')+(pct!=null?'<span class="pc '+(u?'up':'dn')+'">'+(u?'+':'')+pct.toFixed(2)+'%</span>':'');
+      return '<div class="row" data-c="'+esc(r.c)+'">'+coinIcon(r.c)+
+       '<div class="nm"><b>'+esc(r.c)+'</b><span class="px">'+pxLine+'</span></div>'+
+       '<div class="rt"><div class="qty">'+mask(fmt(r.amt,r.c==='USDT'?2:6))+'</div><div class="val">≈ '+mask(fmt(r.val,2)+' USDT')+'</div></div>'+'</div>';
+    }).join('');}
+  }
+}
+function renderFutures(){
+  if($('futBig'))$('futBig').textContent=mask('$'+fmt(futTotal(),2));
+  var _st=futPosStats();var _feq=futEquityUSDT();var _av=+FUT.bal.USDT||0;
+  var brk=$('futBrk');
+  if(brk){if(_st.locked>0||_st.upnl){var _up=_st.upnl>=0;
+    brk.innerHTML='المتاح للتحويل: '+mask(fmt(_av,2)+' USDT')+' · المحجوز بالصفقات: '+mask(fmt(_st.locked,2)+' USDT')+' · غير محقق: <b style="color:'+(_up?'var(--green)':'var(--red)')+'">'+(_up?'+':'')+fmt(_st.upnl,2)+' USDT</b>';}
+    else{brk.innerHTML='';}}
+  var body=$('futList');if(!body)return;
+  var _rfeq=futEquityUSDT();
+  var rows=Object.keys(FUT.bal).map(function(c){return{c:c,amt:+FUT.bal[c]||0};}).filter(function(r){return r.c!=='USDT'&&r.amt>0;});
+  if(_rfeq>1e-6)rows.unshift({c:'USDT',amt:_rfeq});
+  rows.forEach(function(r){r.val=usdValue(r.c,r.amt);});rows.sort(function(a,b){return b.val-a.val;});
+  if(!rows.length){body.innerHTML='<div class="empty">لا يوجد رصيد في محفظة العقود — حوّل من الفوري</div>';return;}
+  body.innerHTML=rows.map(function(r){
+    var pm=PRICES[r.c+'USDT'];var price=pm?pm.price:(r.c==='USDT'?1:null);var pct=pm?pm.pct:null;var u=pct>=0;
+    var pxLine='$'+(price!=null?fmt(price,pdec(price)):'--')+(pct!=null?'<span class="pc '+(u?'up':'dn')+'">'+(u?'+':'')+pct.toFixed(2)+'%</span>':'');
+    return '<div class="row">'+coinIcon(r.c)+
+     '<div class="nm"><b>'+esc(r.c)+'</b><span class="px">'+pxLine+'</span></div>'+
+     '<div class="rt"><div class="qty">'+mask(fmt(r.amt,r.c==='USDT'?2:6))+'</div><div class="val">≈ '+mask(fmt(r.val,2)+' USDT')+'</div></div>'+'</div>';
+  }).join('');
+}
+/* ===== التحويل الداخلي ===== */
+function srcBal(){return FUT.dir==='spot2fut'?wallet:FUT.bal;}
+function openXfer(){
+  $('xFromLbl').textContent=FUT.dir==='spot2fut'?'المحفظة الفورية':'العقود الآجلة';
+  $('xToLbl').textContent=FUT.dir==='spot2fut'?'العقود الآجلة':'المحفظة الفورية';
+  var src=srcBal();var curs=Object.keys(src).filter(function(c){return (+src[c]||0)>0;}).sort();
+  if(curs.indexOf('USDT')<0)curs.unshift('USDT');
+  var sel=$('xCur');var prev=sel.value;sel.innerHTML=curs.map(function(c){return '<option value="'+esc(c)+'">'+esc(c)+'</option>';}).join('');
+  if(prev&&curs.indexOf(prev)>=0)sel.value=prev;
+  updateXferAvail();
+}
+function updateXferAvail(){var sel=$('xCur');var c=sel.value||'USDT';var a=+srcBal()[c]||0;$('xAvail').textContent='المتاح: '+fmt(a,c==='USDT'?2:8)+' '+esc(c);}
+window.updateXferAvail=updateXferAvail;
+function xferSwap(){FUT.dir=FUT.dir==='spot2fut'?'fut2spot':'spot2fut';$('xAmt').value='';openXfer();}
+window.xferSwap=xferSwap;
+function xferMax(){var c=$('xCur').value||'USDT';$('xAmt').value=(+srcBal()[c]||0);}
+window.xferMax=xferMax;
+async function doTransfer(){
+  if(frozenGuard())return;
+  if(!TOK){toast('يرجى تسجيل الدخول أولاً');return;}
+  var c=($('xCur').value||'').toUpperCase();var amt=parseFloat($('xAmt').value);
+  if(!c){toast('اختر العملة');return;}
+  if(!isFinite(amt)||amt<=0){toast('أدخل مبلغاً صالحاً');return;}
+  var avail=+srcBal()[c]||0;if(amt>avail+1e-9){toast('المبلغ أكبر من الرصيد المتاح');return;}
+  var from=FUT.dir==='spot2fut'?'spot':'futures';var to=FUT.dir==='spot2fut'?'futures':'spot';
+  var go=$('xGo');go.disabled=true;
+  try{
+    var r=await fetch('/api/wallet/transfer-internal',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOK},body:JSON.stringify({from:from,to:to,currency:c,amount:amt})});
+    var d=await r.json().catch(function(){return{};});
+    if(!r.ok){if(d.error==='balance_frozen'){applyFrozen(true);if(d.freezeUntil)FREEZE_UNTIL=d.freezeUntil;renderFrozen();toast(freezeMsg()+' — لا يمكن تنفيذ العملية');go.disabled=false;return;}toast(d.error||'تعذر التحويل');go.disabled=false;return;}
+    if(d.balances)mirrorBalances(d.balances);
+    if(d.futures){var m={};for(var k in d.futures){m[String(k).toUpperCase()]=Number(d.futures[k])||0;}FUT.bal=m;}
+    $('xAmt').value='';renderOverview();renderFutures();openXfer();
+    try{addLedger({type:'transfer',currency:c,amount:amt,time:Date.now(),status:'done',note:(from==='spot'?'فوري':'عقود آجلة')+' ← '+(to==='spot'?'فوري':'عقود آجلة')});if($('recSheet').classList.contains('show'))loadRecords();}catch(e){}
+    toast('تم تحويل '+fmt(amt,c==='USDT'?2:8)+' '+c+' بنجاح');
+  }catch(e){toast('خطأ في الاتصال');}
+  go.disabled=false;
+}
+window.doTransfer=doTransfer;
+/* دمج إخفاء الرصيد مع العروض الجديدة */
+var _origToggleEye=toggleEye;
+window.toggleEye=toggleEye=function(){_origToggleEye();renderOverview();renderFutures();};
+if(TOK){fetchFutures();setInterval(function(){if(!document.hidden)fetchFutures();},30000);}
+if(TOK){loadFrozen();setInterval(function(){if(!document.hidden)loadFrozen();},45000);}
+/* رسم الواجهة محلي 100% (بلا شبكة) — أبطأ قليلاً لتوفير المعالج */
+setInterval(function(){if(document.hidden)return;renderOverview();if($('view-futures').classList.contains('on'))renderFutures();},15000);
+try{var _av=new URLSearchParams(location.search).get('acc')||(location.hash||'').replace('#','');
+  if(_av==='futures'||_av==='spot'||_av==='funding'||_av==='overview')switchAccView(_av);}catch(e){}
+renderOverview();
+</script>
+<script>
+/* ===== سجلات المعاملات: إيداع / سحب / تحويل =====
+   تقرأ من السيرفر (عدّة مسارات محتملة) وتدمج مع سجل محلي للتحويلات الداخلية. */
+var REC_FILTER='all',REC_DATA=[],REC_TIMER=null;
+var LEDGER_KEY='apex_ledger_'+UID;
+function loadLedger(){try{return JSON.parse(localStorage.getItem(LEDGER_KEY)||'[]')||[];}catch(e){return[];}}
+function saveLedger(a){try{localStorage.setItem(LEDGER_KEY,JSON.stringify(a.slice(-200)));}catch(e){}}
+function addLedger(rec){var a=loadLedger();rec.id=rec.id||('L'+Date.now()+Math.random().toString(36).slice(2,7));a.push(rec);saveLedger(a);}
+window.addLedger=addLedger;
+/* تصنيف الحركة إلى نوع واحد موحّد — يغطّي أسماء السيرفر الجديدة
+   (deposit/withdraw/convert/transfer/trade/futures/fee/copy/admin/adjust)
+   والأسماء القديمة (order_buy/transfer_out/admin_debit...). */
+var TYPE_SHORT={wd:'withdraw',dep:'deposit',xf:'transfer',xfer:'transfer',conv:'convert',trade:'trade',fut:'futures',fee:'fee',copy:'copy',adm_c:'admin',adm_d:'admin',adj:'adjust',setbalances:'admin',applydeltas:'admin'};
+function normType(t){t=String(t||'').toLowerCase().trim();
+  if(TYPE_SHORT[t])return TYPE_SHORT[t];
+  if(/futures|future|perp|contract|عقود/.test(t))return 'futures';
+  if(/convert|swap|تحويل عملات/.test(t))return 'convert';
+  if(/transfer|تحويل|xfer/.test(t))return 'transfer';
+  if(/fee|commission|عمولة/.test(t))return 'fee';
+  if(/copy|نسخ/.test(t))return 'copy';
+  if(/admin|adjust|settle|correct|تصحيح|تسوية|إداري/.test(t))return 'admin';
+  if(/withdraw|سحب|debit|payout/.test(t))return 'withdraw';
+  if(/dep|إيداع|شحن|credit|recharge/.test(t))return 'deposit';
+  if(/trade|order|spot|تداول|buy|sell/.test(t))return 'trade';
+  return t||'other';}
+/* المبلغ موقّع دائماً: ما خرج من المحفظة سالب، وما دخل موجب */
+function recSign(type,amt){
+  var a=Math.abs(Number(amt)||0);
+  if(Number(amt)<0)return -a;
+  var t=String(type||'').toLowerCase();
+  if(/withdraw|debit|sell|loss|fee|_out$/.test(t))return -a;
+  return a;
+}
+function openRecords(){
+  $('recSheet').classList.add('show');
+  loadRecords();            /* تحديث فوري لحظة الفتح */
+  startRecPoll();
+}
+function closeRecords(){$('recSheet').classList.remove('show');stopRecPoll();}
+/* تحديث تلقائي: فوراً عند الفتح، ثم كل 10 ثوانٍ ما دام مفتوحاً،
+   وفوراً عند العودة للتبويب — فالسجل يبقى حيّاً بلا زر تحديث. */
+function startRecPoll(){
+  stopRecPoll();
+  REC_TIMER=setInterval(function(){
+    if(!document.hidden&&$('recSheet').classList.contains('show'))loadRecords();
+  },10000);
+}
+document.addEventListener('visibilitychange',function(){
+  if(!document.hidden&&$('recSheet').classList.contains('show'))loadRecords();
+});
+window.openRecords=openRecords;window.closeRecords=closeRecords;
+function stopRecPoll(){if(REC_TIMER){clearInterval(REC_TIMER);REC_TIMER=null;}}
+function recFilter(f){REC_FILTER=f;document.querySelectorAll('#recSheet .recfilters button').forEach(function(b){b.classList.toggle('on',b.dataset.f===f);});renderRecords();}
+window.recFilter=recFilter;
+/* /api/wallet/activity هو المصدر الكامل: يبني السجل من دفتر الأستاذ الدائم
+   (كل حركة رصيد) ويدمجه مع سجل المعاملات الغنيّ. البقية احتياطية فقط. */
+var REC_ENDPOINTS=['/api/wallet/activity','/api/wallet/transactions','/api/wallet/history','/api/wallet/ledger','/api/transactions','/api/history'];
+async function fetchServerRecords(){
+  if(!TOK)return [];
+  for(var i=0;i<REC_ENDPOINTS.length;i++){
+    try{var r=await fetch(REC_ENDPOINTS[i],{headers:{'Authorization':'Bearer '+TOK}});
+      if(!r.ok)continue;var d=await r.json();
+      var arr=Array.isArray(d)?d:(Array.isArray(d.activity)?d.activity:(Array.isArray(d.transactions)?d.transactions:(Array.isArray(d.records)?d.records:(Array.isArray(d.history)?d.history:(Array.isArray(d.data)?d.data:null)))));
+      if(arr)return arr;
+    }catch(e){}
+  }
+  return [];
+}
+function normRecord(x){
+  var type=normType(x.type||x.kind||x.category||x.action);
+  var cur=String(x.currency||x.coin||x.asset||x.symbol||'USDT').toUpperCase();
+  var raw=Number(x.amount!=null?x.amount:(x.value!=null?x.value:x.qty))||0;
+  var amt=recSign(type,raw);
+  var ts=x.time||x.timestamp||x.createdAt||x.date||x.ts||Date.now();
+  if(typeof ts==='string'&&/^\d+$/.test(ts))ts=+ts;
+  var tnum=(typeof ts==='number')?(ts<1e12?ts*1000:ts):(Date.parse(ts)||Date.now());
+  var status=String(x.status||x.state||'').toLowerCase();
+  var note=x.note||x.memo||x.remark||((x.from&&x.to)?((x.from||'')+' ← '+(x.to||'')):'');
+  var counterparty=x.counterparty||x.fromName||x.toName||x.from||x.to||'';
+  var dir=x.direction||'';
+  var txid=(x.txid||x.hash||x.txHash||x.reference||x.ref||'');
+  if(/^\//.test(String(txid)))txid='';
+  var addr=x.address||x.toAddress||x.to||x.depositAddress||'';
+  return {id:String(x.id||x._id||('S'+tnum+'_'+amt)),type:type,cur:cur,amt:amt,ts:tnum,status:status,note:note,counterparty:counterparty,direction:dir,txid:txid,addr:addr,rawType:String(x.type||x.kind||x.category||x.action||'')};
+}
+async function loadRecords(){
+  var body=$('recBody');if(body&&!body.querySelector('.recrow'))body.innerHTML='<div class="recempty">… جارِ التحميل</div>';
+  var srv=await fetchServerRecords();
+  var rows=srv.map(normRecord);
+  /* سجل محلي للتحويلات الداخلية — لا نكرّره إذا وصل نفسها من السيرفر */
+  var locals=loadLedger().map(normRecord).filter(function(l){
+    return !rows.some(function(r){
+      return r.type===l.type&&r.cur===l.cur&&Math.abs(Math.abs(r.amt)-Math.abs(l.amt))<1e-8&&Math.abs(r.ts-l.ts)<120000;
+    });
+  });
+  var merged=rows.concat(locals);
+  var seen={};merged=merged.filter(function(r){if(seen[r.id])return false;seen[r.id]=1;return true;});
+  merged.sort(function(a,b){return b.ts-a.ts;});
+  REC_DATA=merged;renderRecords();
+}
+window.loadRecords=loadRecords;
+var REC_META={
+  deposit:{label:'إيداع',svg:'<path d="M12 3v13M7 11l5 5 5-5M5 21h14"/>'},
+  withdraw:{label:'سحب',svg:'<path d="M12 21V8M7 13l5-5 5 5M5 3h14"/>'},
+  transfer:{label:'تحويل',svg:'<path d="M4 7h13l-3-3M20 17H7l3 3"/>'},
+  convert:{label:'تحويل عملات',svg:'<path d="M4 7h13l-3-3M20 17H7l3 3"/>'},
+  trade:{label:'تداول',svg:'<path d="M3 17l6-6 4 4 8-8M21 7v5h-5"/>'},
+  futures:{label:'عقود آجلة',svg:'<path d="M3 3v18h18M8 14l3-3 3 3 4-5"/>'},
+  fee:{label:'عمولة',svg:'<path d="M6 18L18 6M8.5 8.5h.01M15.5 15.5h.01"/>'},
+  copy:{label:'نسخ التداول',svg:'<path d="M8 8h11v11H8zM5 16V5h11"/>'},
+  admin:{label:'تعديل إداري',svg:'<path d="M12 3l8 4v6c0 5-4 7-8 8-4-1-8-3-8-8V7z"/>'},
+  adjust:{label:'تسوية رصيد',svg:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'}
+};
+function recMeta(type){
+  var m=REC_META[type]||REC_META.adjust;
+  return {label:m.label,svg:m.svg};
+}
+/* الفلتر يجمع الأنواع المتقاربة في قسم واحد */
+function recMatch(r){
+  if(REC_FILTER==='all')return true;
+  if(REC_FILTER==='transfer')return r.type==='transfer'||r.type==='convert';
+  if(REC_FILTER==='admin')return r.type==='admin'||r.type==='adjust';
+  if(REC_FILTER==='trade')return r.type==='trade'||r.type==='copy';
+  return r.type===REC_FILTER;
+}
+function recCls(r){if(Math.abs(r.amt)<1e-12)return 'xf';return r.amt>0?'dep':'wd';}
+function recAmtStr(r,dp){
+  var neg=r.amt<0;
+  return (neg?'-':'+')+fmt(Math.abs(r.amt),dp)+' '+esc(r.cur);
+}
+function fmtTime(ts){try{return new Date(ts).toLocaleString('en-GB',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return '';}}
+function statusTxt(s){if(/done|success|complete|ok|approved|confirm/.test(s))return {t:'مكتمل',c:'ok'};if(/pend|wait|review|process/.test(s))return {t:'قيد المعالجة',c:'pend'};if(/reject|fail|cancel|decline/.test(s))return {t:'مرفوض',c:''};return {t:'',c:''};}
+function renderRecords(){
+  var body=$('recBody');if(!body)return;
+  var rows=REC_DATA.filter(recMatch);
+  if(!rows.length){body.innerHTML='<div class="recempty">لا توجد سجلات '+(REC_FILTER==='all'?'بعد':'في هذا القسم')+'</div>';return;}
+  body.innerHTML=rows.map(function(r){
+    var m=recMeta(r.type),st=statusTxt(r.status);
+    var amtStr=recAmtStr(r,r.cur==='USDT'?2:6);
+    return '<div class="recrow '+recCls(r)+'" onclick="showRecDetail(\''+esc(String(r.id).replace(/'/g,''))+'\')"><span class="ri"><svg viewBox="0 0 24 24" stroke="currentColor">'+m.svg+'</svg></span>'+
+      '<div class="rt"><b>'+m.label+'</b><span>'+(r.note?esc(r.note)+' · ':'')+fmtTime(r.ts)+'</span></div>'+
+      '<div class="rv"><div class="amt">'+mask(amtStr)+'</div>'+(st.t?'<div class="st '+st.c+'">'+st.t+'</div>':'')+'</div></div>';
+  }).join('');
+}
+/* ===== تفاصيل العملية ===== */
+function showRecDetail(id){
+  var r=null;for(var i=0;i<REC_DATA.length;i++){if(String(REC_DATA[i].id).replace(/'/g,'')===id){r=REC_DATA[i];break;}}
+  if(!r)return;var m=recMeta(r.type),st=statusTxt(r.status);
+  var cls=r.amt>0?'pos':(r.amt<0?'neg':'');
+  var amtStr=recAmtStr(r,r.cur==='USDT'?2:8);
+  var rows=[['النوع',esc(m.label),''],['المبلغ',mask(amtStr),cls],['العملة',esc(r.cur),''],['الحالة',st.t||'—',st.c==='ok'?'pos':''],['التاريخ والوقت',fmtTime(r.ts),'']];
+  if(r.counterparty)rows.push(['الطرف الآخر',esc(r.counterparty),'']);
+  if(r.addr)rows.push(['العنوان',esc(r.addr),'']);
+  if(r.note)rows.push(['ملاحظة',esc(r.note),'']);
+  if(r.txid)rows.push(['رقم العملية',esc(r.txid),'']);
+  rows.push(['المعرّف',esc(String(r.id)),'']);
+  $('rdTitle').textContent='تفاصيل '+m.label;
+  $('rdBody').innerHTML=rows.map(function(p){return '<div class="rdrow"><span class="k">'+p[0]+'</span><span class="v '+(p[2]||'')+'">'+p[1]+'</span></div>';}).join('');
+  $('recDetail').classList.add('show');
+}
+function closeRecDetail(){$('recDetail').classList.remove('show');}
+window.showRecDetail=showRecDetail;window.closeRecDetail=closeRecDetail;
+/* ===== تصدير السجل (CSV) ===== */
+function csvCell(v){v=String(v==null?'':v);if(/[",\n]/.test(v))v='"'+v.replace(/"/g,'""')+'"';return v;}
+function exportRecords(){
+  var rows=REC_DATA.filter(recMatch);
+  if(!rows.length){toast('لا توجد سجلات للتصدير');return;}
+  var head=['التاريخ','النوع','المبلغ','العملة','الحالة','الطرف الآخر','العنوان','ملاحظة','المعرّف'];
+  var lines=[head.map(csvCell).join(',')];
+  rows.forEach(function(r){var m=recMeta(r.type),st=statusTxt(r.status);
+    lines.push([fmtTime(r.ts),m.label,(r.amt<0?'-':'+')+fmt(Math.abs(r.amt),r.cur==='USDT'?2:8),r.cur,st.t||'',r.counterparty||'',r.addr||'',r.note||'',r.id].map(csvCell).join(','));});
+  var csv='\ufeff'+lines.join('\r\n');
+  var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  var url=URL.createObjectURL(blob);var a=document.createElement('a');
+  var d=new Date();var stamp=d.getFullYear()+('0'+(d.getMonth()+1)).slice(-2)+('0'+d.getDate()).slice(-2)+'-'+('0'+d.getHours()).slice(-2)+('0'+d.getMinutes()).slice(-2);
+  a.href=url;a.download='apex-transactions-'+stamp+'.csv';document.body.appendChild(a);a.click();
+  setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url);},100);
+  toast('تم تصدير '+rows.length+' عملية');
+}
+window.exportRecords=exportRecords;
+</script>
+</body>
+</html>

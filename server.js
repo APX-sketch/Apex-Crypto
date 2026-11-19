@@ -3830,6 +3830,22 @@ app.post('/api/wallet/transfer-internal', strictLimiter, requireUser, (req, res)
 // notification. Money can only be sent to an address that maps to a real,
 // non-banned account. Self-transfers are rejected.
 const TRANSFER_CUR = /^[A-Z0-9]{2,12}$/;
+
+// ---- إخفاء هوية الأطراف في السجل (خصوصية) ----
+// سجل الحركات يُعرض بجانب الحساب الآخر، فلا يجوز كشف الاسم الكامل.
+// نُبقي الحرف الأول فقط ليتعرّف المستخدم على الطرف بلا كشف هويته.
+function maskName(name) {
+  const n = String(name == null ? '' : name).trim();
+  if (!n) return 'مستخدم';
+  if (n === 'الإدارة' || n === 'حساب داخلي' || n === 'مستخدم') return n;
+  const first = Array.from(n)[0];
+  return first + '***';
+}
+// «اسم مُخفّى (عنوان)» بلا كشف الاسم الكامل
+function maskedParty(name, addr) {
+  const a = String(addr || '').trim();
+  return a ? (maskName(name) + ' (' + a + ')') : maskName(name);
+}
 app.post('/api/wallet/transfer', strictLimiter, requireUser, requireApproved, (req, res) => {
   const { toAddress, amount, currency } = req.body || {};
   const addr = String(toAddress || '').trim();
@@ -3855,16 +3871,16 @@ app.post('/api/wallet/transfer', strictLimiter, requireUser, requireApproved, (r
   });
   store.addNotification(recipient.id, {
     title: 'إيداع جديد',
-    body: 'استلمت ' + amt + ' ' + cur + ' من ' + (req.user.name || 'مستخدم') + '.',
+    body: 'استلمت ' + amt + ' ' + cur + ' من ' + maskName(req.user.name) + '.',
   });
   // ---- record the movement on both sides (audit ledger) ----
   store.addTransaction(req.user.id, {
     type: 'transfer_out', amount: amt, currency: cur,
-    counterparty: (recipient.name || '') + ' (' + addr + ')', note: 'تحويل صادر',
+    counterparty: maskedParty(recipient.name, addr), note: 'تحويل صادر',
   });
   store.addTransaction(recipient.id, {
     type: 'transfer_in', amount: amt, currency: cur,
-    counterparty: (req.user.name || 'مستخدم') + ' (' + (req.user.depositAddress || '') + ')', note: 'تحويل وارد',
+    counterparty: maskedParty(req.user.name, req.user.depositAddress), note: 'تحويل وارد',
   });
   res.json({ ok: true, deposit: dep, recipientName: recipient.name || '', balances: sender.balances || {} });
 });
@@ -7086,7 +7102,7 @@ app.post('/api/wallet/withdraw', strictLimiter, requireUser, requireApproved, as
     store.addTransaction(req.user.id, {
       type: 'transfer_out', amount, currency,
       counterparty: delivered
-        ? ((recipientName || 'مستخدم') + ' (' + address + ')')
+        ? maskedParty(recipientName, address)
         : (address || 'سحب خارجي'),
       note: delivered ? 'سحب وصل إلى حساب داخلي' : 'سحب إلى عنوان خارجي',
       direction: 'out', delivered,
@@ -7099,7 +7115,7 @@ app.post('/api/wallet/withdraw', strictLimiter, requireUser, requireApproved, as
       title: 'طلب سحب',
       kind: 'money',
       body: 'تم سحب ' + amount + ' ' + currency + (delivered
-        ? (' وتحويلها إلى ' + (recipientName || 'الحساب المستلم') + '.')
+        ? (' وتحويلها إلى ' + (recipientName ? maskName(recipientName) : 'الحساب المستلم') + '.')
         : (' إلى العنوان ' + address + '.')),
     });
   } catch (e) {}
@@ -7107,7 +7123,7 @@ app.post('/api/wallet/withdraw', strictLimiter, requireUser, requireApproved, as
   // تنبيه بريدي فوري للمُرسِل بالسحب (يحترم تفضيل التنبيهات)
   try {
     alertTransfer(req.user.id, { to: req.user.email, kind: 'withdraw', amount, currency,
-      counterparty: delivered ? (recipientName || 'حساب داخلي') : (address || 'عنوان خارجي'), delivered });
+      counterparty: delivered ? maskName(recipientName) : (address || 'عنوان خارجي'), delivered });
   } catch (e) {}
 
   // لو العنوان يخص حساباً داخلياً: اعتمد المبلغ للمستلم + إشعار إيداع + حركة واردة
@@ -7124,18 +7140,18 @@ app.post('/api/wallet/withdraw', strictLimiter, requireUser, requireApproved, as
       store.addNotification(recipient.id, {
         title: 'إيداع جديد',
         kind: 'money',
-        body: 'استلمت ' + amount + ' ' + currency + ' من ' + (req.user.name || 'مستخدم') + '.',
+        body: 'استلمت ' + amount + ' ' + currency + ' من ' + maskName(req.user.name) + '.',
       });
     } catch (e) {}
     // تنبيه بريدي فوري للمستلم بالإيداع (يحترم تفضيله)
     try {
       alertTransfer(recipient.id, { to: recipientEmail, kind: 'deposit', amount, currency,
-        counterparty: req.user.name || 'مستخدم' });
+        counterparty: maskName(req.user.name) });
     } catch (e) {}
     try {
       store.addTransaction(recipient.id, {
         type: 'transfer_in', amount, currency,
-        counterparty: (req.user.name || 'مستخدم') + ' (' + (req.user.depositAddress || '') + ')',
+        counterparty: maskedParty(req.user.name, req.user.depositAddress),
         note: 'تحويل وارد', direction: 'in', delivered: true,
       });
     } catch (e) {}
