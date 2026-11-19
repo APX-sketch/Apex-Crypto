@@ -541,6 +541,8 @@ $('sortbar').addEventListener('click',e=>{
   render();
 });
 $('q').addEventListener('input',e=>{QSTR=e.target.value.trim();render();});
+/* استقبال كلمة البحث من الصفحة الرئيسية: markets.html?q=BTC */
+(function(){try{var m=new URLSearchParams(location.search).get('q');if(m){m=m.trim();if(m){var el=$('q');if(el)el.value=m;QSTR=m;render();}}}catch(e){}})();
 $('mdl').addEventListener('click',e=>{if(e.target===$('mdl'))closeMdl();});
 /* بدء افتراضي على العملات الرقمية إن لم توجد مفضلة */
 (function(){if(!FAVS.length){document.querySelector('.cat[data-c="crypto"]').click();}else{$('subs').style.display='none';}})();

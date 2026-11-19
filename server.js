@@ -6240,35 +6240,56 @@ app.get('/api/square/hashtags/trending', requireUser, async (req, res) => {
   } catch (e) { console.error('[square/trending]', e.message); res.status(500).json({ error: 'server_error' }); }
 });
 
-// ---- لوحة إحصائيات المنشورات العامة (نظرة شاملة) ----
+// ---- لوحة الإحصائيات: خاصة بكل حساب على حدة ----
+// كل رقم هنا محسوب من منشورات صاحب الحساب فقط (square_posts.user_id = uid)،
+// فيطابق تماماً ما يراه في Square — بلا أي خلط مع حسابات أخرى وبلا تضارب:
+// مجموع الإعجابات/التعليقات/الإعادات/المشاهدات = مجموع ما يظهر لكل منشور من منشوراته.
 app.get('/api/square/stats/overview', requireUser, async (req, res) => {
   try {
-    const [[t]]  = await pool.query('SELECT COUNT(*) AS n FROM square_posts');
-    const [[lk]] = await pool.query('SELECT COUNT(*) AS n FROM square_likes');
-    const [[cm]] = await pool.query('SELECT COUNT(*) AS n FROM square_comments');
-    const [[rp]] = await pool.query('SELECT COUNT(*) AS n FROM square_reposts');
-    const [[vw]] = await pool.query('SELECT COUNT(*) AS n FROM square_views');
+    const uid = req.user.uid;
+    const [[p]]  = await pool.query('SELECT COUNT(*) AS n FROM square_posts WHERE user_id = ?', [uid]);
+    const [[lk]] = await pool.query('SELECT COUNT(*) AS n FROM square_likes l JOIN square_posts p ON p.id = l.post_id WHERE p.user_id = ?', [uid]);
+    const [[cm]] = await pool.query('SELECT COUNT(*) AS n FROM square_comments c JOIN square_posts p ON p.id = c.post_id WHERE p.user_id = ?', [uid]);
+    const [[rp]] = await pool.query('SELECT COUNT(*) AS n FROM square_reposts r JOIN square_posts p ON p.id = r.post_id WHERE p.user_id = ?', [uid]);
+    const [[vw]] = await pool.query('SELECT COUNT(*) AS n FROM square_views v JOIN square_posts p ON p.id = v.post_id WHERE p.user_id = ?', [uid]);
+    // أكثر منشوراتي تفاعلاً (منشوراتي أنا فقط)
     const [top] = await pool.query(
-      'SELECT p.id, p.author, p.content, p.created_at, ' +
+      'SELECT p.id, p.content, p.created_at, p.image IS NOT NULL AS has_img, ' +
       ' (SELECT COUNT(*) FROM square_likes l WHERE l.post_id = p.id) AS likes, ' +
       ' (SELECT COUNT(*) FROM square_comments c WHERE c.post_id = p.id) AS comments, ' +
       ' (SELECT COUNT(*) FROM square_reposts r WHERE r.post_id = p.id) AS reposts, ' +
       ' (SELECT COUNT(*) FROM square_views v WHERE v.post_id = p.id) AS views ' +
-      'FROM square_posts p ORDER BY (' +
+      'FROM square_posts p WHERE p.user_id = ? ORDER BY (' +
       ' (SELECT COUNT(*) FROM square_likes l WHERE l.post_id = p.id) + ' +
       ' (SELECT COUNT(*) FROM square_comments c WHERE c.post_id = p.id) * 2 + ' +
       ' (SELECT COUNT(*) FROM square_reposts r WHERE r.post_id = p.id) * 3' +
-      ') DESC, p.created_at DESC LIMIT 6');
-    const [authors] = await pool.query('SELECT author, COUNT(*) AS posts FROM square_posts GROUP BY author ORDER BY posts DESC LIMIT 6');
-    const [tags] = await pool.query('SELECT tag, COUNT(*) AS n FROM square_tags GROUP BY tag ORDER BY n DESC LIMIT 10');
+      ') DESC, p.created_at DESC LIMIT 6', [uid]);
+    // وسومي: من منشوراتي فقط
+    const [tags] = await pool.query(
+      'SELECT t.tag, COUNT(*) AS n FROM square_tags t JOIN square_posts p ON p.id = t.post_id ' +
+      'WHERE p.user_id = ? GROUP BY t.tag ORDER BY n DESC, MAX(t.created_at) DESC LIMIT 10', [uid]);
+    // نشاطي اليومي: عدد منشوراتي في كل يوم من آخر 14 يوماً
     const days = 14; const now = Date.now(); const dayMs = 86400000;
-    const [recent] = await pool.query('SELECT created_at FROM square_posts WHERE created_at >= ?', [now - days * dayMs]);
+    const [recent] = await pool.query('SELECT created_at FROM square_posts WHERE user_id = ? AND created_at >= ?', [uid, now - days * dayMs]);
     const daily = new Array(days).fill(0);
     for (const row of recent) {
       const idx = Math.floor((now - Number(row.created_at)) / dayMs);
       if (idx >= 0 && idx < days) daily[days - 1 - idx]++;
     }
-    res.json({ ok: true, totals: { posts: t.n, likes: lk.n, comments: cm.n, reposts: rp.n, views: vw.n }, top, authors, tags, daily });
+    const posts = Number(p.n) || 0;
+    const div = posts || 1;
+    res.json({
+      ok: true,
+      me: { name: req.user.name || req.user.username || '' },
+      totals: { posts, likes: Number(lk.n) || 0, comments: Number(cm.n) || 0, reposts: Number(rp.n) || 0, views: Number(vw.n) || 0 },
+      avg: {
+        likes: Math.round(((Number(lk.n) || 0) / div) * 10) / 10,
+        comments: Math.round(((Number(cm.n) || 0) / div) * 10) / 10,
+        reposts: Math.round(((Number(rp.n) || 0) / div) * 10) / 10,
+        views: Math.round(((Number(vw.n) || 0) / div) * 10) / 10,
+      },
+      top: top || [], tags: tags || [], daily,
+    });
   } catch (e) { console.error('[square/overview]', e.message); res.status(500).json({ error: 'server_error' }); }
 });
 

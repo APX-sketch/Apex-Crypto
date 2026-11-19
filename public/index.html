@@ -44,11 +44,54 @@ body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);col
 .icobtn .nbadge{position:absolute;top:-5px;right:-5px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;
   background:var(--red);color:#fff;font-size:10px;font-weight:800;display:none;align-items:center;justify-content:center;line-height:1}
 .icobtn svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.9}
-.hsearch{flex:1;display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--border);
-  border-radius:11px;padding:0 12px;height:38px}
-.hsearch svg{width:16px;height:16px;stroke:var(--muted);fill:none;stroke-width:2}
-.hsearch input{flex:1;background:none;border:0;color:var(--txt);font-family:inherit;font-size:13px;outline:none}
-.hsearch input::placeholder{color:#5c6675}
+/* ===== شريط البحث المميّز ===== */
+.hs-wrap{position:relative;flex:1;min-width:0}
+.hsearch{position:relative;display:flex;align-items:center;gap:9px;height:46px;padding:0 8px 0 10px;
+  border-radius:16px;overflow:hidden;
+  background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.012)),var(--panel2);
+  box-shadow:0 8px 20px rgba(0,0,0,.30),inset 0 1px 0 rgba(255,255,255,.06);
+  transition:box-shadow .25s ease,transform .25s ease}
+.hsearch::before{content:'';position:absolute;inset:0;border-radius:16px;padding:1px;pointer-events:none;
+  background:linear-gradient(135deg,rgba(224,166,21,.70),rgba(255,255,255,.14) 45%,rgba(224,166,21,.38));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude;opacity:.55;transition:opacity .25s}
+.hsearch::after{content:'';position:absolute;top:0;bottom:0;width:40%;left:-50%;transform:skewX(-16deg);
+  background:linear-gradient(100deg,transparent,rgba(255,255,255,.10),transparent);pointer-events:none;
+  animation:hsSweep 6.5s ease-in-out infinite}
+@keyframes hsSweep{0%,70%{left:-50%}86%,100%{left:120%}}
+.hsearch:focus-within{transform:translateY(-1px);
+  box-shadow:0 12px 26px rgba(0,0,0,.38),0 0 0 3px rgba(224,166,21,.12),inset 0 1px 0 rgba(255,255,255,.08)}
+.hsearch:focus-within::before{opacity:1}
+.hs-ic{width:28px;height:28px;border-radius:10px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,rgba(248,217,121,.97),rgba(224,166,21,.97));
+  box-shadow:0 3px 10px rgba(224,166,21,.35);transition:transform .25s ease}
+.hs-ic svg{width:15px;height:15px;stroke:#231a02;fill:none;stroke-width:2.4;stroke-linecap:round}
+.hsearch:focus-within .hs-ic{transform:scale(1.07) rotate(-5deg)}
+.hsearch input{flex:1;min-width:0;background:none;border:0;color:var(--txt);font-family:inherit;
+  font-size:13.5px;font-weight:600;outline:none;letter-spacing:.1px}
+.hsearch input::placeholder{color:#6a7484;font-weight:600}
+.hs-clear{flex:0 0 auto;width:22px;height:22px;border-radius:50%;border:0;background:rgba(255,255,255,.10);
+  display:none;align-items:center;justify-content:center;cursor:pointer;padding:0}
+.hs-clear.on{display:flex}
+.hs-clear svg{width:11px;height:11px;stroke:var(--muted);fill:none;stroke-width:2.6;stroke-linecap:round}
+.hs-key{flex:0 0 auto;font-size:10px;font-weight:900;color:var(--muted);border:1px solid var(--border);
+  border-radius:7px;padding:3px 6px;line-height:1;background:rgba(255,255,255,.03)}
+.hsearch.hasq .hs-key{display:none}
+.hsdrop{position:absolute;left:0;right:0;top:calc(100% + 8px);background:var(--panel);border:1px solid var(--border);
+  border-radius:16px;padding:6px;box-shadow:0 20px 44px rgba(0,0,0,.55);z-index:45;display:none;max-height:300px;overflow:auto}
+.hsdrop.on{display:block;animation:hsPop .16s cubic-bezier(.22,.61,.36,1)}
+@keyframes hsPop{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.hsrow{display:flex;align-items:center;gap:10px;padding:8px;border-radius:11px;cursor:pointer}
+.hsrow.on,.hsrow:active{background:var(--panel2)}
+.hsrow .nm{flex:1;min-width:0;font-size:13px;font-weight:800;display:flex;flex-direction:column;gap:2px}
+.hsrow .nm small{font-size:10.5px;color:var(--muted);font-weight:700}
+.hsrow .pr{text-align:end;font-size:12px;font-weight:800;white-space:nowrap}
+.hsrow .pr small{display:block;font-size:10.5px;font-weight:800;margin-top:2px}
+.hsrow .pr small.up{color:var(--green)}
+.hsrow .pr small.dn{color:var(--red)}
+.hsrow .ico,.hsrow img{width:26px;height:26px;border-radius:50%;flex:0 0 auto}
+.hs-hint{font-size:11px;color:var(--muted);text-align:center;padding:12px 8px;font-weight:700}
+@media (prefers-reduced-motion: reduce){.hsearch::after{display:none;animation:none}.hsdrop.on{animation:none}}
 .avatar{width:38px;height:38px;flex:0 0 auto;border-radius:50%;display:flex;align-items:center;justify-content:center;
   font-weight:900;font-size:16px;color:#231a02;cursor:pointer;background:linear-gradient(135deg,var(--gold1),var(--gold2));
   box-shadow:0 3px 10px rgba(224,166,21,.35)}
@@ -377,9 +420,14 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
   <div class="avatar" id="avatarBtn" onclick="openProfile()">A</div>
 </div>
 <div class="hdr2">
-  <div class="hsearch">
-    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
-    <input id="searchInp" aria-label="بحث عن عملة" data-i18n-ph="searchPh" placeholder="بحث عن عملة (BTC، ETH)...">
+  <div class="hs-wrap" id="hsWrap">
+    <div class="hsearch" id="hsearchBox">
+      <span class="hs-ic"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg></span>
+      <input id="searchInp" aria-label="بحث عن عملة" autocomplete="off" spellcheck="false" data-i18n-ph="searchPh" placeholder="ابحث عن عملة… (BTC، ETH)">
+      <button class="hs-clear" id="hsClear" type="button" aria-label="مسح البحث"><svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+      <span class="hs-key" id="hsKey" aria-hidden="true">↵</span>
+    </div>
+    <div class="hsdrop" id="hsDrop" role="listbox" aria-label="نتائج البحث"></div>
   </div>
   <div class="icobtn sq" title="مسح" onclick="openScan()"><svg viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2M3 12h18"/></svg></div>
 </div>
@@ -1309,8 +1357,85 @@ renderBalance(); renderMarkets(); poll(); _startPoll();
 /* تحديث فوري عند تغيّر سعر APX من لوحة الأدمن */
 if(window.APX&&APX.onChange){APX.onChange(function(){try{poll();}catch(e){}});}
 
-/* البحث → صفحة الأسواق */
-$('searchInp').addEventListener('keydown',e=>{if(e.key==='Enter'){const q=e.target.value.trim();location.href='markets.html'+(q?'?q='+encodeURIComponent(q):'');}});
+/* ===== البحث المميّز: اقتراحات لحظية + تنقّل بالكيبورد ===== */
+(function(){
+  const box=$('hsearchBox'),inp=$('searchInp'),drop=$('hsDrop'),clr=$('hsClear');
+  if(!box||!inp||!drop)return;
+  let sel=-1,items=[];
+  const escq=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  function pool(){
+    const seen=new Set(),out=[];
+    [].concat(FAMOUS,NEW_LIST,Object.keys(mktMap)).forEach(s=>{
+      if(!s||seen.has(s))return;seen.add(s);out.push(s);
+    });
+    return out;
+  }
+  function results(q){
+    let list=pool().filter(s=>mktMap[s]);
+    if(!list.length)list=pool();
+    q=String(q||'').trim().toLowerCase();
+    if(!q)return list.slice(0,5);
+    return list.filter(s=>s.toLowerCase().indexOf(q)>=0).slice(0,6);
+  }
+  function logo(b){
+    return (window.APX&&APX.BASE===b)?'<span class="ico apxlogo">A</span>':icoEl(b);
+  }
+  function render(){
+    const q=inp.value;
+    const has=!!q.trim();
+    box.classList.toggle('hasq',has);
+    clr.classList.toggle('on',has);
+    if(!has){drop.classList.remove('on');drop.innerHTML='';items=[];sel=-1;return;}
+    items=results(q);
+    if(!items.length){
+      drop.innerHTML='<div class="hs-hint">لا نتائج لـ «'+escq(q)+'» — جرّب BTC أو ETH</div>';
+      drop.classList.add('on');return;
+    }
+    drop.innerHTML=items.map((s,i)=>{
+      const d=mktMap[s]||{};const b=s.replace('USDT','');
+      const px=(d.c!=null&&d.c!=='')?parseFloat(d.c):null;
+      const chg=(d.P!=null&&d.P!=='')?parseFloat(d.P):null;
+      const up=chg==null?true:chg>=0;
+      return '<div class="hsrow'+(i===sel?' on':'')+'" data-i="'+i+'" data-sym="'+s+'" role="option">'+
+        logo(b)+
+        '<span class="nm">'+((window.APX&&APX.BASE===b)?'Apex Coin':b)+'<small>'+b+'/USDT</small></span>'+
+        '<span class="pr">'+(px!=null?'$'+fmt(px,pdec(px)):'—')+
+        (chg!=null?'<small class="'+(up?'up':'dn')+'">'+(up?'+':'')+chg.toFixed(2)+'%</small>':'')+
+        '</span></div>';
+    }).join('');
+    drop.classList.add('on');
+  }
+  function goSym(sym){
+    if(!sym)return;
+    location.href='trading.html?symbol='+encodeURIComponent(String(sym).toLowerCase());
+  }
+  inp.addEventListener('input',()=>{sel=-1;render();});
+  inp.addEventListener('focus',()=>{if(inp.value.trim())render();});
+  inp.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){drop.classList.remove('on');return;}
+    if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+      if(!items.length)return;
+      e.preventDefault();
+      sel=(sel+(e.key==='ArrowDown'?1:-1)+items.length)%items.length;
+      render();
+      const el=drop.querySelector('.hsrow.on'); if(el&&el.scrollIntoView)el.scrollIntoView({block:'nearest'});
+      return;
+    }
+    if(e.key==='Enter'){
+      if(sel>=0&&items[sel]){goSym(items[sel]);return;}
+      const q=inp.value.trim();
+      location.href='markets.html'+(q?'?q='+encodeURIComponent(q):'');
+    }
+  });
+  clr.addEventListener('click',()=>{inp.value='';items=[];sel=-1;render();inp.focus();});
+  drop.addEventListener('click',e=>{
+    const row=e.target.closest?e.target.closest('.hsrow'):null;
+    if(row)goSym(row.getAttribute('data-sym'));
+  });
+  document.addEventListener('click',e=>{
+    if(!e.target.closest||!e.target.closest('#hsWrap'))drop.classList.remove('on');
+  });
+})();
 
 /* ================= الأوراق المنبثقة (Sheets) ================= */
 function openSheet(id){$(id).classList.add('show');$('scrim').classList.add('show');_syncOvLock();}

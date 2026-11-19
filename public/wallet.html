@@ -235,6 +235,22 @@ body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);col
 .recsheet.show .recfilters,.recsheet.show .recbody{animation:wlFade .34s cubic-bezier(.22,.61,.36,1) both}
 .recsheet.show .recbody{animation-delay:.06s}
 .hero,.acts,.accnav,.sumcard{animation:wlFade .4s cubic-bezier(.22,.61,.36,1) both}
+/* ===== حركة السحب بين الصفحات/التبويبات (ناعمة وبلا تقطيع) ===== */
+.accview{opacity:0;visibility:hidden;display:none}
+.accview.on{opacity:1;visibility:visible;display:block;will-change:transform,opacity}
+.accview.accInNext{animation:accInNext .26s cubic-bezier(.22,.61,.36,1) both}
+.accview.accInPrev{animation:accInPrev .26s cubic-bezier(.22,.61,.36,1) both}
+@keyframes accInNext{from{opacity:.35;transform:translate3d(-16px,0,0) scale(.995)}to{opacity:1;transform:translate3d(0,0,0) scale(1)}}
+@keyframes accInPrev{from{opacity:.35;transform:translate3d(16px,0,0) scale(.995)}to{opacity:1;transform:translate3d(0,0,0) scale(1)}}
+/* التمرير داخل الصفحة الجديدة لا يرث حركة الأب */
+.accview.on .list,.accview.on .sumcard{transform:translateZ(0)}
+.accnav button{transition:color .18s ease,opacity .18s ease,-webkit-tap-highlight-color .2s}
+.accnav button.on{transition:color .18s ease}
+.accnav button:active{opacity:.65}
+@media (prefers-reduced-motion: reduce){
+  .accview.accInNext,.accview.accInPrev{animation:none}
+  .accnav button{transition:none}
+}
 .acts{animation-delay:.05s}.accnav{animation-delay:.08s}.sumcard{animation-delay:.11s}
 /* أيقونات الرأس بلمسة ذهبية لمطابقة الهوية */
 .hdr .ttl{background:linear-gradient(135deg,var(--gold1),var(--gold2));-webkit-background-clip:text;background-clip:text;color:transparent}
@@ -735,9 +751,14 @@ function futPosStats(){
 }
 function futEquityUSDT(){var st=futPosStats();return (+FUT.bal.USDT||0)+st.locked+st.upnl;}
 function usdValue(cur,amt){amt=+amt||0;return amt*priceOf(cur);}
-function switchAccView(v){
+function switchAccView(v,dir){
   document.querySelectorAll('.accnav button').forEach(function(b){b.classList.toggle('on',b.dataset.v===v);});
-  document.querySelectorAll('.accview').forEach(function(el){el.classList.toggle('on',el.id==='view-'+v);});
+  document.querySelectorAll('.accview').forEach(function(el){
+    var on=el.id==='view-'+v;
+    el.classList.toggle('on',on);
+    el.classList.remove('accInNext','accInPrev');
+    if(on&&dir){void el.offsetWidth;el.classList.add(dir>0?'accInNext':'accInPrev');}
+  });
   if(v==='overview')renderOverview();
   if(v==='futures')renderFutures();
   if(v==='funding')openXfer();
@@ -755,7 +776,7 @@ function accStep(dir){
   var i=ACC_ORDER.indexOf(curAccView());if(i<0)i=0;
   var j=i+dir;if(j<0)j=0;if(j>ACC_ORDER.length-1)j=ACC_ORDER.length-1;
   if(j===i)return false;
-  switchAccView(ACC_ORDER[j]);return true;
+  switchAccView(ACC_ORDER[j],dir);return true;
 }
 function swipeBlocked(t){
   try{
@@ -963,10 +984,24 @@ function recSign(type,amt){
   if(/withdraw|debit|sell|loss|fee|_out$/.test(t))return -a;
   return a;
 }
-function openRecords(){$('recSheet').classList.add('show');loadRecords();startRecPoll();}
+function openRecords(){
+  $('recSheet').classList.add('show');
+  loadRecords();            /* تحديث فوري لحظة الفتح */
+  startRecPoll();
+}
 function closeRecords(){$('recSheet').classList.remove('show');stopRecPoll();}
+/* تحديث تلقائي: فوراً عند الفتح، ثم كل 10 ثوانٍ ما دام مفتوحاً،
+   وفوراً عند العودة للتبويب — فالسجل يبقى حيّاً بلا زر تحديث. */
+function startRecPoll(){
+  stopRecPoll();
+  REC_TIMER=setInterval(function(){
+    if(!document.hidden&&$('recSheet').classList.contains('show'))loadRecords();
+  },10000);
+}
+document.addEventListener('visibilitychange',function(){
+  if(!document.hidden&&$('recSheet').classList.contains('show'))loadRecords();
+});
 window.openRecords=openRecords;window.closeRecords=closeRecords;
-function startRecPoll(){stopRecPoll();REC_TIMER=setInterval(function(){if(!document.hidden&&$('recSheet').classList.contains('show'))loadRecords();},20000);}
 function stopRecPoll(){if(REC_TIMER){clearInterval(REC_TIMER);REC_TIMER=null;}}
 function recFilter(f){REC_FILTER=f;document.querySelectorAll('#recSheet .recfilters button').forEach(function(b){b.classList.toggle('on',b.dataset.f===f);});renderRecords();}
 window.recFilter=recFilter;
