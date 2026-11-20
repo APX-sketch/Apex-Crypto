@@ -116,6 +116,21 @@ html.guest-mode .qacts a,html.guest-mode .qacts .qact{cursor:pointer}
 .bal .sub{font-size:12px;color:var(--muted);margin-top:4px;direction:ltr}
 .bal .sub b{color:var(--green)}
 .bal .sub b.dn{color:var(--red)}
+/* مؤشر حالة الرصيد — يوضّح أن الرقم قيد التحديث أو أنه آخر رقم مؤكَّد */
+.balstat{display:none;align-items:center;gap:7px;margin-top:10px;font-size:11.5px;font-weight:800;
+  color:var(--muted);background:var(--panel2,#1b2027);border:1px solid var(--border);border-radius:999px;
+  padding:5px 11px;width:max-content;max-width:100%;line-height:1.5}
+.balstat.show{display:inline-flex}
+.balstat .d{width:7px;height:7px;border-radius:50%;background:var(--gold2);flex:0 0 auto}
+.balstat.ld .d{animation:bsPulse 1s ease-in-out infinite}
+.balstat.err{color:#f0b90b;border-color:rgba(224,166,21,.42);background:rgba(224,166,21,.1)}
+.balstat.err .d{background:#f0b90b}
+.balstat.ok{color:#2ebd85;border-color:rgba(46,189,133,.35);background:rgba(46,189,133,.1)}
+.balstat.ok .d{background:#2ebd85}
+.balstat button{background:transparent;border:0;color:inherit;font:inherit;font-weight:900;text-decoration:underline;
+  padding:0;margin-inline-start:2px;cursor:pointer}
+@keyframes bsPulse{0%,100%{opacity:.35}50%{opacity:1}}
+@media (prefers-reduced-motion: reduce){.balstat.ld .d{animation:none}}
 
 /* actions */
 .acts{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:18px 14px 6px}
@@ -451,6 +466,7 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
   </div>
   <div class="amt" id="balAmt">--</div>
   <div class="sub" id="balSub">≈ <span id="balUsd">--</span> USD</div>
+  <div class="balstat" id="balStat"></div>
   <div id="balFrozen" style="display:none;margin-top:10px;background:rgba(246,70,93,.14);border:1px solid rgba(246,70,93,.5);color:#f6465d;font-weight:900;font-size:13px;padding:8px 12px;border-radius:12px">⛔ الرصيد مجمّد</div>
 </div>
 
@@ -1149,27 +1165,57 @@ if(SUP_TOKEN){supUnread();setInterval(function(){if(!document.hidden)supUnread()
 /* السيرفر يحفظ رصيد كل حساب على حدة؛ شحن الإدارة والتحويلات تُحدّث الرصيد هناك
    مباشرةً، والصفحة تعرض رصيد السيرفر فقط — لا خلط بين الحسابات على نفس المتصفح. */
 function walletKey(){return 'skygo_wallet_'+(UID||makeUid(sess.email));}
-async function refreshWallet(){if(typeof GUEST_MODE!=='undefined'&&GUEST_MODE)return;
+/* ===== طلب مع إعادة محاولة تلقائية =====
+   خطة Render المجانية تُنيم السيرفر بعد خمول، وأول طلب بعد النوم يفشل أو يتأخر
+   (502/503/مهلة). لذلك نعيد المحاولة ٣ مرات بفاصل ثانيتين قبل اعتبار الاتصال فاشلاً. */
+async function fetchRetry(url,opt,tries,gap){
+  tries=tries||3;gap=(gap==null?2000:gap);
+  for(let i=0;i<tries;i++){
+    try{
+      const r=await fetch(url,opt);
+      if(r.ok)return r;
+      /* ٤٠١/٤٠٣/٤٠٤: الرد نفسه جواب نهائي، لا فائدة من تكراره */
+      if(r.status>=400&&r.status<500&&r.status!==408&&r.status!==429)return r;
+    }catch(e){}
+    if(i<tries-1)await new Promise(function(res){setTimeout(res,gap);});
+  }
+  return null;
+}
+/* الرصيد لا يُصفّر بسبب فشل الطلب: نُبقي آخر رقم مؤكَّد معروضاً ونوضّح الحالة. */
+async function refreshWallet(manual){
+  if(typeof GUEST_MODE!=='undefined'&&GUEST_MODE)return;
   if(!SUP_TOKEN)return;
-  try{const r=await fetch('/api/wallet/me',{headers:{'Authorization':'Bearer '+SUP_TOKEN}});
-    if(!r.ok)return;
-    const d=await r.json();
-    const bals=d.balances||{};
-    for(const k in wallet){wallet[k]=0;}
-    for(const k in bals){wallet[String(k).toUpperCase()]=Number(bals[k])||0;}
-    localStorage.setItem(walletKey(),JSON.stringify(wallet));
-    renderBalance();
-  }catch(e){}
+  const prev=balState;
+  balState='loading';
+  clearTimeout(_balSlowT);
+  if(prev!=='ok'||manual){paintBalState();}
+  else{_balSlowT=setTimeout(function(){if(balState==='loading')paintBalState();},900);}
+  const r=await fetchRetry('/api/wallet/me',{headers:{'Authorization':'Bearer '+SUP_TOKEN}},3,2000);
+  let d=null;
+  if(r&&r.ok){try{d=await r.json();}catch(e){d=null;}}
+  if(!d||!d.balances||typeof d.balances!=='object'){
+    balState='stale';paintBalState();renderBalance();return;
+  }
+  const bals=d.balances;
+  for(const k in wallet){wallet[k]=0;}
+  for(const k in bals){wallet[String(k).toUpperCase()]=Number(bals[k])||0;}
+  try{localStorage.setItem(walletKey(),JSON.stringify(wallet));}catch(e){}
+  walletKnown=true;balState='ok';
+  if(prev!=='ok'||manual){paintBalState();}
+  else{const _bs=$('balStat');if(_bs){_bs.className='balstat';_bs.innerHTML='';}}
+  renderBalance();
 }
 /* ===== رصيد محفظة العقود الآجلة (لدمجه ضمن نظرة عامة) ===== */
 async function refreshFutures(){if(typeof GUEST_MODE!=='undefined'&&GUEST_MODE)return;
   if(!SUP_TOKEN)return;
-  try{const r=await fetch('/api/wallet/futures',{headers:{'Authorization':'Bearer '+SUP_TOKEN}});
-    if(!r.ok)return;
-    const d=await r.json();const b=d.balances||{};const m={};
-    for(const k in b){m[String(k).toUpperCase()]=Number(b[k])||0;}
-    futBal=m;renderBalance();
-  }catch(e){}
+  /* نفس منطق الإعادة: عند الفشل نُبقي آخر رصيد عقود معروف بدل تصفيره */
+  const r=await fetchRetry('/api/wallet/futures',{headers:{'Authorization':'Bearer '+SUP_TOKEN}},3,2000);
+  let d=null;
+  if(r&&r.ok){try{d=await r.json();}catch(e){d=null;}}
+  if(!d||!d.balances||typeof d.balances!=='object')return;
+  const b=d.balances;const m={};
+  for(const k in b){m[String(k).toUpperCase()]=Number(b[k])||0;}
+  futBal=m;renderBalance();
 }
 /* ===== شارة الإشعارات غير المقروءة ===== */
 async function refreshNotifBadge(){
@@ -1197,6 +1243,8 @@ if(SUP_TOKEN){
     if(document.hidden)_stopAcct();
     else{_startAcct();refreshWallet();refreshFutures();}
   });
+  /* عودة الشبكة = نحدّث فوراً بدل انتظار المؤقت */
+  window.addEventListener('online',function(){try{refreshWallet(1);refreshFutures();}catch(e){}});
   _startAcct();
 }
 
@@ -1204,9 +1252,37 @@ if(SUP_TOKEN){
 function loadWallet(){const k=walletKey();const w=localStorage.getItem(k);if(w){try{return JSON.parse(w);}catch(e){}}
   const init={USDT:0,ETH:0,BTC:0,BNB:0,SOL:0,XRP:0};localStorage.setItem(k,JSON.stringify(init));return init;}
 const wallet=loadWallet();
-/* السيرفر هو المصدر الوحيد للرصيد؛ لا نظهر رصيداً محلياً قديماً ريثما يردّ السيرفر. */
-if(SUP_TOKEN){for(const _k in wallet)wallet[_k]=0;}
 let balHidden=false, priceMap={}, futBal={};
+/* لا نصفّر الرصيد عند التحميل: التصفير كان سبب ظهور 0.00 وهمياً بينما السيرفر
+   يستيقظ من السكون. نعرض آخر رصيد مؤكَّد، ونستبدله فقط بردّ 200 من السيرفر —
+   ولا يظهر صفر إلا إذا أكّد السيرفر فعلاً أن الرصيد صفر. */
+let walletKnown=false;
+let balState=(SUP_TOKEN?'loading':'idle');
+let _balSlowT=null, _balHideT=null;
+try{walletKnown=Object.keys(wallet).some(function(k){return (+wallet[k]||0)>0;});}catch(e){}
+function paintBalState(){
+  const el=$('balStat');if(!el)return;
+  if(!SUP_TOKEN||(typeof GUEST_MODE!=='undefined'&&GUEST_MODE)){el.className='balstat';el.innerHTML='';return;}
+  clearTimeout(_balHideT);
+  if(balState==='loading'){
+    el.className='balstat show ld';
+    el.innerHTML='<i class="d"></i><span id="balStatTx">جارٍ تحديث الرصيد…</span>';
+    clearTimeout(_balSlowT);
+    _balSlowT=setTimeout(function(){
+      const tx=$('balStatTx');
+      if(tx&&balState==='loading')tx.textContent='السيرفر يستيقظ من السكون… قد يأخذ نصف دقيقة';
+    },2600);
+  }else if(balState==='stale'){
+    clearTimeout(_balSlowT);
+    el.className='balstat show err';
+    el.innerHTML='<i class="d"></i><span>تعذّر الاتصال — هذا آخر رصيد محفوظ</span><button type="button" onclick="refreshWallet(1)">تحديث</button>';
+  }else if(balState==='ok'){
+    el.className='balstat show ok';
+    el.innerHTML='<i class="d"></i><span>الرصيد محدّث</span>';
+    _balHideT=setTimeout(function(){el.className='balstat';el.innerHTML='';},2200);
+  }else{el.className='balstat';el.innerHTML='';}
+}
+setTimeout(function(){try{paintBalState();}catch(e){}},0);
 /* نظرة عامة = الرصيد الفوري + رصيد العقود الآجلة (مثل تبويب "نظرة عامة" في المحفظة) */
 /* رصيد العقود كحقوق ملكية: الحر + المحجوز بالصفقات + الربح/الخسارة غير المحقق
    (نفس منطق صفحة المحفظة) حتى لا يظهر الإجمالي منقوصاً عند فتح صفقة عقود. */
@@ -1228,6 +1304,9 @@ function renderBalance(){
   total+=futEquityUSDT();
   for(const k in futBal){if(k==='USDT')continue;const p=priceMap[k+'USDT'];if(p)total+=(futBal[k]||0)*p;}
   if(window.APX){const ah=APX.hold();if(ah>0&&priceMap[APX.SYM])total+=ah*priceMap[APX.SYM];}
+  /* لا رقم مؤكَّد بعد: نعرض شرطتين بدل 0.00 حتى لا يبدو الرصيد صفراً وهو ليس كذلك */
+  const waiting=!!SUP_TOKEN&&!walletKnown&&balState!=='ok';
+  if(waiting){$('balAmt').textContent='--';$('balUsd').textContent='--';return;}
   if(balHidden){$('balAmt').textContent='••••••';$('balUsd').textContent='••••';}
   else{$('balAmt').textContent=fmt(total,2);$('balUsd').textContent=fmt(total,2);}
 }

@@ -1017,7 +1017,7 @@ function buildTabs(){
 function pickSym(el){applySymByIndex(+el.dataset.i);}
 function applySymByIndex(i){
   if(i<0||i>=SYMBOLS.length)return;
-  cur=SYMBOLS[i];mark=0;lastTickPx=null;tape=[];lastCandle=null;if($('tape'))$('tape').innerHTML='';
+  cur=SYMBOLS[i];saveLastSym(cur.s);mark=0;lastTickPx=null;tape=[];lastCandle=null;if($('tape'))$('tape').innerHTML='';
   [].slice.call(document.querySelectorAll('.symtab')).forEach(function(x){x.classList.toggle('on',+x.dataset.i===i);});
   $('pairName').innerHTML=cur.b+'<small>/'+quoteCcy()+'</small>';updatePairSub();$('chartLd').style.display='flex';statsFromTicker=false;$('hi').textContent='--';$('lo').textContent='--';$('vol').textContent='--';
   var on=document.querySelector('.symtab.on');if(on&&on.scrollIntoView)on.scrollIntoView({inline:'center',block:'nearest'});
@@ -1803,13 +1803,19 @@ function updateDtCounts(){
   var bt=$('dtBotCnt');if(bt){var g=(typeof gridLoad==='function')?gridLoad().length:0;bt.textContent='('+g+')';}
 }
 
+/* ===== آخر عملة فتحها المستخدم (تُفتح تلقائياً في الزيارة القادمة) ===== */
+function lastSymSaved(){try{return String(localStorage.getItem('apex_last_sym')||'').toUpperCase();}catch(e){return '';}}
+function saveLastSym(s){try{if(s)localStorage.setItem('apex_last_sym',String(s).toUpperCase());}catch(e){}}
 function init(){
-  /* فتح العملة المطلوبة من الرابط trading.html?symbol=xxx */
-  const qsym=(new URLSearchParams(location.search).get('symbol')||'').toUpperCase();
-  if(qsym){
-    let idx=SYMBOLS.findIndex(x=>x.s===qsym);
-    if(idx<0){SYMBOLS.unshift({s:qsym,b:splitSym(qsym).base,q:splitSym(qsym).quote});idx=0;}
+  /* أولوية العملة: رابط ?symbol= ثم آخر عملة فتحها المستخدم ثم BTC */
+  var qsym='';
+  try{qsym=(new URLSearchParams(location.search).get('symbol')||'').toUpperCase();}catch(e){}
+  var _want=qsym||lastSymSaved()||'BTCUSDT';
+  if(_want){
+    let idx=SYMBOLS.findIndex(x=>x.s===_want);
+    if(idx<0){SYMBOLS.unshift({s:_want,b:splitSym(_want).base,q:splitSym(_want).quote});idx=0;}
     cur=SYMBOLS[idx];
+    saveLastSym(cur.s);
   }
   buildTabs();$('pairName').innerHTML=cur.b+'<small>/'+quoteCcy()+'</small>';updatePairSub();
   const on=document.querySelector('.symtab.on');if(on&&on.scrollIntoView)on.scrollIntoView({inline:'center',block:'nearest'});

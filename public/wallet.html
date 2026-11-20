@@ -45,6 +45,21 @@ body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);col
 .hero .pnl{font-size:12.5px;font-weight:800;margin-top:7px;direction:ltr;display:inline-flex;align-items:center;gap:6px}
 .hero .pnl.up{color:var(--green)} .hero .pnl.dn{color:var(--red)}
 .hero .pnl .cur{color:var(--muted);font-weight:700}
+/* مؤشر حالة الرصيد في المحفظة */
+.herostat{display:none;align-items:center;gap:7px;margin-top:11px;font-size:11.5px;font-weight:800;
+  color:var(--muted);background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:999px;
+  padding:5px 11px;width:max-content;max-width:100%;line-height:1.5}
+.herostat.show{display:inline-flex}
+.herostat .d{width:7px;height:7px;border-radius:50%;background:var(--gold2,#e0a615);flex:0 0 auto}
+.herostat.ld .d{animation:hsPulse 1s ease-in-out infinite}
+.herostat.err{color:#f0b90b;border-color:rgba(224,166,21,.42);background:rgba(224,166,21,.1)}
+.herostat.err .d{background:#f0b90b}
+.herostat.ok{color:#0ecb81;border-color:rgba(14,203,129,.35);background:rgba(14,203,129,.1)}
+.herostat.ok .d{background:#0ecb81}
+.herostat button{background:transparent;border:0;color:inherit;font:inherit;font-weight:900;
+  text-decoration:underline;padding:0;margin-inline-start:2px;cursor:pointer}
+@keyframes hsPulse{0%,100%{opacity:.35}50%{opacity:1}}
+@media (prefers-reduced-motion: reduce){.herostat.ld .d{animation:none}}
 /* action circles */
 .acts{display:flex;justify-content:space-around;margin:4px 10px 14px;padding:0 6px}
 .acts .act{display:flex;flex-direction:column;align-items:center;gap:7px;cursor:pointer;background:none;border:0;font-family:inherit}
@@ -323,6 +338,7 @@ body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);col
     <span class="eye" id="eye" onclick="toggleEye()"><svg viewBox="0 0 24 24"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></span></div>
   <div class="big" id="heroBig">$0.00</div>
   <div class="pnl" id="heroPnl"><span class="cur">24h PnL</span> <span id="pnlVal">+0.00 (0.00%)</span></div>
+  <div class="herostat" id="heroStat"></div>
   <div id="heroFrozen" style="display:none;margin:12px 0 0;background:rgba(246,70,93,.14);border:1px solid rgba(246,70,93,.5);color:#f6465d;font-weight:900;font-size:13px;padding:9px 12px;border-radius:12px">⛔ الرصيد مجمّد — لا يمكن تنفيذ عمليات الإيداع أو السحب أو التحويل أو التداول</div>
 </div>
 <!-- ACTION CIRCLES -->
@@ -495,7 +511,8 @@ function renderBalances(){
   let total=0,pnlUsd=0;
   Object.keys(wallet).forEach(c=>{const amt=+wallet[c]||0;if(amt<=0)return;const v=amt*priceOf(c);total+=v;const pm=PRICES[c+'USDT'];const pct=pm?pm.pct:0;if(pct)pnlUsd+=v-(v/(1+pct/100));});
   const base=total-pnlUsd;const pnlPct=base>0?(pnlUsd/base*100):0;const up=pnlUsd>=0;
-  $('heroBig').textContent=mask('$'+fmt(total,2));
+  var waiting=!!TOK&&!W_KNOWN&&W_STATE!=='ok';
+  $('heroBig').textContent=waiting?'--':mask('$'+fmt(total,2));
   const hp=$('heroPnl');hp.className='pnl '+(up?'up':'dn');
   $('pnlVal').textContent=(up?'+':'')+fmt(pnlUsd,2)+' ('+(up?'+':'')+pnlPct.toFixed(2)+'%)';
   const body=$('balList');
@@ -637,7 +654,59 @@ function renderFrozen(){
 function frozenGuard(msg){if(FROZEN){toast(msg||(freezeMsg()+' — لا يمكن تنفيذ العملية'));return true;}return false;}
 function saveWallet(){try{localStorage.setItem(WKEY,JSON.stringify(wallet));}catch(e){}}
 function mirrorBalances(b){if(!b)return;for(var k in wallet){wallet[k]=0;}for(var k2 in b){wallet[String(k2).toUpperCase()]=Number(b[k2])||0;}injectApx();saveWallet();renderBalances();}
-async function pullWallet(){if(!TOK)return;try{var r=await fetch('/api/wallet/me',{headers:{'Authorization':'Bearer '+TOK}});if(!r.ok)return;var d=await r.json();mirrorBalances(d.balances||{});}catch(e){}}
+/* ===== طلب مع إعادة محاولة (السيرفر يستيقظ من السكون على الخطة المجانية) ===== */
+async function fetchRetry(url,opt,tries,gap){
+  tries=tries||3;gap=(gap==null?2000:gap);
+  for(var i=0;i<tries;i++){
+    try{
+      var r=await fetch(url,opt);
+      if(r.ok)return r;
+      if(r.status>=400&&r.status<500&&r.status!==408&&r.status!==429)return r;
+    }catch(e){}
+    if(i<tries-1)await new Promise(function(res){setTimeout(res,gap);});
+  }
+  return null;
+}
+/* حالة الرصيد: ما نعرضه هو آخر رقم مؤكَّد، وفشل الطلب لا يصفّره */
+var W_KNOWN=false, W_STATE=(TOK?'loading':'idle'), _wSlowT=null, _wHideT=null;
+function paintWState(){
+  var el=$('heroStat');if(!el)return;
+  if(!TOK){el.className='herostat';el.innerHTML='';return;}
+  clearTimeout(_wHideT);
+  if(W_STATE==='loading'){
+    el.className='herostat show ld';
+    el.innerHTML='<i class="d"></i><span id="heroStatTx">جارٍ تحديث الرصيد…</span>';
+    clearTimeout(_wSlowT);
+    _wSlowT=setTimeout(function(){
+      var tx=$('heroStatTx');
+      if(tx&&W_STATE==='loading')tx.textContent='السيرفر يستيقظ من السكون… قد يأخذ نصف دقيقة';
+    },2600);
+  }else if(W_STATE==='stale'){
+    clearTimeout(_wSlowT);
+    el.className='herostat show err';
+    el.innerHTML='<i class="d"></i><span>تعذّر الاتصال — هذا آخر رصيد محفوظ</span><button type="button" onclick="pullWallet(1)">تحديث</button>';
+  }else if(W_STATE==='ok'){
+    el.className='herostat show ok';
+    el.innerHTML='<i class="d"></i><span>الرصيد محدّث</span>';
+    _wHideT=setTimeout(function(){el.className='herostat';el.innerHTML='';},2200);
+  }else{el.className='herostat';el.innerHTML='';}
+}
+async function pullWallet(manual){
+  if(!TOK)return;
+  var prev=W_STATE;W_STATE='loading';
+  clearTimeout(_wSlowT);
+  if(prev!=='ok'||manual){paintWState();}
+  else{_wSlowT=setTimeout(function(){if(W_STATE==='loading')paintWState();},900);}
+  var r=await fetchRetry('/api/wallet/me',{headers:{'Authorization':'Bearer '+TOK}},3,2000);
+  var d=null;
+  if(r&&r.ok){try{d=await r.json();}catch(e){d=null;}}
+  if(!d||!d.balances||typeof d.balances!=='object'){W_STATE='stale';paintWState();renderBalances();return;}
+  W_KNOWN=true;W_STATE='ok';
+  mirrorBalances(d.balances||{});
+  if(prev!=='ok'||manual){paintWState();}
+  else{var _hs=$('heroStat');if(_hs){_hs.className='herostat';_hs.innerHTML='';}}
+  renderBalances();
+}
 function syncSeen(){if(!TOK)return;try{fetch('/api/wallet/sync',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOK}}).then(function(r){return r.ok?r.json():null;}).then(function(d){if(d&&d.balances)mirrorBalances(d.balances);}).catch(function(){});}catch(e){}}
 /* ===== إشعارات المحفظة (الإيداعات/السحوبات/التحويلات) ===== */
 var NOTIFS=[], _notifLastAt=0, _notifFirst=true, NOTIF_FILTER='all';
@@ -698,8 +767,11 @@ function openNotif(){var s=document.getElementById('notifSheet');if(!s)return;s.
 function closeNotif(){var s=document.getElementById('notifSheet');if(s)s.style.display='none';}
 /* للمستخدم المُسجّل: السيرفر هو المصدر الوحيد للرصيد، لذا لا نعرض أي رصيد مخزّن
    محلياً قديم (لتجنّب ظهوره ثم اختفائه)؛ ننتظر ردّ السيرفر. */
-if(TOK){for(var _k in wallet)wallet[_k]=0;}
+/* لا نصفّر الرصيد عند فتح الصفحة (كان يظهر 0.00 وهمياً أثناء استيقاظ السيرفر)،
+   ونعرض ما هو محفوظ لحين وصول ردّ السيرفر الذي يؤكّد الرقم الحقيقي. */
+try{W_KNOWN=Object.keys(wallet).some(function(k){return (+wallet[k]||0)>0;});}catch(e){}
 injectApx();renderBalances();renderFavs();poll();
+setTimeout(function(){try{paintWState();}catch(e){}},0);
 /* ===== توفير باندويث (خطة Render المجانية) =====
    كانت الصفحة تطلب 12 مرة/دقيقة لكل زائر مفتوح.
    الآن 15 ثانية أثناء العرض، وتوقف تام عند إخفاء التبويب. */
@@ -765,49 +837,81 @@ function switchAccView(v,dir){
 }
 window.switchAccView=switchAccView;
 /* ===== السحب بالإصبع بين تبويبات الحساب =====
-   سحب لليمين ينتقل للتبويب التالي (نظرة عامة ← فورية ← العقود الآجلة ← التمويل)
-   وسحب لليسار يرجع للتبويب السابق. الضغط على التابات يبقى شغّالاً كما هو. */
-var ACC_ORDER=['overview','spot','futures','funding'];
-function curAccView(){
-  var b=document.querySelector('.accnav button.on');
-  return (b&&b.dataset.v)||'overview';
-}
-function accStep(dir){
-  var i=ACC_ORDER.indexOf(curAccView());if(i<0)i=0;
-  var j=i+dir;if(j<0)j=0;if(j>ACC_ORDER.length-1)j=ACC_ORDER.length-1;
-  if(j===i)return false;
-  switchAccView(ACC_ORDER[j],dir);return true;
-}
-function swipeBlocked(t){
-  try{
-    if(!t||!t.closest)return true;
-    if(t.closest('input,textarea,select,button,a,canvas,.recfilters,.recbody,.list,.recdetail.show,.recsheet.show'))return true;
-    var ns=document.getElementById('notifSheet');
-    if(ns&&ns.style.display&&ns.style.display!=='none')return true;
-  }catch(e){return true;}
-  return false;
-}
+   كان المعالج القديم يتجاهل السحب فوق الأزرار والقوائم (أغلب مساحة الصفحة)
+   فبدا وكأن السحب لا يعمل. هذا المعالج يلتقط السحب في أي مكان عدا الحقول
+   والصفوف المفتوحة، ويمنع التمرير الأفقي الأصلي فقط عند سحب أفقي واضح. */
 (function(){
-  var sx=0,sy=0,st=0,act=false,lock=false;
+  if(window.__accSwipe)return;window.__accSwipe=1;
+  var BOX='.accnav',ITEM='button',ACT='on',MIN=40;
+  var st=document.createElement('style');
+  st.textContent='.sw-pulse{animation:swPulse .3s cubic-bezier(.22,.61,.36,1)}@keyframes swPulse{0%{transform:scale(.9)}60%{transform:scale(1.06)}100%{transform:scale(1)}}@media (prefers-reduced-motion:reduce){.sw-pulse{animation:none}}';
+  document.head.appendChild(st);
+  function list(){
+    var b=document.querySelector(BOX);
+    if(!b||b.offsetParent===null)return[];
+    return Array.prototype.slice.call(b.querySelectorAll(ITEM));
+  }
+  function current(){
+    var el=list();
+    for(var i=0;i<el.length;i++){if(el[i].classList.contains(ACT))return i;}
+    return 0;
+  }
+  function blocked(el){
+    if(!el||el.nodeType!==1)return true;
+    if(el.closest('input,textarea,select,canvas,[data-noswipe],[contenteditable="true"]'))return true;
+    if(document.querySelector('#notifSheet[style*="flex"],.recbody.show,.recsheet.show,.mdl.on,.mdl.show'))return true;
+    /* أي جدول/شريط يُمرّر أفقياً: نترك التمرير الأصلي ولا نبدّل التبويب */
+    for(var n=el;n&&n!==document.body;n=n.parentElement){
+      if(n.classList&&n.classList.contains('accnav'))break;
+      var cs=window.getComputedStyle(n);
+      if((cs.overflowX==='auto'||cs.overflowX==='scroll')&&n.scrollWidth>n.clientWidth+6)return true;
+    }
+    return false;
+  }
+  function go(el,dir){
+    try{el.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});}catch(e){}
+    var v=el.getAttribute('data-v');
+    if(v&&window.switchAccView){switchAccView(v,dir);}else{el.click();}
+    el.classList.remove('sw-pulse');void el.offsetWidth;el.classList.add('sw-pulse');
+  }
+  var sx=0,sy=0,active=false,locked=0;
   document.addEventListener('touchstart',function(e){
-    if(e.touches.length!==1){act=false;return;}
-    var t=e.target;
-    lock=swipeBlocked(t);
-    if(lock){act=false;return;}
-    act=true;sx=e.touches[0].clientX;sy=e.touches[0].clientY;st=Date.now();
+    if(e.touches.length!==1)return;
+    if(blocked(e.target))return;
+    var t=e.touches[0];sx=t.clientX;sy=t.clientY;active=true;locked=0;
   },{passive:true});
+  document.addEventListener('touchmove',function(e){
+    if(!active||!e.touches[0])return;
+    var dx=e.touches[0].clientX-sx,dy=e.touches[0].clientY-sy;
+    if(!locked){
+      if(Math.abs(dx)>9&&Math.abs(dx)>Math.abs(dy)*1.15)locked=1;
+      else if(Math.abs(dy)>9)locked=-1;
+    }
+    if(locked===1&&e.cancelable)e.preventDefault();
+  },{passive:false});
   document.addEventListener('touchend',function(e){
-    if(!act)return;act=false;
+    if(!active)return;active=false;
+    if(locked!==1)return;
     var t=e.changedTouches&&e.changedTouches[0];if(!t)return;
     var dx=t.clientX-sx,dy=t.clientY-sy;
-    if(Date.now()-st>900)return;
-    if(Math.abs(dx)<60)return;
-    if(Math.abs(dy)>Math.abs(dx)*0.8)return;
-    if(accStep(dx>0?1:-1)){try{navigator.vibrate&&navigator.vibrate(6);}catch(err){}}
+    if(Math.abs(dx)<MIN)return;
+    if(Math.abs(dy)>Math.abs(dx)*0.85)return;
+    var els=list();if(els.length<2)return;
+    var i=current(),j=i+(dx>0?1:-1);
+    if(j<0||j>=els.length)return;
+    go(els[j],dx>0?1:-1);
+    try{if(navigator.vibrate)navigator.vibrate(6);}catch(err){}
   },{passive:true});
-  document.addEventListener('touchcancel',function(){act=false;},{passive:true});
+  document.addEventListener('touchcancel',function(){active=false;},{passive:true});
 })();
-async function fetchFutures(){if(!TOK)return;try{var r=await fetch('/api/wallet/futures',{headers:{'Authorization':'Bearer '+TOK}});if(!r.ok)return;var d=await r.json();var b=d.balances||{};var m={};for(var k in b){m[String(k).toUpperCase()]=Number(b[k])||0;}FUT.bal=m;renderOverview();renderFutures();if($('view-funding').classList.contains('on'))updateXferAvail();}catch(e){}}
+async function fetchFutures(){if(!TOK)return;
+  var r=null;
+  try{r=await fetchRetry('/api/wallet/futures',{headers:{'Authorization':'Bearer '+TOK}},3,2000);}catch(e){return;}
+  if(!r||!r.ok)return;
+  var d=null;try{d=await r.json();}catch(e){return;}
+  if(!d||!d.balances||typeof d.balances!=='object')return;
+  var b=d.balances;var m={};for(var k in b){m[String(k).toUpperCase()]=Number(b[k])||0;}
+  FUT.bal=m;renderOverview();renderFutures();if($('view-funding').classList.contains('on'))updateXferAvail();}
 function spotTotal(){var t=0;for(var c in wallet){var a=+wallet[c]||0;if(a>0)t+=usdValue(c,a);}return t;}
 function futTotal(){var t=0;for(var c in FUT.bal){if(c==='USDT')continue;var a=+FUT.bal[c]||0;if(a>0)t+=usdValue(c,a);}var eq=futEquityUSDT();if(eq>0)t+=eq;return t;}
 /* ألوان مخطط التوزيع + تاريخ القيمة للرسم المصغّر */
@@ -834,7 +938,8 @@ function renderSpark(){
 function renderOverview(){
   if(typeof renderFrozen==='function')renderFrozen();
   var s=spotTotal(),f=futTotal(),total=s+f;
-  if($('ovBig'))$('ovBig').innerHTML=mask('$'+fmt(total,2))+' <small>USDT</small>';
+  var _waiting=!!TOK&&!W_KNOWN&&W_STATE!=='ok';
+  if($('ovBig'))$('ovBig').innerHTML=(_waiting?'--':mask('$'+fmt(total,2)))+' <small>USDT</small>';
   if($('ovLoc'))$('ovLoc').textContent=mask('≈ '+fmt(total,2)+' USDT');
   if($('ovSpot'))$('ovSpot').textContent=mask('$'+fmt(s,2));
   if($('ovFut'))$('ovFut').textContent=mask('$'+fmt(f,2));

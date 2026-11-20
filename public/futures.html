@@ -285,8 +285,6 @@ body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);col
   <div class="sresults" id="sresults"></div>
 </div>
 
-<!-- نسخ التداول (أيقونة فقط) -->
-<a href="copy.html" title="نسخ التداول" aria-label="نسخ التداول" style="display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:13px;margin:12px 14px 0;text-decoration:none;background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#231a02;font-size:20px;border:1px solid var(--border)">👥</a>
 <div class="symtabs" id="symtabs"></div>
 
 <!-- PRICE HEAD -->
@@ -456,7 +454,22 @@ const SYMBOLS=[
 const INTERVALS=['1m','5m','15m','1h','4h','1d'];
 const LEVS=[1,2,5,10,20,50,100];
 
-let cur=SYMBOLS[0], iv='15m', lev=10, mark=0;
+/* ===== آخر عملة فتحها المستخدم =====
+   تُحفظ عند كل تبديل وتُفتح تلقائياً في المرة القادمة، والافتراضي BTC.
+   ورابط ?symbol= القادم من صفحة الأسواق له الأولوية. */
+function _lastSym(){try{return String(localStorage.getItem('apex_last_sym')||'').toUpperCase();}catch(e){return '';}}
+function _saveSym(s){try{if(s)localStorage.setItem('apex_last_sym',String(s).toUpperCase());}catch(e){}}
+function _pickStartSym(){
+  var q='';
+  try{q=(new URLSearchParams(location.search).get('symbol')||'').toUpperCase();}catch(e){}
+  var want=q||_lastSym()||'BTCUSDT';
+  var i=-1;
+  for(var k=0;k<SYMBOLS.length;k++){if(SYMBOLS[k].s===want){i=k;break;}}
+  if(i<0){SYMBOLS.unshift({s:want,b:want.replace(/USDT$/,'')});i=0;}
+  _saveSym(SYMBOLS[i].s);
+  return SYMBOLS[i];
+}
+let cur=_pickStartSym(), iv='15m', lev=10, mark=0;
 let chartFit=true;   /* true = اضبط العرض تلقائياً مرة واحدة فقط؛ غير ذلك نحافظ على تكبير المستخدم */
 
 /* ===== المحفظة (السيرفر هو المصدر الموثوق، مع نسخة محلية لكل حساب) ===== */
@@ -496,10 +509,10 @@ function addFee(f){feeTotal+=f;localStorage.setItem('apex_fees_collected',feeTot
 function reportFee(f,src){if(!FTOK||!(f>0))return;try{fetch('/api/wallet/fee',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+FTOK},body:JSON.stringify({amount:f,currency:'USDT',source:src||'futures'})}).catch(function(){});}catch(e){}}
 
 /* ===== بناء التبويبات ===== */
-$('symtabs').innerHTML=SYMBOLS.map((c,i)=>'<div class="symtab'+(i===0?' on':'')+'" data-i="'+i+'">'+c.b+'<span style="opacity:.6;font-weight:600">/USDT</span></div>').join('');
+$('symtabs').innerHTML=SYMBOLS.map((c,i)=>'<div class="symtab'+(c.s===cur.s?' on':'')+'" data-i="'+i+'">'+c.b+'<span style="opacity:.6;font-weight:600">/USDT</span></div>').join('');
 $('symtabs').querySelectorAll('.symtab').forEach(el=>el.addEventListener('click',()=>{
   $('symtabs').querySelectorAll('.symtab').forEach(x=>x.classList.remove('on'));
-  el.classList.add('on');cur=SYMBOLS[+el.dataset.i];lastCandle=null;chartFit=true;$('chartLd').style.display='flex';refreshAll();updateSummary();
+  el.classList.add('on');cur=SYMBOLS[+el.dataset.i];_saveSym(cur.s);lastCandle=null;chartFit=true;$('chartLd').style.display='flex';refreshAll();updateSummary();
 }));
 $('ivbar').innerHTML=INTERVALS.map((v,i)=>'<div class="iv'+(v===iv?' on':'')+'" data-v="'+v+'">'+v+'</div>').join('');
 $('ivbar').querySelectorAll('.iv').forEach(el=>el.addEventListener('click',()=>{
@@ -535,9 +548,12 @@ function renderSearch(q){
   box.querySelectorAll('.sres-item').forEach(el=>el.addEventListener('click',()=>pickSearch(el.dataset.s,el.dataset.b)));
 }
 function pickSearch(s,b){
-  cur={s:s,b:b};lastCandle=null;chartFit=true;
+  cur={s:s,b:b};_saveSym(s);lastCandle=null;chartFit=true;
   $('coinSearch').value='';$('sresults').classList.remove('on');$('sresults').innerHTML='';
   $('symtabs').querySelectorAll('.symtab').forEach(x=>x.classList.remove('on'));
+  /* إبراز التبويب المطابق إن وُجد */
+  var _ti=-1;for(var _k=0;_k<SYMBOLS.length;_k++){if(SYMBOLS[_k].s===s){_ti=_k;break;}}
+  if(_ti>=0){var _tb=$('symtabs').querySelector('.symtab[data-i="'+_ti+'"]');if(_tb){_tb.classList.add('on');try{_tb.scrollIntoView({inline:'center',block:'nearest'});}catch(e){}}}
   $('chartLd').style.display='flex';
   refreshAll();updateSummary();
 }
