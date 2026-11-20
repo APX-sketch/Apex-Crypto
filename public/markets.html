@@ -16,6 +16,7 @@
 <script src="api-config.js"></script>
 <script src="i18n.js"></script>
 <script src="apx-coin.js"></script>
+<script src="apx-ico.js"></script>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>Apex — الأسواق</title>
 <style>
@@ -215,16 +216,34 @@ const $=id=>document.getElementById(id);
 const fmt=(n,d=2)=>Number(n).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
 function fmtPx(p){p=+p;if(!isFinite(p)||p<=0)return null;if(p>=1)return p.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});if(p>=0.1)return p.toFixed(4);if(p>=0.001)return p.toFixed(6);return p.toFixed(10).replace(/0+$/,'');}
 function fmtVol(v){v=+v;if(!isFinite(v)||v<=0)return '-';if(v>=1e9)return (v/1e9).toFixed(2)+'B';if(v>=1e6)return (v/1e6).toFixed(2)+'M';if(v>=1e3)return (v/1e3).toFixed(1)+'K';return v.toFixed(0);}
-function icoUrl(b){return 'https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/128/color/'+String(b||'').toLowerCase()+'.png';}
-function icoUrl2(b){return 'https://assets.coincap.io/assets/icons/'+String(b||'').toLowerCase()+'@2x.png';}
+/* ===== أيقونة عملة ثابتة: دائرة ملوّنة بحرف + صورة فوقها =====
+   ليش؟ الصورة كانت تُطلب من CDN، وعملات كثيرة (PEPE وغيرها) غير موجودة هناك
+   فتطلع دائرة رمادية أو أيقونة مكسورة، وكانت القائمة تُعاد بناؤها كل تحديث سعر
+   فتُحذف الصور وتُطلب من جديد (تختفي وترجع). الحل: خلفية حرف ملوّنة ثابتة
+   لا تختفي أبداً، والصورة تُحذف من الصفحة نهائياً عند فشلها وتُحفظ بالذاكرة
+   حتى لا تُطلب مرة ثانية. */
+const ICO_BAD={};
+const ICO_SRC=[
+  function(b){return 'https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/128/color/'+b.toLowerCase()+'.png';},
+  function(b){return 'https://assets.coincap.io/assets/icons/'+b.toLowerCase()+'@2x.png';}
+];
+function icoHue(b){var h=0;for(var i=0;i<b.length;i++)h=(h*31+b.charCodeAt(i))%360;return h;}
 function icoImg(base){
-  var b=String(base||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6);
-  var letter=b.slice(0,1)||'?';
-  return '<span class="icoWrap" style="position:relative;width:30px;height:30px;flex:0 0 auto">'+
-    '<img class="cio" data-sym="'+b+'" src="'+icoUrl(b)+'" alt="'+letter+'" style="width:30px;height:30px;border-radius:50%;object-fit:cover;background:#1b2430" '+
-    'onerror="if(!this.dataset.alt){this.dataset.alt=1;this.src=icoUrl2(this.dataset.sym);}else{this.style.display=&#39;none&#39;;var n=this.nextElementSibling;if(n)n.style.display=&#39;flex&#39;;}">'+
-    '<span class="cico" style="display:none;position:absolute;inset:0">'+letter+'</span>'+
-    '</span>';
+  var b=String(base||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6)||'?';
+  /* الأولوية للموديول المشترك (يخزّن الصورة محلياً فلا تُطلب مرة ثانية ولا تختفي) */
+  if(window.APXICO&&APXICO.html){try{return APXICO.html(b,30);}catch(e){}}
+  var letter=b.slice(0,1);
+  var h=icoHue(b);
+  var bg='linear-gradient(135deg,hsl('+h+',58%,44%),hsl('+((h+26)%360)+',56%,26%))';
+  var img=ICO_BAD[b]?'':'<img class="cio" data-sym="'+b+'" data-step="0" alt="'+letter+'" src="'+ICO_SRC[0](b)+'" style="position:absolute;inset:0;width:30px;height:30px;border-radius:50%;object-fit:cover;background:transparent">';
+  return '<span class="axic" style="position:relative;width:30px;height:30px;flex:0 0 auto;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;background:'+bg+';color:#fff;font-weight:900;font-size:13px;text-shadow:0 1px 2px rgba(0,0,0,.4)">'+letter+img+'</span>';
+}
+function icoErr(img){
+  var b=(img&&img.dataset)?img.dataset.sym:'';
+  var step=parseInt((img&&img.dataset&&img.dataset.step)||'0',10)||0;
+  if(step+1<ICO_SRC.length){img.dataset.step=String(step+1);img.src=ICO_SRC[step+1](b);return;}
+  ICO_BAD[b]=1;
+  try{if(img&&img.parentNode)img.parentNode.removeChild(img);}catch(e){try{if(img)img.style.display='none';}catch(_){}}
 }
 const QUOTES=['USDT','USDC','FDUSD','BUSD','TUSD','BTC','ETH','BNB'];
 const STABLE=['USDT','USDC','FDUSD','BUSD','TUSD'];
@@ -235,11 +254,50 @@ let ROWS=[];const pxPrev={};
 const MSESS=JSON.parse(localStorage.getItem('skygo_session')||'{}');
 function _uid(e){var h=0;e=(e||'').toLowerCase();for(var i=0;i<e.length;i++){h=(h*31+e.charCodeAt(i))>>>0;}return(100000000+(h%900000000));}
 const FAVKEY='apex_favs_'+_uid(MSESS.email);
-function loadFavs(){try{return JSON.parse(localStorage.getItem(FAVKEY)||'[]');}catch(e){return[];}}
+const FAVSYNC='apex_favs_synced_'+_uid(MSESS.email);
+function loadFavs(){try{var a=JSON.parse(localStorage.getItem(FAVKEY)||'[]');return Array.isArray(a)?a.filter(function(x){return typeof x==='string'&&x;}):[];}catch(e){return[];}}
 let FAVS=loadFavs();
-function saveFavs(){localStorage.setItem(FAVKEY,JSON.stringify(FAVS));}
+function saveFavs(){try{localStorage.setItem(FAVKEY,JSON.stringify(FAVS));}catch(e){}}
+function favToken(){try{return (MSESS&&MSESS.token)||localStorage.getItem('apex_token')||'';}catch(e){return '';}}
+function favApi(method,body){
+  var tk=favToken();if(!tk)return Promise.resolve(null);
+  try{
+    return fetch(API_BASE+'/api/favorites',{method:method,headers:{'Content-Type':'application/json','Accept':'application/json','Authorization':'Bearer '+tk},body:body?JSON.stringify(body):undefined})
+      .then(function(r){return r.ok?r.json():null;}).catch(function(){return null;});
+  }catch(e){return Promise.resolve(null);}
+}
+/* مزامنة المفضّلة مع السيرفر (حتى تبقى معك على أي جهاز):
+   أول مرة: نرفع مفضّلة هذا المتصفّح ونندمجها مع اللي على السيرفر بلا تكرار.
+   بعد كذا: السيرفر هو المرجع، فأي إضافة/حذف من الجوال تطلع على الكمبيوتر والعكس. */
+async function syncFavs(){
+  var d=await favApi('GET');
+  if(!d||!Array.isArray(d.favorites))return;
+  var srv=d.favorites.map(function(x){return String(x).toUpperCase();});
+  var migrated=false;try{migrated=localStorage.getItem(FAVSYNC)==='1';}catch(e){}
+  if(!migrated){
+    var wasEmpty=!FAVS.length;
+    var uni=[],seen={};
+    srv.concat(FAVS).forEach(function(x){if(x&&!seen[x]){seen[x]=1;uni.push(x);}});
+    FAVS=uni;saveFavs();
+    var up=await favApi('POST',{list:uni});
+    if(up&&Array.isArray(up.favorites)){FAVS=up.favorites.map(function(x){return String(x).toUpperCase();});saveFavs();}
+    try{localStorage.setItem(FAVSYNC,'1');}catch(e){}
+    render();
+    if(wasEmpty&&FAVS.length){var fb=document.querySelector('.cat[data-c="fav"]');if(fb&&CAT!=='fav')fb.click();}
+    return;
+  }
+  var same=srv.length===FAVS.length&&srv.every(function(x,i){return x===FAVS[i];});
+  if(!same){FAVS=srv;saveFavs();render();}
+}
 const STAR='<svg viewBox="0 0 24 24"><path d="M12 3l2.9 6 6.1.9-4.5 4.4 1.1 6.3L12 18.6 6.4 20.6l1.1-6.3L3 9.9 9.1 9z"/></svg>';
-function toggleFav(e,sym){e.stopPropagation();const i=FAVS.indexOf(sym);if(i>=0)FAVS.splice(i,1);else FAVS.push(sym);saveFavs();render();}
+function toggleFav(e,sym){
+  if(e&&e.stopPropagation)e.stopPropagation();
+  var i=FAVS.indexOf(sym),on=i<0;
+  if(on)FAVS.push(sym);else FAVS.splice(i,1);
+  saveFavs();
+  favApi('POST',{symbol:sym,on:on});
+  render();
+}
 window.toggleFav=toggleFav;
 /* تنبيهات الأسعار */
 const ALKEY='apex_alerts_'+_uid(MSESS.email);
@@ -275,38 +333,81 @@ function sortList(list){
   });
 }
 function emptyState(){
-  if(CAT==='fav')return '<div class="empty"><div class="big">⭐</div><b>لا مفضلة بعد</b><p>اضغط النجمة بجانب أي عملة لإضافتها هنا والوصول السريع لها.</p></div>';
+  if(CAT==='fav'){
+    if(FAVS.length&&!ROWS.length)return '<div class="empty"><div class="big">⏳</div><b>جارٍ تحميل الأسعار…</b><p>مفضلتك محفوظة على حسابك، لحظة وتظهر.</p></div>';
+    return '<div class="empty"><div class="big">⭐</div><b>لا مفضلة بعد</b><p>اضغط النجمة بجانب أي عملة لإضافتها هنا والوصول السريع لها.</p></div>';
+  }
   if(CAT==='tradfi')return '<div class="empty"><div class="big">🏦</div><b>التمويل التقليدي</b><p>فوركس، أسهم، سلع ومؤشرات عالمية — تُطرح قريباً على منصّة Apex.</p></div>';
   if(CAT==='predict')return '<div class="empty"><div class="big">🔮</div><b>أسواق التوقّع</b><p>راهن على نتائج الأحداث والأسعار المستقبلية — قريباً.</p></div>';
   if(CAT==='crypto'&&SUB==='options')return '<div class="empty"><div class="big">🧩</div><b>عقود الخيارات</b><p>خيارات Call / Put على BTC وETH — قريباً على Apex.</p></div>';
   return '<div class="empty"><div class="big">🔍</div><b>لا نتائج</b><p>جرّب كلمة بحث أخرى.</p></div>';
 }
+function rowHtml(r){
+  const up=r.pct>=0;
+  const isApx=(window.APX&&r.base===APX.BASE);
+  const logo=isApx?'<span class="apxlogo">A</span>':icoImg(r.base);
+  const tag=r.mkt?'<span class="tag">'+r.mkt+'</span>':'';
+  const sub='حجم '+fmtVol(r.vol)+' • '+esc(r.base)+'/'+esc(r.quote||'');
+  const routeFut=(CAT==='crypto'&&(SUB==='usdm'||SUB==='coinm'));
+  const href=routeFut?('futures.html?symbol='+r.sym.toLowerCase()):('trading.html?symbol='+r.sym.toLowerCase());
+  return '<div class="mrow" data-sym="'+esc(r.sym)+'" onclick="location.href=\''+href+'\'">'+
+    '<span class="fav'+(FAVS.includes(r.sym)?' on':'')+'" onclick="toggleFav(event,\''+r.sym+'\')">'+STAR+'</span>'+
+    logo+
+    '<div class="nm"><b>'+esc(r.base)+tag+'</b><span>'+sub+'</span></div>'+
+    '<span class="mpx px">$'+fmtPx(r.price)+'</span>'+
+    '<span class="mpc pc '+(up?'up':'dn')+'">'+(up?'+':'')+r.pct.toFixed(2)+'%</span>'+
+  '</div>';
+}
+/* ===== بناء القائمة مرة واحدة ثم تحديث الأرقام فقط =====
+   السبب: إعادة بناء innerHTML مع كل تحديث سعر (كل 6 ثوانٍ) كانت تحذف صور العملات
+   وتُعيد طلبها → تختفي وترجع. هلق الصف والصورة يبقون بمكانهم ويتغيّر النص وحده. */
+function listSig(list){
+  return CAT+'|'+SUB+'|'+QSTR+'|'+SORT.key+'|'+SORT.dir+'||'+list.map(r=>r.sym).join(',');
+}
+function updateRows(list){
+  const body=$('mktBody');if(!body)return;
+  for(let i=0;i<list.length;i++){
+    const r=list[i];
+    const row=body.children[i];
+    if(!row||row.dataset.sym!==r.sym)continue;
+    const up=r.pct>=0;
+    const pxEl=row.querySelector('.mpx');
+    const prev=pxPrev[r.sym];
+    if(pxEl){
+      const txt='$'+fmtPx(r.price);
+      if(pxEl.textContent!==txt){
+        pxEl.textContent=txt;
+        if(prev!=null&&r.price!==prev){
+          pxEl.classList.remove('up','dn','eq');
+          void pxEl.offsetWidth;
+          pxEl.classList.add(r.price>prev?'up':'dn');
+        }
+      }
+    }
+    pxPrev[r.sym]=r.price;
+    const pcEl=row.querySelector('.mpc');
+    if(pcEl){
+      const t=(up?'+':'')+r.pct.toFixed(2)+'%';
+      if(pcEl.textContent!==t)pcEl.textContent=t;
+      if(pcEl.classList.contains('up')!==up){pcEl.classList.toggle('up',up);pcEl.classList.toggle('dn',!up);}
+    }
+    const star=row.querySelector('.fav');
+    if(star){const on=FAVS.includes(r.sym);if(star.classList.contains('on')!==on)star.classList.toggle('on',on);}
+  }
+}
 function render(){
   const body=$('mktBody');if(!body)return;
-  if(CAT==='tradfi'){renderTradFi();return;}
-  if(CAT==='predict'){renderPredict();return;}
-  if(CAT==='crypto'&&SUB==='options'){renderOptions();return;}
+  if(CAT==='tradfi'){body.dataset.sig='';body.innerHTML='';renderTradFi();return;}
+  if(CAT==='predict'){body.dataset.sig='';body.innerHTML='';renderPredict();return;}
+  if(CAT==='crypto'&&SUB==='options'){body.dataset.sig='';body.innerHTML='';renderOptions();return;}
   let list=catList();
   if(QSTR){const s=QSTR.toUpperCase();list=list.filter(r=>r.sym.includes(s)||r.base.includes(s));}
   list=sortList(list);
-  if(!list.length){body.innerHTML=emptyState();return;}
-  const routeFut=(CAT==='crypto'&&(SUB==='usdm'||SUB==='coinm'));
-  body.innerHTML=list.map(r=>{
-    const up=r.pct>=0;
-    const prev=pxPrev[r.sym];let dir='eq';if(prev!=null){if(r.price>prev)dir='up';else if(r.price<prev)dir='dn';}pxPrev[r.sym]=r.price;
-    const isApx=(window.APX&&r.base===APX.BASE);
-    const logo=isApx?'<span class="apxlogo">A</span>':icoImg(r.base);
-    const tag=r.mkt?'<span class="tag">'+r.mkt+'</span>':'';
-    const sub='حجم '+fmtVol(r.vol)+' • '+esc(r.base)+'/'+esc(r.quote||'');
-    const href=routeFut?('futures.html?symbol='+r.sym.toLowerCase()):('trading.html?symbol='+r.sym.toLowerCase());
-    return '<div class="mrow" onclick="location.href=\''+href+'\'">'+
-      '<span class="fav'+(FAVS.includes(r.sym)?' on':'')+'" onclick="toggleFav(event,\''+r.sym+'\')">'+STAR+'</span>'+
-      logo+
-      '<div class="nm"><b>'+esc(r.base)+tag+'</b><span>'+sub+'</span></div>'+
-      '<span class="mpx px '+dir+'">$'+fmtPx(r.price)+'</span>'+
-      '<span class="mpc pc '+(up?'up':'dn')+'">'+(up?'+':'')+r.pct.toFixed(2)+'%</span>'+
-    '</div>';
-  }).join('');
+  if(!list.length){body.dataset.sig='';body.innerHTML=emptyState();return;}
+  const sig=listSig(list);
+  if(body.dataset.sig===sig&&body.querySelector('.mrow')){updateRows(list);return;}
+  body.dataset.sig=sig;
+  body.innerHTML=list.map(rowHtml).join('');
 }
 /* ===== التمويل التقليدي ===== */
 const TRADFI=[
@@ -527,8 +628,24 @@ $('q').addEventListener('input',e=>{QSTR=e.target.value.trim();render();});
 /* استقبال كلمة البحث من الصفحة الرئيسية: markets.html?q=BTC */
 (function(){try{var m=new URLSearchParams(location.search).get('q');if(m){m=m.trim();if(m){var el=$('q');if(el)el.value=m;QSTR=m;render();}}}catch(e){}})();
 $('mdl').addEventListener('click',e=>{if(e.target===$('mdl'))closeMdl();});
-/* بدء افتراضي على العملات الرقمية إن لم توجد مفضلة */
-(function(){if(!FAVS.length){document.querySelector('.cat[data-c="crypto"]').click();}else{$('subs').style.display='none';}})();
+/* صور العملات: نلتقط فشل التحميل/نجاحه هنا بدل خصائص onerror داخل الوسوم
+   (فحص واحد لكل القائمة، والصورة الفاشلة تُحذف نهائياً فلا تظهر مكسورة). */
+(function(){
+  var body=$('mktBody');if(!body)return;
+  body.addEventListener('error',function(ev){
+    var t=ev.target;
+    if(t&&t.tagName==='IMG'&&t.classList&&t.classList.contains('cio'))icoErr(t);
+  },true);
+},true);
+/* بدء افتراضي على العملات الرقمية إن لم توجد مفضلة + جلب المفضّلة من السيرفر */
+(function(){
+  var wantCat='';try{wantCat=new URLSearchParams(location.search).get('cat')||'';}catch(e){}
+  if(wantCat==='fav'){var f=document.querySelector('.cat[data-c="fav"]');if(f)f.click();}
+  else if(!FAVS.length){var c=document.querySelector('.cat[data-c="crypto"]');if(c)c.click();}else{$('subs').style.display='none';}
+  syncFavs();
+  document.addEventListener('visibilitychange',function(){if(!document.hidden)syncFavs();});
+  window.addEventListener('focus',function(){syncFavs();});
+})();
 poll();setInterval(poll,6000);
 if(window.APX&&APX.onChange){APX.onChange(function(){try{poll();}catch(e){}});}
 </script>

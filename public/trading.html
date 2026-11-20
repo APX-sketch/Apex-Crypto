@@ -798,7 +798,6 @@ html,body{margin:0;background:#05070a;color:var(--txt);font-family:'Segoe UI',Ta
   </div>
   <div style="padding:0 16px">
     <div class="err" id="err"></div>
-    <div style="font-size:10px;color:var(--mut);text-align:center;margin-bottom:8px" id="feePct"></div>
     <button class="confirm buy" id="confirmBtn" onclick="placeOrder()">تأكيد الشراء</button>
   </div>
   <div class="otb">
@@ -843,7 +842,7 @@ html,body{margin:0;background:#05070a;color:var(--txt);font-family:'Segoe UI',Ta
       <button class="mcell" onclick="soon('معلمات التداول')"><span class="mic"><svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 012-2h7v18H6a2 2 0 01-2-2z"/><path d="M13 3h5a2 2 0 012 2v14a2 2 0 01-2 2h-5"/></svg></span><span>معلمات التداول</span></button>
       <button class="mcell" onclick="soon('إعلان')"><span class="mic"><svg viewBox="0 0 24 24"><path d="M3 10v4h3l5 4V6L6 10z"/><path d="M16 9a4 4 0 010 6M18.5 7a7 7 0 010 10"/></svg></span><span>إعلان</span></button>
       <button class="mcell" onclick="location.href='index.html'"><span class="mic"><svg viewBox="0 0 24 24"><path d="M4 10a8 8 0 0116 0v4a3 3 0 01-3 3h-1v-6h4M4 14v-4m0 4a3 3 0 003 3h0v-6H4"/></svg></span><span>مركز المساعدة</span></button>
-      <button class="mcell" onclick="location.href='markets.html'"><span class="mic"><svg viewBox="0 0 24 24"><path d="M12 3l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 18l-5.8 3.4 1.1-6.5L2.6 9.8l6.5-.9z"/></svg></span><span>المفضلة</span></button>
+      <button class="mcell" onclick="location.href='markets.html?cat=fav'"><span class="mic"><svg viewBox="0 0 24 24"><path d="M12 3l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 18l-5.8 3.4 1.1-6.5L2.6 9.8l6.5-.9z"/></svg></span><span>المفضلة</span></button>
     </div>
   </div>
 </div>
@@ -1329,7 +1328,6 @@ function openSheet(s){otype='limit';
   if($('shChg')&&$('chg')){$('shChg').textContent=$('chg').textContent;$('shChg').className='chg '+($('chg').className.indexOf('down')>=0?'down':'up');}
   if($('priceUnit'))$('priceUnit').textContent=quoteCcy();
   if($('totalUnit'))$('totalUnit').textContent=quoteCcy();
-  if($('feePct'))$('feePct').textContent='رسوم التداول: '+(FEE_RATE*100).toFixed(2)+'% (نفس عمولة بينانس)';
   document.querySelectorAll('.otab').forEach(t=>t.classList.toggle('on',t.dataset.ot==='limit'));
   $('priceFld').style.display='flex';$('priceFld').style.opacity='1';$('inPrice').disabled=false;
   $('inPrice').value=mark?(+mark).toFixed(pdec(mark)):'';

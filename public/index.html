@@ -1276,11 +1276,11 @@ function paintBalState(){
     clearTimeout(_balSlowT);
     el.className='balstat show err';
     el.innerHTML='<i class="d"></i><span>تعذّر الاتصال — هذا آخر رصيد محفوظ</span><button type="button" onclick="refreshWallet(1)">تحديث</button>';
-  }else if(balState==='ok'){
-    el.className='balstat show ok';
-    el.innerHTML='<i class="d"></i><span>الرصيد محدّث</span>';
-    _balHideT=setTimeout(function(){el.className='balstat';el.innerHTML='';},2200);
-  }else{el.className='balstat';el.innerHTML='';}
+  }else{
+    /* حالة النجاح: لا نُظهر أي شارة خضراء — تُخفى الشارة تماماً */
+    clearTimeout(_balSlowT);clearTimeout(_balHideT);
+    el.className='balstat';el.innerHTML='';
+  }
 }
 setTimeout(function(){try{paintBalState();}catch(e){}},0);
 /* نظرة عامة = الرصيد الفوري + رصيد العقود الآجلة (مثل تبويب "نظرة عامة" في المحفظة) */
@@ -1327,9 +1327,65 @@ let activeCat='trending';
 const pxPrev={};/* آخر سعر لكل رمز لتلوين التحديث */
 function pdec(p){return p>=1000?2:p>=1?2:p>=0.1?4:6;}
 function icoUrl(b){return 'https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/128/color/'+String(b||'').toLowerCase()+'.png';}
-/* أيقونة العملة عبر الحلّ المشترك الثابت (لا فراغ ولا وميض) */
-function icoEl(base){return (window.APXICO)?APXICO.html(base,26):'<span class="ax-ico" style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#2a3441;color:#fff;font-weight:900;font-size:11px">'+String(base||'?').slice(0,1)+'</span>';}
-function favArr(){try{return JSON.parse(localStorage.getItem('apex_favs_'+UID)||'[]')||[];}catch(e){return [];}}
+/* ===== أيقونة العملة: دائرة ملوّنة بحرف + صورة فوقها =====
+   الخلفية ثابتة (لون مشتق من الرمز) فلا تظهر دائرة رمادية فارغة،
+   والصورة إن فشلت تُحذف نهائياً وتُحفظ بالذاكرة فلا تُطلب مرة أخرى. */
+var ICO_BAD={};
+var ICO_SRC=[icoUrl,function(b){return 'https://assets.coincap.io/assets/icons/'+String(b||'').toLowerCase()+'@2x.png';}];
+function icoEl(base){
+  var b=String(base||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6)||'?';
+  /* الموديول المشترك أولاً (كاش محلي للصور = لا اختفاء) ثم البديل المحلي */
+  if(window.APXICO&&APXICO.html){try{return APXICO.html(b,26);}catch(e){}}
+  var letter=b.slice(0,1);
+  var h=0;for(var i=0;i<b.length;i++)h=(h*31+b.charCodeAt(i))%360;
+  var bg='linear-gradient(135deg,hsl('+h+',58%,44%),hsl('+((h+26)%360)+',56%,26%))';
+  var img=ICO_BAD[b]?'':'<img class="cio" data-sym="'+b+'" data-step="0" alt="'+letter+'" src="'+ICO_SRC[0](b)+'" style="position:absolute;inset:0;width:26px;height:26px;border-radius:50%;object-fit:cover;background:transparent">';
+  return '<span class="axic" style="position:relative;width:26px;height:26px;flex:0 0 auto;border-radius:50%;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;background:'+bg+';color:#fff;font-weight:900;font-size:11px;text-shadow:0 1px 2px rgba(0,0,0,.4)">'+letter+img+'</span>';
+}
+function icoErr(img){
+  var b=(img&&img.dataset)?img.dataset.sym:'';
+  var step=parseInt((img&&img.dataset&&img.dataset.step)||'0',10)||0;
+  if(step+1<ICO_SRC.length){img.dataset.step=String(step+1);img.src=ICO_SRC[step+1](b);return;}
+  ICO_BAD[b]=1;
+  try{if(img&&img.parentNode)img.parentNode.removeChild(img);}catch(e){try{if(img)img.style.display='none';}catch(_){}}
+}
+/* التقاط فشل صور القائمة (خطأ في التحميل) بدون خصائص onerror داخل الوسوم */
+document.addEventListener('error',function(ev){
+  var t=ev.target;
+  if(t&&t.tagName==='IMG'&&t.classList&&t.classList.contains('cio'))icoErr(t);
+},true);
+function favArr(){try{var a=JSON.parse(localStorage.getItem('apex_favs_'+UID)||'[]');return Array.isArray(a)?a.filter(function(x){return typeof x==='string'&&x;}):[];}catch(e){return [];}}
+function favSave(a){try{localStorage.setItem('apex_favs_'+UID,JSON.stringify(a));}catch(e){}}
+/* مزامنة المفضّلة من السيرفر: تضاف من الجوال تظهر على الكمبيوتر والعكس.
+   أول مرة: تُرفع مفضّلة هذا المتصفّح وتُدمج بلا تكرار، وبعدها السيرفر هو المرجع. */
+function favApiCall(method,body){
+  if(!SUP_TOKEN)return Promise.resolve(null);
+  try{
+    return fetch(API_BASE+'/api/favorites',{method:method,headers:{'Content-Type':'application/json','Accept':'application/json','Authorization':'Bearer '+SUP_TOKEN},body:body?JSON.stringify(body):undefined})
+      .then(function(r){return r.ok?r.json():null;}).catch(function(){return null;});
+  }catch(e){return Promise.resolve(null);}
+}
+async function syncFavs(){
+  if(!SUP_TOKEN||(typeof GUEST_MODE!=='undefined'&&GUEST_MODE))return;
+  var d=await favApiCall('GET');
+  if(!d||!Array.isArray(d.favorites))return;
+  var srv=d.favorites.map(function(x){return String(x).toUpperCase();});
+  var local=favArr();
+  var key='apex_favs_synced_'+UID;
+  var migrated=false;try{migrated=localStorage.getItem(key)==='1';}catch(e){}
+  if(!migrated){
+    var uni=[],seen={};
+    srv.concat(local).forEach(function(x){if(x&&!seen[x]){seen[x]=1;uni.push(x);}});
+    favSave(uni);
+    var up=await favApiCall('POST',{list:uni});
+    if(up&&Array.isArray(up.favorites))favSave(up.favorites.map(function(x){return String(x).toUpperCase();}));
+    try{localStorage.setItem(key,'1');}catch(e){}
+    renderMarkets();
+    return;
+  }
+  var same=srv.length===local.length&&srv.every(function(x,i){return x===local[i];});
+  if(!same){favSave(srv);renderMarkets();}
+}
 function catSyms(cat){
   if(cat==='fav')return favArr();
   if(cat==='trending')return FAMOUS;
@@ -1438,6 +1494,7 @@ var POLL_MS=15000,_pollTimer=null;
 function _startPoll(){if(_pollTimer)return;_pollTimer=setInterval(function(){if(!document.hidden)poll();},POLL_MS);}
 function _stopPoll(){if(_pollTimer){clearInterval(_pollTimer);_pollTimer=null;}}
 renderBalance(); renderMarkets(); poll(); _startPoll();
+try{syncFavs();document.addEventListener('visibilitychange',function(){if(!document.hidden)syncFavs();});}catch(e){}
 /* تحديث فوري عند تغيّر سعر APX من لوحة الأدمن */
 if(window.APX&&APX.onChange){APX.onChange(function(){try{poll();}catch(e){}});}
 
