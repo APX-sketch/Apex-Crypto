@@ -1324,7 +1324,6 @@ const FAMOUS=['APXUSDT','BTCUSDT','ETHUSDT','BNBUSDT','SOLUSDT','XRPUSDT','DOGEU
 const NEW_LIST=['SUIUSDT','SEIUSDT','TIAUSDT','PEPEUSDT','WIFUSDT','JUPUSDT','PYTHUSDT','ENAUSDT','WLDUSDT','ORDIUSDT','STRKUSDT','ONDOUSDT','NOTUSDT','FETUSDT','RNDRUSDT'];
 const mktMap={};
 let activeCat='trending';
-const pxPrev={};/* آخر سعر لكل رمز لتلوين التحديث */
 function pdec(p){return p>=1000?2:p>=1?2:p>=0.1?4:6;}
 function icoUrl(b){return 'https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/128/color/'+String(b||'').toLowerCase()+'.png';}
 /* ===== أيقونة العملة: دائرة ملوّنة بحرف + صورة فوقها =====
@@ -1400,7 +1399,8 @@ function rowHtml(sym){
   const price=parseFloat(d.c),chg=parseFloat(d.P),up=chg>=0;
   const logo=(window.APX&&b===APX.BASE)?'<span class="apxlogo">A</span>':icoEl(b);
   const nm=(window.APX&&b===APX.BASE)?'Apex Coin':b;
-  const prev=pxPrev[sym];let dir='eq';if(prev!=null){if(price>prev)dir='up';else if(price<prev)dir='dn';}pxPrev[sym]=price;
+  /* لون السعر يتبع اتجاه 24 ساعة: أخضر صعود، أحمر هبوط، أبيض ثبات */
+  const dir=(chg>0)?'up':(chg<0?'dn':'eq');
   return '<tr data-sym="'+sym+'" onclick="location.href=\'trading.html?symbol='+sym.toLowerCase()+'\'" style="cursor:pointer">'+
     '<td><div class="coin">'+logo+'<div><b>'+nm+'</b><br><span>'+b+'/USDT</span></div></div></td>'+
     '<td style="text-align:end"><span class="px '+dir+'">$'+fmt(price,pdec(price))+'</span></td>'+
@@ -1442,14 +1442,14 @@ function updateMarketRows(body,syms){
     const price=parseFloat(d.c), chg=parseFloat(d.P), up=chg>=0;
     const pxEl=tr.querySelector('.px');
     if(pxEl){
-      const prev=pxPrev[sym];
-      if(prev==null){pxPrev[sym]=price;}
-      else if(prev!==price){
-        pxEl.textContent='$'+fmt(price,pdec(price));
+      const txt='$'+fmt(price,pdec(price));
+      const changed=(pxEl.textContent!==txt);
+      if(changed)pxEl.textContent=txt;
+      const want=(chg>0)?'up':(chg<0?'dn':'eq');
+      if(!pxEl.classList.contains(want)||(changed&&want!=='eq')){
         pxEl.classList.remove('up','dn','eq');
         void pxEl.offsetWidth;
-        pxEl.classList.add(price>prev?'up':'dn');
-        pxPrev[sym]=price;
+        pxEl.classList.add(want);
       }
     }
     const pcEl=tr.querySelector('.pc');

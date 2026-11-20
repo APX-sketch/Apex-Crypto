@@ -250,7 +250,7 @@ const STABLE=['USDT','USDC','FDUSD','BUSD','TUSD'];
 const MAJ=['BTC','ETH','BNB','SOL','XRP','DOGE','ADA','LTC','LINK','AVAX','DOT','TRX','BCH'];
 function splitSym(sym){for(const q of QUOTES){if(sym.endsWith(q)&&sym.length>q.length)return{base:sym.slice(0,-q.length),quote:q};}return{base:sym,quote:''};}
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-let ROWS=[];const pxPrev={};
+let ROWS=[];
 const MSESS=JSON.parse(localStorage.getItem('skygo_session')||'{}');
 function _uid(e){var h=0;e=(e||'').toLowerCase();for(var i=0;i<e.length;i++){h=(h*31+e.charCodeAt(i))>>>0;}return(100000000+(h%900000000));}
 const FAVKEY='apex_favs_'+_uid(MSESS.email);
@@ -344,6 +344,7 @@ function emptyState(){
 }
 function rowHtml(r){
   const up=r.pct>=0;
+  const pxCls=(r.pct>0)?'up':(r.pct<0?'dn':'eq');
   const isApx=(window.APX&&r.base===APX.BASE);
   const logo=isApx?'<span class="apxlogo">A</span>':icoImg(r.base);
   const tag=r.mkt?'<span class="tag">'+r.mkt+'</span>':'';
@@ -354,7 +355,7 @@ function rowHtml(r){
     '<span class="fav'+(FAVS.includes(r.sym)?' on':'')+'" onclick="toggleFav(event,\''+r.sym+'\')">'+STAR+'</span>'+
     logo+
     '<div class="nm"><b>'+esc(r.base)+tag+'</b><span>'+sub+'</span></div>'+
-    '<span class="mpx px">$'+fmtPx(r.price)+'</span>'+
+    '<span class="mpx px '+pxCls+'">$'+fmtPx(r.price)+'</span>'+
     '<span class="mpc pc '+(up?'up':'dn')+'">'+(up?'+':'')+r.pct.toFixed(2)+'%</span>'+
   '</div>';
 }
@@ -371,20 +372,21 @@ function updateRows(list){
     const row=body.children[i];
     if(!row||row.dataset.sym!==r.sym)continue;
     const up=r.pct>=0;
+    /* اللون يتبع اتجاه السعر: أخضر صعود، أحمر هبوط، أبيض ثبات.
+       نضبط الصنف بكل دورة (لا نكتفي بتغيّر النص) لأن السعر قد يرجع لقيمته
+       السابقة فيجب أن يرجع اللون أبيض — ونُعيد تشغيل الوميض فقط عند تغيّر فعلي. */
     const pxEl=row.querySelector('.mpx');
-    const prev=pxPrev[r.sym];
     if(pxEl){
       const txt='$'+fmtPx(r.price);
-      if(pxEl.textContent!==txt){
-        pxEl.textContent=txt;
-        if(prev!=null&&r.price!==prev){
-          pxEl.classList.remove('up','dn','eq');
-          void pxEl.offsetWidth;
-          pxEl.classList.add(r.price>prev?'up':'dn');
-        }
+      const changed=(pxEl.textContent!==txt);
+      if(changed)pxEl.textContent=txt;
+      const want=(r.pct>0)?'up':(r.pct<0?'dn':'eq');
+      if(!pxEl.classList.contains(want)||(changed&&want!=='eq')){
+        pxEl.classList.remove('up','dn','eq');
+        void pxEl.offsetWidth;
+        pxEl.classList.add(want);
       }
     }
-    pxPrev[r.sym]=r.price;
     const pcEl=row.querySelector('.mpc');
     if(pcEl){
       const t=(up?'+':'')+r.pct.toFixed(2)+'%';

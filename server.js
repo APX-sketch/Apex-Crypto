@@ -3645,6 +3645,98 @@ app.get('/api/wallet/transactions', requireUser, (req, res) => {
   res.json({ ok: true, transactions: rows });
 });
 
+// ============================================================
+//  تحويل العملات (Convert)
+// ------------------------------------------------------------
+//  السيرفر هو من ينفّذ التحويل فعلياً (وليس المتصفّح): يخصم عملة المصدر
+//  ويضيف العملة الهدف بنفس القيمة الدولارية بسعر السوق اللحظي (سعر
+//  /api/markets نفسه الذي يراه المستخدم في القوائم)، ثم يسجّل الحركة في
+//  دفتر الأستاذ. الخصم والإضافة يتمّان بنداء ذرّي واحد، فأي تجاوز للرصيد
+//  يُرفض بالكامل ولا يخلق مالاً من العدم.
+// ============================================================
+const CONVERT_FEE_PCT = 0;               // رسوم التحويل (0 = بدون رسوم)
+const CONVERT_MAX = 1e9;                 // سقف أمان للطلب الواحد
+const CONVERT_SYM = /^[A-Z0-9]{2,12}$/;
+function convertUsdPrice(sym) {
+  const s = String(sym || '').toUpperCase();
+  if (!s) return null;
+  if (STABLES.has(s)) return 1;
+  // كاش الأسواق يحمل الأزواج كاملة (BTCUSDT)، لذا نبحث عن <العملة>USDT أولاً
+  let p = priceOf(s + 'USDT');
+  if (!(isFinite(p) && p > 0)) p = priceOf(s);
+  if (!(isFinite(p) && p > 0)) {
+    const ref = priceOf('USDT' + s);   // زوج معكوس (نادر)
+    if (isFinite(ref) && ref > 0) p = 1 / ref;
+  }
+  return (isFinite(p) && p > 0) ? p : null;
+}
+function convertFail(res, status, error) { return res.status(status).json({ ok: false, error }); }
+
+// سعر التحويل اللحظي (يستخدمه زر «تحويل» كتقدير مبدئي قبل التأكيد)
+app.get('/api/convert/quote', (req, res) => {
+  const from = String(req.query.from || '').toUpperCase();
+  const to = String(req.query.to || '').toUpperCase();
+  if (!CONVERT_SYM.test(from) || !CONVERT_SYM.test(to) || from === to) return convertFail(res, 400, 'bad_pair');
+  const pf = convertUsdPrice(from), pt = convertUsdPrice(to);
+  if (!pf || !pt) return convertFail(res, 503, 'price_unavailable');
+  const amount = Number(req.query.amount);
+  const amt = (isFinite(amount) && amount > 0) ? amount : 0;
+  const net = amt * (1 - CONVERT_FEE_PCT / 100);
+  return res.json({
+    ok: true, from, to, amount: amt,
+    receive: +(net * pf / pt).toFixed(8),
+    rate: +(pf / pt).toFixed(12),
+    priceFrom: pf, priceTo: pt,      // سعر كل عملة بالدولار (يستخدمه المتصفّح للعملات النادرة)
+    feePct: CONVERT_FEE_PCT,
+  });
+});
+
+app.post('/api/convert', strictLimiter, requireUser, (req, res) => {
+  const body = req.body || {};
+  const from = String(body.from || '').toUpperCase();
+  const to = String(body.to || '').toUpperCase();
+  const amount = Number(body.amount);
+  if (!CONVERT_SYM.test(from) || !CONVERT_SYM.test(to)) return convertFail(res, 400, 'bad_pair');
+  if (from === to) return convertFail(res, 400, 'same_currency');
+  if (!isFinite(amount) || amount <= 0 || amount > CONVERT_MAX) return convertFail(res, 400, 'bad_amount');
+  // الحساب المجمّد لا يحرّك أي رصيد (نفس قاعدة الإيداع/السحب/التحويل)
+  if (req.user && req.user.frozen) return convertFail(res, 403, 'frozen');
+
+  const pf = convertUsdPrice(from), pt = convertUsdPrice(to);
+  if (!pf || !pt) return convertFail(res, 503, 'price_unavailable');
+
+  const net = amount * (1 - CONVERT_FEE_PCT / 100);
+  const receive = +(net * pf / pt).toFixed(8);
+  if (!(receive > 0)) return convertFail(res, 400, 'amount_too_small');
+
+  // نداء واحد ذرّي: خصم المصدر وإضافة الهدف معاً (يرفض أي رصيد سالب)
+  const u = store.applyDeltas(req.user.id, { [from]: -amount, [to]: receive });
+  if (!u) {
+    try { logSecurity(req, { kind: 'convert_insufficient', severity: 'warning', detail: 'محاولة تحويل عملة تتجاوز الرصيد (رُفضت)', meta: { from, to, amount } }); } catch (e) {}
+    return convertFail(res, 400, 'insufficient_balance');
+  }
+
+  const rate = pf / pt;
+  try {
+    store.addTransaction(req.user.id, {
+      type: 'convert', amount: receive, currency: to, status: 'done',
+      note: 'تحويل ' + amount + ' ' + from + ' ← ' + receive + ' ' + to + ' بسعر 1 ' + from + ' = ' + (+rate.toPrecision(8)) + ' ' + to,
+    });
+  } catch (e) {}
+  try {
+    store.addNotification(req.user.id, {
+      title: 'تحويل عملة', kind: 'money',
+      body: 'تم تحويل ' + amount + ' ' + from + ' إلى ' + receive + ' ' + to + '.',
+    });
+  } catch (e) {}
+
+  return res.json({
+    ok: true, from, to, amount,
+    receive, rate: +rate.toFixed(12), feePct: CONVERT_FEE_PCT,
+    balances: u.balances || {},
+  });
+});
+
 // ---- سجل حركة المحفظة (كل ما يلمس الرصيد) ----
 // يُبنى من دفتر الأستاذ الدائم wx_ledger (كل فرق رصيد يُكتب صفّاً هناك)
 // ويُدمج مع سجل المعاملات الغنيّ (store.getTransactions) الذي يحمل نوع
