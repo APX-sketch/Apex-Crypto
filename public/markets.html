@@ -250,7 +250,7 @@ const STABLE=['USDT','USDC','FDUSD','BUSD','TUSD'];
 const MAJ=['BTC','ETH','BNB','SOL','XRP','DOGE','ADA','LTC','LINK','AVAX','DOT','TRX','BCH'];
 function splitSym(sym){for(const q of QUOTES){if(sym.endsWith(q)&&sym.length>q.length)return{base:sym.slice(0,-q.length),quote:q};}return{base:sym,quote:''};}
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-let ROWS=[];
+let ROWS=[];const pxPrev={};   /* آخر سعر لكل عملة لمقارنة الحركة اللحظية (أخضر/أحمر/أبيض) */
 const MSESS=JSON.parse(localStorage.getItem('skygo_session')||'{}');
 function _uid(e){var h=0;e=(e||'').toLowerCase();for(var i=0;i<e.length;i++){h=(h*31+e.charCodeAt(i))>>>0;}return(100000000+(h%900000000));}
 const FAVKEY='apex_favs_'+_uid(MSESS.email);
@@ -344,7 +344,7 @@ function emptyState(){
 }
 function rowHtml(r){
   const up=r.pct>=0;
-  const pxCls=(r.pct>0)?'up':(r.pct<0?'dn':'eq');
+  const pxCls='eq';   /* اللون يُحدَّد بعد أول حركة سعرية فعلية */
   const isApx=(window.APX&&r.base===APX.BASE);
   const logo=isApx?'<span class="apxlogo">A</span>':icoImg(r.base);
   const tag=r.mkt?'<span class="tag">'+r.mkt+'</span>':'';
@@ -372,21 +372,25 @@ function updateRows(list){
     const row=body.children[i];
     if(!row||row.dataset.sym!==r.sym)continue;
     const up=r.pct>=0;
-    /* اللون يتبع اتجاه السعر: أخضر صعود، أحمر هبوط، أبيض ثبات.
-       نضبط الصنف بكل دورة (لا نكتفي بتغيّر النص) لأن السعر قد يرجع لقيمته
-       السابقة فيجب أن يرجع اللون أبيض — ونُعيد تشغيل الوميض فقط عند تغيّر فعلي. */
+    /* اللون يتبع حركة السعر نفسها (زي المنصّات العالمية):
+       صعد عن آخر سعر → أخضر، نزل → أحمر، ما تحرّك → أبيض.
+       نضبط الصنف بكل دورة حتى يرجع أبيض لما يوقف السعر. */
     const pxEl=row.querySelector('.mpx');
+    const prev=pxPrev[r.sym];
+    let moved=false;
+    if(prev!=null&&r.price!==prev)moved=true;
     if(pxEl){
       const txt='$'+fmtPx(r.price);
       const changed=(pxEl.textContent!==txt);
       if(changed)pxEl.textContent=txt;
-      const want=(r.pct>0)?'up':(r.pct<0?'dn':'eq');
-      if(!pxEl.classList.contains(want)||(changed&&want!=='eq')){
+      const want=(prev==null||r.price===prev)?'eq':(r.price>prev?'up':'dn');
+      if(!pxEl.classList.contains(want)||(moved&&want!=='eq')){
         pxEl.classList.remove('up','dn','eq');
         void pxEl.offsetWidth;
         pxEl.classList.add(want);
       }
     }
+    pxPrev[r.sym]=r.price;
     const pcEl=row.querySelector('.mpc');
     if(pcEl){
       const t=(up?'+':'')+r.pct.toFixed(2)+'%';
@@ -410,6 +414,8 @@ function render(){
   if(body.dataset.sig===sig&&body.querySelector('.mrow')){updateRows(list);return;}
   body.dataset.sig=sig;
   body.innerHTML=list.map(rowHtml).join('');
+  /* نحافظ على آخر سعر معروف (لا نصفّره) حتى لا يرجع اللون أبيض مع كل إعادة ترتيب */
+  list.forEach(function(r){if(pxPrev[r.sym]==null)pxPrev[r.sym]=r.price;});
 }
 /* ===== التمويل التقليدي ===== */
 const TRADFI=[

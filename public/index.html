@@ -1393,14 +1393,15 @@ function catSyms(cat){
   uni.sort((a,b)=>cat==='gain'?(parseFloat(mktMap[b].P)-parseFloat(mktMap[a].P)):(parseFloat(mktMap[a].P)-parseFloat(mktMap[b].P)));
   return uni.slice(0,15);
 }
+const pxPrev={};   /* آخر سعر لكل عملة (مرجع الحركة اللحظية) */
 function rowHtml(sym){
   const d=mktMap[sym]; if(!d)return '';
   const b=sym.replace('USDT','');
   const price=parseFloat(d.c),chg=parseFloat(d.P),up=chg>=0;
   const logo=(window.APX&&b===APX.BASE)?'<span class="apxlogo">A</span>':icoEl(b);
   const nm=(window.APX&&b===APX.BASE)?'Apex Coin':b;
-  /* لون السعر يتبع اتجاه 24 ساعة: أخضر صعود، أحمر هبوط، أبيض ثبات */
-  const dir=(chg>0)?'up':(chg<0?'dn':'eq');
+  /* اللون بعد أول حركة سعرية فعلية (صعود/هبوط/ثبات) */
+  const dir='eq';
   return '<tr data-sym="'+sym+'" onclick="location.href=\'trading.html?symbol='+sym.toLowerCase()+'\'" style="cursor:pointer">'+
     '<td><div class="coin">'+logo+'<div><b>'+nm+'</b><br><span>'+b+'/USDT</span></div></div></td>'+
     '<td style="text-align:end"><span class="px '+dir+'">$'+fmt(price,pdec(price))+'</span></td>'+
@@ -1430,6 +1431,8 @@ function renderMarkets(){
   }
   body.dataset.sig=sig;
   body.innerHTML=syms.map(rowHtml).join('');
+  /* نحافظ على آخر سعر معروف حتى لا يرجع اللون أبيض مع كل إعادة بناء */
+  syms.forEach(function(s){var d=mktMap[s];if(d&&pxPrev[s]==null)pxPrev[s]=parseFloat(d.c);});
 }
 
 /* تحديث سعر/نسبة صفوف موجودة (بلا لمس الأيقونة إطلاقاً) */
@@ -1445,12 +1448,15 @@ function updateMarketRows(body,syms){
       const txt='$'+fmt(price,pdec(price));
       const changed=(pxEl.textContent!==txt);
       if(changed)pxEl.textContent=txt;
-      const want=(chg>0)?'up':(chg<0?'dn':'eq');
-      if(!pxEl.classList.contains(want)||(changed&&want!=='eq')){
+      const prev=pxPrev[sym];
+      const moved=(prev!=null&&price!==prev);
+      const want=(prev==null||price===prev)?'eq':(price>prev?'up':'dn');
+      if(!pxEl.classList.contains(want)||(moved&&want!=='eq')){
         pxEl.classList.remove('up','dn','eq');
         void pxEl.offsetWidth;
         pxEl.classList.add(want);
       }
+      pxPrev[sym]=price;
     }
     const pcEl=tr.querySelector('.pc');
     if(pcEl){
