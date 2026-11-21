@@ -1352,6 +1352,21 @@ async function ensureSchema() {
     ' INDEX idx_rep_post (post_id),' +
     ' INDEX idx_rep_open (handled, created_at)' +
     ')');
+  // تصنيف المنشور: post | news | ads | analysis — يغذّي تبويبات «الأخبار/الإعلانات/الاكتشاف»
+  await ensureColumn('square_posts', 'kind', "`kind` VARCHAR(12) NOT NULL DEFAULT 'post'");
+  await pool.query('ALTER TABLE square_posts ADD INDEX idx_kind_created (kind, created_at)').catch(function () {});
+  // ===== لقطات قيمة المحفظة اليومية — أساس حساب «أرباح وخسائر اليوم» =====
+  // كل لقطة تخزّن قيمة المحفظة الكاملة (فوري + عقود) بالدولار. عند فتح
+  // المحفظة نحفظ لقطة (كل دقيقتين كحد أقصى)، ثم نحسب فرق القيمة من بداية
+  // اليوم ونطرح منه صافي الإيداعات/السحوبات، فلا يظهر الإيداع كأنه ربح.
+  await pool.query(
+    'CREATE TABLE IF NOT EXISTS pnl_snapshots (' +
+    ' user_id INT NOT NULL,' +
+    ' ts BIGINT NOT NULL,' +
+    ' value DECIMAL(24,8) NOT NULL DEFAULT 0,' +
+    ' PRIMARY KEY (user_id, ts),' +
+    ' INDEX idx_pnl_user (user_id, ts)' +
+    ')');
   // ===== تقييمات ومراجعات المتداولين (نظام الثقة) — صف واحد لكل (متداول، مُقيِّم) =====
   await pool.query(
     'CREATE TABLE IF NOT EXISTS copy_reviews (' +
@@ -1366,11 +1381,42 @@ async function ensureSchema() {
     ' INDEX idx_trader (trader_id)' +
     ')');
 }
+// ---- محتوى رسمي مبدئي للساحة (أخبار/إعلانات/تحليلات) ----
+// يُزرع مرة واحدة فقط (user_id = 0 = الحساب الرسمي) حتى لا تظهر تبويبات
+// «الأخبار» و«الإعلانات» فارغة على منصّة جديدة. يمكن تعديل/حذف المنشورات
+// لاحقاً من لوحة الإدارة أو من قاعدة البيانات مباشرة.
+async function seedSquareOfficial() {
+  try {
+    const [[c]] = await pool.query('SELECT COUNT(*) AS n FROM square_posts WHERE user_id = 0');
+    if (c && Number(c.n) > 0) return;
+    const now = Date.now();
+    const H = 3600 * 1000;
+    const items = [
+      { kind: 'ads', h: 1.5, txt: '⚡️ جديد: تحويل العملات صار داخل المحفظة بضغطة واحدة — بدون أي رسوم تحويل، وبسعر السوق اللحظي. جرّبه من المحفظة ← «تحويل عملة».' },
+      { kind: 'news', h: 3, txt: '📰 تحديث المنصّة: تحسين سرعة تنفيذ الأوامر وتحديث قوائم الأسواق — السعر يتحدّث الآن لحظياً بالأخضر عند الصعود والأحمر عند الهبوط.' },
+      { kind: 'analysis', h: 5, symbol: 'BTC', txt: '📊 تحليل $BTC: راقب منطقة الدعم الأخيرة وحجم التداول عند أي اختراق. الاختراق بلا حجم غالباً يكون فخّاً — انتظر تأكيد الإغلاق فوق المستوى.' },
+      { kind: 'news', h: 8, txt: '📰 تنبيه سوق: التقلّبات ترتفع عادةً حول مواعيد البيانات الاقتصادية. اضبط وقف الخسارة قبل الدخول، ولا تفتح صفقة بحجم أكبر من قدرتك على التحمّل.' },
+      { kind: 'analysis', h: 12, txt: '📊 إدارة المخاطر: لا تخاطر بأكثر من 1–2% من رأس المال في صفقة واحدة، وحدّد نقطة الخروج قبل أن تفكّر بالربح.' },
+      { kind: 'ads', h: 20, txt: '🛡️ أمانك أولاً: فعّل التحقق بخطوتين، ولا تشارك رمز الدخول أو عنوان السحب مع أي شخص. فريق الدعم لا يطلب منك رصيدك ولا رمزك أبداً.' },
+      { kind: 'news', h: 30, txt: '📰 معلومة: محفظة العقود الآجلة معزولة عن المحفظة الفورية — التحويل بينهما يدوي، فما تربحه أو تخسره في العقود لا يمسّ رصيدك الفوري.' }
+    ];
+    for (const it of items) {
+      await pool.query(
+        'INSERT INTO square_posts (user_id, author, content, image, tag, symbol, kind, created_at) VALUES (0,?,?,?,?,?,?,?)',
+        ['Apex Official', it.txt, '', '', it.symbol || '', it.kind, now - Math.round(it.h * H)]
+      );
+    }
+    console.log('[square] seeded official posts:', items.length);
+  } catch (e) { console.warn('[square/seed]', e.message); }
+}
+
 ensureSchema()
   .then(function () {
     console.log('[schema] ensured OK');
-    return ensureWalletsUnique().then(function (ok) {
-      if (ok) return flushWalletMirror();
+    return seedSquareOfficial().then(function () {
+      return ensureWalletsUnique().then(function (ok) {
+        if (ok) return flushWalletMirror();
+      });
     });
   })
   .catch((e) => console.error('[schema] ensure FAILED:', e.message));
@@ -2426,6 +2472,26 @@ function requireApproved(req, res, next) {
       meta: { status: req.user.status } });
     return res.status(403).json({ error: 'account_not_approved' });
   }
+  next();
+}
+
+// قراءة عامة اختيارية: يمرّ الزائر بلا تسجيل، ويُربط الحساب تلقائياً لو
+// أرسل رمز دخول صالحاً (تُستخدم لتغذية الساحة على الرئيسية قبل تسجيل الدخول).
+async function softUser(req, res, next) {
+  try {
+    const tok = verifyUserToken(bearer(req));
+    if (!tok) return next();
+    if (tok.id && getActiveSid(tok.id) && tok.sid !== getActiveSid(tok.id)) return next();
+    const dbu = await dbGetUserById(tok.id);
+    if (!dbu || dbu.status === 'banned') return next();
+    req.user = {
+      id: String(dbu.id), uid: dbu.id,
+      name: dbu.name || dbu.username || dbu.email,
+      username: dbu.username || dbu.name || dbu.email,
+      email: dbu.email, status: dbu.status || 'pending',
+      frozen: !!Number(dbu.frozen),
+    };
+  } catch (e) { /* زائر */ }
   next();
 }
 
@@ -3598,6 +3664,7 @@ setInterval(matchOrders, 2000);
 // The client credits its local wallet from any new deposits (idempotent by id)
 // then re-syncs, so balances stay consistent with the admin liquidity view.
 app.get('/api/wallet/me', requireUser, (req, res) => {
+  try { pnlTouch(req.user.id); } catch (e) {}
   res.json({
     ok: true,
     depositAddress: req.user.depositAddress || '',
@@ -3605,6 +3672,96 @@ app.get('/api/wallet/me', requireUser, (req, res) => {
     balances: req.user.balances || {},
     locked: lockedBalances(req.user.id),
   });
+});
+
+// ============================================================
+//  أرباح وخسائر اليوم (Today PnL) — من تغيّر قيمة المحفظة فعلياً
+// ------------------------------------------------------------
+//  الفكرة: نحفظ لقطات لقيمة المحفظة (فوري + عقود) طول اليوم. الربح/الخسارة
+//  = قيمة الآن − قيمة بداية اليوم − صافي الإيداعات/السحوبات بعد البداية.
+//  هكذا لا يظهر الإيداع كأنه «ربح»، ولا يظهر السحب كأنه «خسارة».
+const PNL_SNAP_GAP = 120000; // لا نحفظ أكثر من لقطة كل دقيقتين لكل مستخدم
+function equityNow(uid) {
+  let spot = 0, fut = 0;
+  try { const u = store.findUserById(String(uid)); spot = valueUsd((u && u.balances) || {}); } catch (e) {}
+  try { fut = valueUsd(futuresBalances(uid)); } catch (e) {}
+  const t = spot + fut;
+  return isFinite(t) ? +t.toFixed(8) : 0;
+}
+async function pnlTouch(uid) {
+  try {
+    const [[last]] = await pool.query('SELECT ts FROM pnl_snapshots WHERE user_id = ? ORDER BY ts DESC LIMIT 1', [uid]);
+    const ts = Date.now();
+    if (last && ts - Number(last.ts) < PNL_SNAP_GAP) return;
+    await pool.query('INSERT IGNORE INTO pnl_snapshots (user_id, ts, value) VALUES (?, ?, ?)', [uid, ts, equityNow(uid)]);
+  } catch (e) { /* الجدول قد لا يكون جاهزاً بعد */ }
+}
+function pnlFlowsSince(uid, since) {
+  let inflow = 0, outflow = 0;
+  try {
+    for (const d of (store.getDeposits(String(uid)) || [])) {
+      if (Number(d.at) < since) continue;
+      inflow += valueUsd({ [String(d.currency || 'USDT').toUpperCase()]: Number(d.amount) || 0 });
+    }
+  } catch (e) {}
+  try {
+    for (const t of (store.getTransactions(String(uid)) || [])) {
+      if (Number(t.at) < since) continue;
+      const ty = String(t.type || '').toLowerCase();
+      if (ty !== 'transfer_out' && ty !== 'withdraw') continue;
+      outflow += valueUsd({ [String(t.currency || 'USDT').toUpperCase()]: Math.abs(Number(t.amount) || 0) });
+    }
+  } catch (e) {}
+  return { inflow, outflow };
+}
+app.get('/api/pnl/today', requireUser, async (req, res) => {
+  try {
+    const uid = req.user.id;
+    const now = Date.now();
+    const d = new Date();
+    const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const equity = equityNow(uid);
+    let base = null, baseline = 'new';
+    try {
+      const [[b]] = await pool.query(
+        'SELECT ts, value FROM pnl_snapshots WHERE user_id = ? AND ts < ? ORDER BY ts DESC LIMIT 1', [uid, dayStart]);
+      if (b) { base = { ts: Number(b.ts), value: Number(b.value) }; baseline = 'day'; }
+    } catch (e) {}
+    if (!base) {
+      try {
+        const [[b2]] = await pool.query(
+          'SELECT ts, value FROM pnl_snapshots WHERE user_id = ? AND ts >= ? ORDER BY ts ASC LIMIT 1', [uid, dayStart]);
+        if (b2 && Number(b2.ts) < now - 60000) { base = { ts: Number(b2.ts), value: Number(b2.value) }; baseline = 'first'; }
+      } catch (e) {}
+    }
+    if (!base) base = { ts: now, value: equity };
+    const since = Math.max(base.ts, dayStart);
+    const f = pnlFlowsSince(uid, since);
+    const netFlow = +(f.inflow - f.outflow).toFixed(8);
+    const pnl = (equity - base.value) - netFlow;
+    const baseVal = base.value + netFlow;
+    const pct = baseVal > 0 ? (pnl / baseVal) * 100 : 0;
+    let spark = [];
+    try {
+      const [rows] = await pool.query(
+        'SELECT value FROM pnl_snapshots WHERE user_id = ? AND ts >= ? ORDER BY ts ASC LIMIT 160', [uid, dayStart]);
+      spark = rows.map(function (r) { return +Number(r.value).toFixed(4); });
+    } catch (e) {}
+    if (spark.length < 2) spark = [base.value, equity];
+    pnlTouch(uid);
+    // تنظيف اللقطات الأقدم من 14 يوماً (مرة كل فتح تقريباً — استعلام رخيص)
+    pool.query('DELETE FROM pnl_snapshots WHERE user_id = ? AND ts < ?', [uid, now - 14 * 86400000]).catch(function () {});
+    res.json({
+      ok: true,
+      pnl: +pnl.toFixed(2), pnlUsd: +pnl.toFixed(2), pnlPct: +pct.toFixed(2),
+      equity: +equity.toFixed(2), startValue: +base.value.toFixed(2),
+      inflow: +f.inflow.toFixed(2), outflow: +f.outflow.toFixed(2), netFlow: +netFlow.toFixed(2),
+      dayStart, since, baseline, spark
+    });
+  } catch (e) {
+    console.error('[pnl/today]', e.message);
+    res.status(500).json({ error: 'server_error' });
+  }
 });
 
 // ---- Futures wallet: read my futures balances ----
@@ -6145,32 +6302,58 @@ async function notifyPostOwner(pid, actorUid, actorName, action, snippet) {
 // 'mine' : منشوراتي
 // 'saved': المنشورات التي حفظتها
 // 'report': الأكثر إبلاغاً (عادةً للأدمن — لكنه متاح لمن يريد مراجعة المحتوى)
-app.get('/api/square/posts', requireUser, async (req, res) => {
+app.get('/api/square/posts', softUser, async (req, res) => {
   try {
-    const me = Number(req.user.uid);
-    const filter = String(req.query.filter || 'new');
+    const me = req.user ? Number(req.user.uid) : 0;
+    const filter = String(req.query.filter || 'discover');
     const q = String(req.query.q || '').trim();
     let where = '1=1';
     // ترتيب البارامترات: (liked, reposted, following, saved, voted, reported) قبل شروط WHERE
     const params = [me, me, me, me, me, me];
     if (filter === 'mine') {
-      // «منشوراتي» = منشوراتي + ما أعدت نشره (تظهر باسمي كما لو نشرتها)
-      where = '(p.user_id = ? OR p.id IN (SELECT post_id FROM square_reposts WHERE user_id = ?))';
-      params.push(me, me);
+      if (!me) { where = '1=0'; }
+      else {
+        // «منشوراتي» = منشوراتي + ما أعدت نشره (تظهر باسمي كما لو نشرتها)
+        where = '(p.user_id = ? OR p.id IN (SELECT post_id FROM square_reposts WHERE user_id = ?))';
+        params.push(me, me);
+      }
     }
+    // «المتابعات» = منشورات الحسابات التي أتابعها فقط (بدون منشوراتي)
+    if (filter === 'following') {
+      if (!me) { where = '1=0'; }
+      else {
+        where = 'p.user_id IN (SELECT target_id FROM square_follows WHERE follower_id = ?) AND p.user_id <> ?';
+        params.push(me, me);
+      }
+    }
+    // تصنيفات المحتوى: الأخبار / الإعلانات / التحليلات
+    if (filter === 'news') where += " AND p.kind = 'news'";
+    if (filter === 'ads') where += " AND p.kind = 'ads'";
+    if (filter === 'analysis') where += " AND p.kind = 'analysis'";
+    if (filter === 'official') where += ' AND p.user_id = 0';
     if (q) { where += ' AND (p.content LIKE ? OR p.author LIKE ?)'; params.push('%' + q + '%', '%' + q + '%'); }
     const symbol = String(req.query.symbol || '').trim().toUpperCase().slice(0, 20);
     if (symbol) { where += ' AND p.symbol = ?'; params.push(symbol); }
     const htag = String(req.query.tag || '').trim().toLowerCase().slice(0, 80);
     if (htag) { where += ' AND p.id IN (SELECT post_id FROM square_tags WHERE tag = ?)'; params.push(htag); }
     // «حفظ المنشور» — فلتر يعرض المحفوظات فقط
-    if (filter === 'saved') where += ' AND p.id IN (SELECT post_id FROM square_saves WHERE user_id = ?)';
+    if (filter === 'saved') {
+      if (!me) { where = '1=0'; }
+      else where += ' AND p.id IN (SELECT post_id FROM square_saves WHERE user_id = ?)';
+    }
     // «غير مهتم» — يُخفى المنشور عن هذا المستخدم في التغذية (يبقى ظاهراً في «منشوراتي»)
     if (filter !== 'mine' && filter !== 'saved') {
       where += ' AND p.id NOT IN (SELECT post_id FROM square_votes WHERE user_id = ? AND vote = \'out\')';
       params.push(me);
     }
     let order = 'p.created_at DESC';
+    if (filter === 'discover') {
+      // الاكتشاف = مزيج الرائج والرسمي ثم الأحدث (مثل تبويب Discover في بينانس)
+      order = '((SELECT COUNT(*) FROM square_likes l WHERE l.post_id = p.id) + ' +
+        '(SELECT COUNT(*) FROM square_comments c WHERE c.post_id = p.id) * 2 + ' +
+        '(SELECT COUNT(*) FROM square_reposts r WHERE r.post_id = p.id) * 3 + ' +
+        '(p.user_id = 0) * 2) DESC, p.created_at DESC';
+    }
     if (filter === 'hot') {
       order = '((SELECT COUNT(*) FROM square_likes l WHERE l.post_id = p.id) + ' +
         '(SELECT COUNT(*) FROM square_comments c WHERE c.post_id = p.id) * 2 + ' +
@@ -6180,7 +6363,7 @@ app.get('/api/square/posts', requireUser, async (req, res) => {
       order = '(SELECT COUNT(*) FROM square_reports rp WHERE rp.post_id = p.id) DESC, p.created_at DESC';
     }
     const [rows] = await pool.query(
-      'SELECT p.id, p.user_id, p.author, p.content, p.image, p.tag, p.symbol, p.created_at, ' +
+      'SELECT p.id, p.user_id, p.author, p.content, p.image, p.tag, p.symbol, p.kind, p.created_at, ' +
       ' (p.video IS NOT NULL AND p.video <> \'\') AS has_video, ' +
       ' (SELECT COUNT(*) FROM square_likes l WHERE l.post_id = p.id) AS likes, ' +
       ' (SELECT COUNT(*) FROM square_comments c WHERE c.post_id = p.id) AS comments, ' +
@@ -6252,10 +6435,19 @@ app.post('/api/square/posts', requireUser, async (req, res) => {
     const tag = String(b.tag || '').trim().slice(0, 20) || null;
     const symbol = String(b.symbol || '').trim().toUpperCase().slice(0, 20) || null;
     if (!content && !image && !video) return res.status(400).json({ error: 'empty' });
+    // تصنيف المنشور: الأخبار/التحليلات متاحة للمستخدمين، أما «إعلان» فللإدارة فقط
+    let kind = String(b.kind || '').trim().toLowerCase();
+    if (kind !== 'news' && kind !== 'analysis' && kind !== 'ads') kind = 'post';
+    if (kind === 'ads' && !(req.user && req.user.isAdmin)) kind = 'post';
+    // استنتاج تلقائي من الوسوم العربية إن لم يحدّد المستخدم النوع
+    if (kind === 'post') {
+      if (/#(خبر|أخبار|news)\b/i.test(content)) kind = 'news';
+      else if (/#(تحليل|analysis)\b/i.test(content)) kind = 'analysis';
+    }
     const author = req.user.name || req.user.username || req.user.email;
     const [r] = await pool.query(
-      'INSERT INTO square_posts (user_id, author, content, image, video, tag, symbol, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [req.user.uid, author, content, image || null, video || null, tag, symbol, Date.now()]);
+      'INSERT INTO square_posts (user_id, author, content, image, video, tag, symbol, kind, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [req.user.uid, author, content, image || null, video || null, tag, symbol, kind, Date.now()]);
     // ---- تخزين الوسوم (#hashtags) لتصنيف المنشور وفلترته ----
     try {
       const hts = extractHashtags(content);

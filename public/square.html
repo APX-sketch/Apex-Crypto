@@ -26,6 +26,10 @@ html[data-theme=light] .hdr{background:linear-gradient(135deg,#fff,#eef1f6)}
 .chips::-webkit-scrollbar{display:none}
 .chip{flex:0 0 auto;padding:7px 15px;border-radius:999px;background:var(--panel);border:1px solid var(--border);color:var(--muted);font-size:12.5px;font-weight:800;cursor:pointer;white-space:nowrap;font-family:inherit}
 .chip.active{background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#231a02;border-color:transparent}
+.kbd{display:inline-block;font-style:normal;font-size:9.5px;font-weight:900;padding:2px 6px;border-radius:5px;margin-inline-end:5px;vertical-align:1px}
+.kbd.news{color:#63b3ff;background:rgba(47,131,251,.13);border:1px solid rgba(47,131,251,.3)}
+.kbd.ads{color:var(--gold1);background:rgba(224,166,21,.13);border:1px solid rgba(224,166,21,.3)}
+.kbd.ana{color:var(--green);background:rgba(14,203,129,.11);border:1px solid rgba(14,203,129,.28)}
 .feed{padding:4px 0}
 .post{padding:14px;border-bottom:8px solid rgba(0,0,0,.18)}
 html[data-theme=light] .post{border-bottom:8px solid #e9edf3}
@@ -171,8 +175,10 @@ html[data-theme=light] .bnav{background:#fff}
   <a class="statlink" href="square-stats.html" title="إحصائيات المنشورات" aria-label="إحصائيات"><svg viewBox="0 0 24 24"><path d="M18 20V10M12 20V4M6 20v-6"/></svg></a>
 </div>
 <div class="chips" id="chips">
-  <button class="chip active" data-f="hot">🔥 الرائج</button>
-  <button class="chip" data-f="new">الأحدث</button>
+  <button class="chip active" data-f="discover">اكتشف</button>
+  <button class="chip" data-f="following">المتابعات</button>
+  <button class="chip" data-f="hot">🔥 رائج</button>
+  <button class="chip" data-f="ads">الإعلانات</button>
   <button class="chip" data-f="news">📰 الأخبار</button>
   <button class="chip" data-f="mine">منشوراتي</button>
   <button class="chip" data-f="saved">🔖 المحفوظات</button>
@@ -361,7 +367,7 @@ function toast(msg){var t=$('toast');if(!t)return;t.textContent=msg;t.classList.
 var VIEWED={};
 var _io=('IntersectionObserver' in window)?new IntersectionObserver(function(entries){entries.forEach(function(en){if(!en.isIntersecting)return;var id=en.target.getAttribute('data-pid');_io.unobserve(en.target);if(!id||VIEWED[id])return;VIEWED[id]=1;api('/api/square/posts/'+id+'/view',{method:'POST'}).then(function(d){var p=POSTS.find(function(x){return +x.id===+id;});if(p&&d&&d.views!=null){p.views=d.views;var el=document.querySelector('.post[data-pid="'+id+'"] .pact.stat span');if(el)el.textContent=fmtNum(d.views);}}).catch(function(){});});},{threshold:0.5}):null;
 function observeViews(){if(!_io)return;document.querySelectorAll('.post').forEach(function(el){_io.observe(el);});}
-let FILTER='hot',QSTR='',CUR=null,PENDING_IMG=null,POSTS=[],TAG='',PENDING_VIDEO=null;
+let FILTER='discover',QSTR='',CUR=null,PENDING_IMG=null,POSTS=[],TAG='',PENDING_VIDEO=null;
 function load(){var url='/api/square/posts?filter='+encodeURIComponent(FILTER)+'&q='+encodeURIComponent(QSTR)+(TAG?('&tag='+encodeURIComponent(TAG)):'');api(url).then(function(d){POSTS=d.posts||[];render();}).catch(function(){$('feed').innerHTML='<div style="padding:54px 24px;text-align:center;color:var(--muted)"><div style="font-size:40px">⚠️</div><b style="color:var(--txt)">تعذّر التحميل</b></div>';});}
 function filterTag(tag){tag=String(tag||'').toLowerCase();if(!tag)return;TAG=tag;var tb=$('tagbar');if(tb){tb.style.display='flex';tb.innerHTML='<b>#'+esc(tag)+'</b><button class="clr" onclick="clearTag()">✕ إزالة الوسم</button>';}try{window.scrollTo(0,0);}catch(e){}load();}
 function clearTag(){TAG='';var tb=$('tagbar');if(tb){tb.style.display='none';tb.innerHTML='';}load();}
@@ -439,6 +445,7 @@ function sendReport(){if(!REP_PID){return;}if(!REP_REASON){toast('اختر سب�
   }).catch(function(e){if(btn)btn.disabled=false;toast('تعذّر إرسال البلاغ، حاول مجدداً');});}
 window.vote=vote;window.savePost=savePost;window.openReport=openReport;window.closeReport=closeReport;window.sendReport=sendReport;
 (function(){var box=document.getElementById('repReasons');if(box)box.addEventListener('click',function(e){var b=e.target.closest('.rs');if(b)pickReason(b);});})();
+function kindBadge(k){k=String(k||'post');if(k==='news')return '<i class="kbd news">خبر</i>';if(k==='ads')return '<i class="kbd ads">إعلان</i>';if(k==='analysis')return '<i class="kbd ana">تحليل</i>';return '';}
 function render(){var feed=$('feed');
   var list=POSTS;
   if(!list.length){feed.innerHTML='<div style="padding:54px 24px;text-align:center;color:var(--muted)"><div style="font-size:40px;margin-bottom:10px">📝</div><b style="display:block;color:var(--txt);margin-bottom:6px">لا منشورات بعد</b><p style="font-size:12.5px">كن أول من ينشر — اضغط زر +</p></div>';return;}
@@ -452,7 +459,7 @@ function render(){var feed=$('feed');
     var dname=p.display_author||p.author||'مستخدم';
     return '<div class="post" data-pid="'+p.id+'">'+
       '<div class="phead">'+avatar(dname)+
-      '<div class="who"><b>'+esc(dname)+'</b><span>'+timeAgo(p.created_at)+(p.tag?(' • $'+esc(p.tag)):'')+'</span>'+vb+'</div>'+
+      '<div class="who"><b>'+esc(dname)+'</b><span>'+kindBadge(p.kind)+' '+timeAgo(p.created_at)+(p.tag?(' • $'+esc(p.tag)):'')+'</span>'+vb+'</div>'+
       '<button class="morebtn" title="خيارات المنشور" onclick="toggleMenu('+p.id+',event)">'+moreIco()+'</button>'+
       '</div>'+
       '<div class="ptext">'+fmtText(p.content)+'</div>'+
@@ -477,7 +484,7 @@ function closeCmt(){$('cmtMask').classList.remove('on');}
 function addCmt(){var v=($('cmtInput').value||'').trim();if(!v||!CUR)return;api('/api/square/posts/'+CUR+'/comments',{method:'POST',body:JSON.stringify({content:v})}).then(function(){$('cmtInput').value='';var cur=CUR;openCmt(cur);load();}).catch(function(){});}
 function openCompose(){$('ta').value='';PENDING_IMG=null;PENDING_VIDEO=null;$('imgPreview').innerHTML='';$('vidPreview').innerHTML='';$('composeMask').classList.add('on');setTimeout(function(){try{$('ta').focus();}catch(e){}},120);}
 function closeCompose(){$('composeMask').classList.remove('on');}
-function publish(){var v=($('ta').value||'').trim();if(!v&&!PENDING_IMG&&!PENDING_VIDEO)return;var m=v.match(/\$([A-Za-z]{2,10})/);var btn=$('pubBtn');btn.disabled=true;api('/api/square/posts',{method:'POST',body:JSON.stringify({content:v,image:PENDING_IMG||'',video:PENDING_VIDEO||'',tag:m?m[1].toUpperCase():''})}).then(function(){PENDING_IMG=null;PENDING_VIDEO=null;closeCompose();FILTER='new';TAG='';var _tb=$('tagbar');if(_tb){_tb.style.display='none';_tb.innerHTML='';}document.querySelectorAll('.chip').forEach(function(c){c.classList.toggle('active',c.dataset.f==='new');});btn.disabled=false;load();loadTrending();}).catch(function(){btn.disabled=false;alert('تعذّر النشر');});}
+function publish(){var v=($('ta').value||'').trim();if(!v&&!PENDING_IMG&&!PENDING_VIDEO)return;var m=v.match(/\$([A-Za-z]{2,10})/);var btn=$('pubBtn');btn.disabled=true;api('/api/square/posts',{method:'POST',body:JSON.stringify({content:v,image:PENDING_IMG||'',video:PENDING_VIDEO||'',tag:m?m[1].toUpperCase():''})}).then(function(){PENDING_IMG=null;PENDING_VIDEO=null;closeCompose();FILTER='discover';TAG='';var _tb=$('tagbar');if(_tb){_tb.style.display='none';_tb.innerHTML='';}document.querySelectorAll('.chip').forEach(function(c){c.classList.toggle('active',c.dataset.f==='discover');});btn.disabled=false;load();loadTrending();}).catch(function(){btn.disabled=false;alert('تعذّر النشر');});}
 function handleImg(file){if(!file)return;var rd=new FileReader();rd.onload=function(ev){var img=new Image();img.onload=function(){var mx=1000,w=img.width,h=img.height;if(w>mx){h=Math.round(h*mx/w);w=mx;}var cv=document.createElement('canvas');cv.width=w;cv.height=h;cv.getContext('2d').drawImage(img,0,0,w,h);PENDING_IMG=cv.toDataURL('image/jpeg',0.82);$('imgPreview').innerHTML='<img src="'+PENDING_IMG+'"><button class="rm" onclick="removeImg()">×</button>';};img.src=ev.target.result;};rd.readAsDataURL(file);}
 function removeImg(){PENDING_IMG=null;$('imgPreview').innerHTML='';try{$('imgInput').value='';}catch(e){}}
 function videoCard(id){return '<div class="pvid" id="pvid-'+id+'"><button class="pvidplay" onclick="playPostVideo('+id+')"><svg viewBox="0 0 24 24" style="width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.9"><circle cx="12" cy="12" r="10"/><path d="M10 8l6 4-6 4z" fill="currentColor"/></svg> تشغيل الفيديو</button></div>';}

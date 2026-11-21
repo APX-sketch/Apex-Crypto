@@ -306,7 +306,7 @@ body{font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:var(--bg);col
   <div class="lbl"><span data-i18n="wEstBalance">الرصيد التقديري</span>
     <span class="eye" id="eye" onclick="toggleEye()"><svg viewBox="0 0 24 24"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></span></div>
   <div class="big" id="heroBig">$0.00</div>
-  <div class="pnl" id="heroPnl"><span class="cur">24h PnL</span> <span id="pnlVal">+0.00 (0.00%)</span></div>
+  <div class="pnl" id="heroPnl"><span class="cur">أرباح اليوم</span> <span id="pnlVal">+0.00 (0.00%)</span></div>
   <div id="heroFrozen" style="display:none;margin:12px 0 0;background:rgba(246,70,93,.14);border:1px solid rgba(246,70,93,.5);color:#f6465d;font-weight:900;font-size:13px;padding:9px 12px;border-radius:12px">⛔ الرصيد مجمّد — لا يمكن تنفيذ عمليات الإيداع أو السحب أو التحويل أو التداول</div>
 </div>
 <!-- ACTION CIRCLES -->
@@ -483,6 +483,8 @@ function renderBalances(){
   $('heroBig').textContent=mask('$'+fmt(total,2));
   const hp=$('heroPnl');hp.className='pnl '+(up?'up':'dn');
   $('pnlVal').textContent=(up?'+':'')+fmt(pnlUsd,2)+' ('+(up?'+':'')+pnlPct.toFixed(2)+'%)';
+  // إن وصلت أرقام «أرباح اليوم» الحقيقية من السيرفر فهي المرجع (تستثني الإيداع/السحب)
+  if(window.TODAY_PNL&&typeof window.paintTodayPnl==='function')window.paintTodayPnl();
   const body=$('balList');
   if(!rows.length){
     if(body.dataset.sig!=='empty'){body.dataset.sig='empty';body.innerHTML='<div class="empty">'+T('wNoAssets')+'</div>';}
@@ -818,13 +820,18 @@ function renderOverview(){
   if($('ovLoc'))$('ovLoc').textContent=mask('≈ '+fmt(total,2)+' USDT');
   if($('ovSpot'))$('ovSpot').textContent=mask('$'+fmt(s,2));
   if($('ovFut'))$('ovFut').textContent=mask('$'+fmt(f,2));
-  // today's PnL across spot+futures combined (24h change from PRICES)
-  var rows=combinedHoldings(),pnlUsd=0;
-  rows.forEach(function(r){var pm=PRICES[r.c+'USDT'];var pct=pm?pm.pct:0;if(pct)pnlUsd+=r.val-(r.val/(1+pct/100));});
-  var base=total-pnlUsd,pnlPct=base>0?(pnlUsd/base*100):0,up=pnlUsd>=0;
-  var box=$('ovPnlBox');if(box)box.className='tl '+(up?'up':'dn');
-  if($('ovPnlAmt'))$('ovPnlAmt').textContent=mask((up?'+':'')+fmt(pnlUsd,2)+' USDT');
-  if($('ovPnlPct'))$('ovPnlPct').textContent=(up?'+':'')+pnlPct.toFixed(2)+'%';
+  // أرباح وخسائر اليوم: من تغيّر قيمة المحفظة فعلياً (سيرفر) مع استثناء
+  // الإيداع/السحب. لو تعذّر الاتصال نرجع لحساب تغيّر 24 ساعة كتقدير مؤقت.
+  var rows=combinedHoldings();
+  if(window.TODAY_PNL&&typeof window.paintTodayPnl==='function'){window.paintTodayPnl();}
+  else{
+    var pnlUsd=0;
+    rows.forEach(function(r){var pm=PRICES[r.c+'USDT'];var pct=pm?pm.pct:0;if(pct)pnlUsd+=r.val-(r.val/(1+pct/100));});
+    var base=total-pnlUsd,pnlPct=base>0?(pnlUsd/base*100):0,up=pnlUsd>=0;
+    var box=$('ovPnlBox');if(box)box.className='tl '+(up?'up':'dn');
+    if($('ovPnlAmt'))$('ovPnlAmt').textContent=mask((up?'+':'')+fmt(pnlUsd,2)+' USDT');
+    if($('ovPnlPct'))$('ovPnlPct').textContent=(up?'+':'')+pnlPct.toFixed(2)+'%';
+  }
   // mini chart history (session rolling, builds up as the page runs)
   if(total>0||OV_HIST.length){OV_HIST.push(total);if(OV_HIST.length>60)OV_HIST.shift();}
   renderSpark();
@@ -1097,6 +1104,48 @@ function exportRecords(){
   toast('تم تصدير '+rows.length+' عملية');
 }
 window.exportRecords=exportRecords;
+</script>
+<script>
+/* ===== أرباح وخسائر اليوم (اليوم الحقيقي) =====
+   السيرفر يحسب: قيمة المحفظة الآن − قيمة بداية اليوم − صافي الإيداع/السحب.
+   فيظهر الإيداع كإيداع (لا كربح) والسحب كسحب (لا كخسارة)، وهو المطلوب
+   في بطاقة «أرباح وخسائر اليوم» أعلى المحفظة. */
+window.TODAY_PNL=null;
+window.paintTodayPnl=function(){
+  var d=window.TODAY_PNL;if(!d)return;
+  var pnl=Number(d.pnl)||0,pct=Number(d.pnlPct)||0,up=pnl>=0;
+  var hp=document.getElementById('heroPnl');
+  if(hp){hp.className='pnl '+(up?'up':'dn');}
+  var pv=document.getElementById('pnlVal');
+  if(pv)pv.textContent=(up?'+':'')+fmt(pnl,2)+' ('+(up?'+':'')+pct.toFixed(2)+'%)';
+  var box=document.getElementById('ovPnlBox');
+  if(box)box.className='tl '+(up?'up':'dn');
+  var amt=document.getElementById('ovPnlAmt');
+  if(amt)amt.textContent=mask((up?'+':'')+fmt(pnl,2)+' USDT');
+  var pc=document.getElementById('ovPnlPct');
+  if(pc)pc.textContent=(up?'+':'')+pct.toFixed(2)+'%';
+  // ميني-شارت من لقطات اليوم الفعلية (إن توفّرت) بدل تقدير اللحظة
+  try{
+    if(Array.isArray(d.spark)&&d.spark.length>1){OV_HIST=d.spark.slice(-60);renderSpark();}
+  }catch(e){}
+  var t=document.getElementById('ovPnlBox');
+  if(t){
+    t.title='قيمة البداية: '+fmt(d.startValue,2)+' USDT · صافي التدفقات اليوم: '+(d.netFlow>=0?'+':'')+fmt(d.netFlow,2)+' USDT'+(d.baseline==='new'?' · يُحسب من الآن (أول فتح اليوم)':'');
+  }
+};
+(window.refreshTodayPnl=function(){
+  if(!TOK)return;
+  fetch('/api/pnl/today',{headers:{'Accept':'application/json','Authorization':'Bearer '+TOK}})
+    .then(function(r){return r.ok?r.json():null;})
+    .then(function(d){
+      if(!d||!d.ok)return;
+      window.TODAY_PNL=d;
+      window.paintTodayPnl();
+    })
+    .catch(function(){});
+})();
+setTimeout(function(){window.refreshTodayPnl();},600);
+setInterval(function(){if(!document.hidden)window.refreshTodayPnl();},60000);
 </script>
 </body>
 </html>
