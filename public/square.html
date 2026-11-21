@@ -256,105 +256,15 @@ html[data-theme=light] .bnav{background:#fff}
   <a href="futures.html"><svg viewBox="0 0 24 24"><path d="M3 3v18h18M8 14l3-3 3 3 4-5"/></svg><span>عقود آجلة</span></a>
   <a href="wallet.html"><svg viewBox="0 0 24 24"><path d="M3 7h16a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2zM16 13h.01"/></svg><span>المحفظة</span></a>
 </nav>
-<script type="application/legacy">
-const $=id=>document.getElementById(id);
-const SESS=JSON.parse(localStorage.getItem('skygo_session')||'{}');
-const ME=(SESS.email||'').split('@')[0]||'trader';
-const MENAME=SESS.name||ME;
-function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-const AVC=['#e0a615','#2f83fb','#e256c9','#0ecb81','#f6465d','#7c3aed','#ff7a45','#11b5c9'];
-function avColor(s){let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return AVC[h%AVC.length];}
-function avatar(name,cls){const c=avColor(name||'?');return '<div class="av'+(cls?' '+cls:'')+'" style="background:'+c+'">'+esc((name||'?').charAt(0).toUpperCase())+'</div>';}
-function timeAgo(t){const s=Math.floor((Date.now()-t)/1000);if(s<60)return 'الآن';if(s<3600)return Math.floor(s/60)+' د';if(s<86400)return Math.floor(s/3600)+' س';return Math.floor(s/86400)+' ي';}
-const VBADGE='<svg class="vf" viewBox="0 0 24 24"><path d="M12 2l2.4 2.1 3.1-.5 1 3 2.9 1.3-1 3 1 3-2.9 1.3-1 3-3.1-.5L12 22l-2.4-2.1-3.1.5-1-3L2.6 15.5l1-3-1-3 2.9-1.3 1-3 3.1.5z"/></svg>';
-/* علامة التوثيق الزرقاء للحساب الرسمي للمنصة */
-const VCHK='<svg class="vchk" viewBox="0 0 24 24" aria-label="موثّق"><circle cx="12" cy="12" r="10" fill="#1d9bf0"/><path d="M7.1 12.4l3.1 3.2 6.6-6.8" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-/* علامة التوثيق: زرقاء (حساب موثّق) أو ذهبية (حساب رسمي/شريك) مثل بينانس */
-function VBADGE(k){var g=(k==='gold');
- return '<svg class="vchk" viewBox="0 0 24 24" aria-label="موثّق"><circle cx="12" cy="12" r="10" fill="'+(g?'#e0a615':'#1d9bf0')+'"/><path d="M7.1 12.4l3.1 3.2 6.6-6.8" fill="none" stroke="'+(g?'#231a02':'#fff')+'" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';}
-/* ===== التخزين ===== */
-const FEEDKEY='apex_squarefeed_v1';
-const LIKEKEY='apex_sqlike_'+ME;
-function uid(){return 'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
-function loadFeed(){try{const a=JSON.parse(localStorage.getItem(FEEDKEY)||'null');if(Array.isArray(a))return a;}catch(e){}return seed();}
-function saveFeed(){localStorage.setItem(FEEDKEY,JSON.stringify(FEED));}
-function loadLikes(){try{return JSON.parse(localStorage.getItem(LIKEKEY)||'[]');}catch(e){return[];}}
-function saveLikes(){localStorage.setItem(LIKEKEY,JSON.stringify(MYLIKES));}
-function seed(){const now=Date.now();return [
-  {id:uid(),author:'BlockchainMafiaaa',handle:'@mafia_signals',vf:true,t:now-1000*60*18,text:'$BTC كسر مقاومة 80K بوضوح 🚀 الهدف القادم 84K إذا ثبت فوق هالمستوى. من كان ينتظر تأكيد — هذا هو. السيولة تدخل بقوة.',chart:[30,42,38,55,60,52,70,78,74,88,95],tag:'BTC',likes:214,shares:38,cmts:[{a:'Abu Fahad',t:'تحليل ممتاز، أنا داخل من 79.2',at:now-1000*60*9}]},
-  {id:uid(),author:'Abu Fahad',handle:'@abufahad_crypto',vf:false,t:now-1000*60*52,text:'تذكير مهم ⚠️ لا تطارد الشمعة الخضراء. $ETH عند مقاومة قوية، انتظروا إعادة اختبار 3100 قبل الدخول. إدارة رأس المال أهم من التوقّع.',tag:'ETH',likes:97,shares:12,cmts:[]},
-  {id:uid(),author:'Apex News',handle:'@apex_news',vf:true,t:now-1000*60*120,text:'📰 عاجل: ارتفاع حجم التداول على منصّة Apex بنسبة 34% خلال 24 ساعة مع إطلاق صفحة Square الجديدة. $APX يسجّل أعلى سيولة منذ الإدراج.',tag:'APX',likes:356,shares:71,news:true,cmts:[{a:'CryptoLina',t:'أخيراً صار في مجتمع داخل المنصة 🔥',at:now-1000*60*80}]},
-  {id:uid(),author:'CryptoLina',handle:'@lina_charts',vf:false,t:now-1000*60*200,text:'$SOL يبني قاعدة جميلة على الفريم اليومي. الحجم يتراكم بهدوء. صبر = أرباح. ليس نصيحة استثمارية.',tag:'SOL',chart:[40,38,44,41,48,46,52,50,58,62,66],likes:143,shares:20,cmts:[]}
-];}
-let FEED=loadFeed();let MYLIKES=loadLikes();let FILTER='hot',QSTR='',CUR=null;let PENDING_IMG=null;
-</script>
-<script type="application/legacy">
-function fmtText(s){
-  s=esc(s);
-  s=s.replace(/\$([A-Za-z]{2,10})/g,'<span class="cashtag">$$$1</span>');
-  return s;
-}
-function chartHtml(arr){if(!arr||!arr.length)return '';const mx=Math.max.apply(null,arr)||1;return '<div class="pchart">'+arr.map(v=>'<i style="height:'+Math.max(8,v/mx*100)+'%"></i>').join('')+'</div>';}
-function heart(f){return '<svg viewBox="0 0 24 24"><path d="M12 21s-7-4.5-9.5-9A5 5 0 0112 5a5 5 0 019.5 7c-2.5 4.5-9.5 9-9.5 9z"/></svg>';}
-function listFor(){
-  let out=FEED.slice();
-  if(FILTER==='new')out.sort((a,b)=>b.t-a.t);
-  else if(FILTER==='hot')out.sort((a,b)=>(b.likes+b.shares*2)-(a.likes+a.shares*2));
-  else if(FILTER==='news')out=out.filter(p=>p.news);
-  else if(FILTER==='mine')out=out.filter(p=>p.handle==='@'+ME||p.mine);
-  if(QSTR){const s=QSTR.toLowerCase();out=out.filter(p=>p.text.toLowerCase().includes(s)||(p.display_author||p.author||'').toLowerCase().includes(s));}
-  return out;
-}
-function render(){
-  const feed=$('feed');const list=listFor();
-  if(!list.length){feed.innerHTML='<div style="padding:54px 24px;text-align:center;color:var(--muted)"><div style="font-size:40px;margin-bottom:10px">📝</div><b style="display:block;color:var(--txt);margin-bottom:6px">لا منشورات بعد</b><p style="font-size:12.5px">كن أول من ينشر خبراً — اضغط زر +</p></div>';return;}
-  feed.innerHTML=list.map(p=>{
-    const liked=MYLIKES.includes(p.id);
-    return '<div class="post">'+
-      '<div class="phead">'+avatar(p.author)+
-      '<div class="who"><b>'+esc(p.author)+(p.vf?VBADGE:'')+'</b><span>'+esc(p.handle)+' • '+timeAgo(p.t)+'</span></div></div>'+
-      '<div class="ptext">'+fmtText(p.text)+'</div>'+
-      (p.img?'<img class="pimg" src="'+p.img+'">':'')+
-      (p.chart?chartHtml(p.chart):'')+
-      '<div class="pacts">'+
-        '<div class="pact like'+(liked?' liked':'')+'" onclick="like(\''+p.id+'\')">'+heart()+'<span>'+(p.likes||0)+'</span></div>'+
-        '<div class="pact" onclick="openCmt(\''+p.id+'\')"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg><span>'+((p.cmts&&p.cmts.length)||0)+'</span></div>'+
-        '<div class="pact" onclick="share(\''+p.id+'\')"><svg viewBox="0 0 24 24"><path d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7M16 6l-4-4-4 4M12 2v14"/></svg><span>'+(p.shares||0)+'</span></div>'+
-      '</div>'+
-    '</div>';
-  }).join('');
-}
-function like(id){const p=FEED.find(x=>x.id===id);if(!p)return;const i=MYLIKES.indexOf(id);if(i>=0){MYLIKES.splice(i,1);p.likes=Math.max(0,(p.likes||1)-1);}else{MYLIKES.push(id);p.likes=(p.likes||0)+1;}saveLikes();saveFeed();render();}
-function share(id){const p=FEED.find(x=>x.id===id);if(!p)return;p.shares=(p.shares||0)+1;saveFeed();render();if(navigator.share){navigator.share({title:'Apex Square',text:p.text}).catch(()=>{});}}
-window.like=like;window.share=share;
-/* تعليقات */
-function openCmt(id){CUR=id;const p=FEED.find(x=>x.id===id);const box=$('cmtList');const cs=(p&&p.cmts)||[];
-  box.innerHTML=cs.length?cs.map(c=>'<div class="cmt">'+avatar(c.a,'av')+'<div class="cb"><b>'+esc(c.a)+'</b><p>'+fmtText(c.t||c.text||'')+'</p><span>'+timeAgo(c.at||Date.now())+'</span></div></div>').join(''):'<div style="color:var(--muted);text-align:center;padding:20px 0;font-size:13px">لا تعليقات بعد — كن الأول</div>';
-  $('cmtMask').classList.add('on');}
-function closeCmt(){$('cmtMask').classList.remove('on');}
-function addCmt(){const v=$('cmtInput').value.trim();if(!v||!CUR)return;const p=FEED.find(x=>x.id===CUR);if(!p)return;p.cmts=p.cmts||[];p.cmts.push({a:MENAME,t:v,at:Date.now()});saveFeed();$('cmtInput').value='';openCmt(CUR);render();}
-window.openCmt=openCmt;window.closeCmt=closeCmt;window.addCmt=addCmt;
-/* إنشاء منشور */
-function openCompose(){$('ta').value='';PENDING_IMG=null;$('imgPreview').innerHTML='';$('composeMask').classList.add('on');setTimeout(()=>$('ta').focus(),120);}
-function closeCompose(){$('composeMask').classList.remove('on');}
-function publish(){const v=$('ta').value.trim();if(!v&&!PENDING_IMG)return;const m=v.match(/\$([A-Za-z]{2,10})/);const post={id:uid(),author:MENAME,handle:'@'+ME,vf:false,mine:true,t:Date.now(),text:v,img:PENDING_IMG||null,tag:m?m[1].toUpperCase():null,likes:0,shares:0,cmts:[]};FEED.unshift(post);saveFeed();PENDING_IMG=null;closeCompose();FILTER='new';document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('active',c.dataset.f==='new'));render();}
-window.closeCompose=closeCompose;window.publish=publish;
-/* أحداث */
-$('fab').onclick=openCompose;
-/* إرفاق صورة مع المنشور: نصغّر الصورة قبل الحفظ محلياً */
-function handleImg(file){if(!file)return;const rd=new FileReader();rd.onload=function(ev){const img=new Image();img.onload=function(){const mx=1000;let w=img.width,h=img.height;if(w>mx){h=Math.round(h*mx/w);w=mx;}const cv=document.createElement('canvas');cv.width=w;cv.height=h;cv.getContext('2d').drawImage(img,0,0,w,h);PENDING_IMG=cv.toDataURL('image/jpeg',0.82);$('imgPreview').innerHTML='<img src="'+PENDING_IMG+'"><button class="rm" onclick="removeImg()">\u00d7</button>';};img.src=ev.target.result;};rd.readAsDataURL(file);}
-function removeImg(){PENDING_IMG=null;$('imgPreview').innerHTML='';$('imgInput').value='';}
-window.removeImg=removeImg;
-$('imgInput').addEventListener('change',e=>{handleImg(e.target.files&&e.target.files[0]);});
-$('chips').addEventListener('click',e=>{const b=e.target.closest('.chip');if(!b)return;document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));b.classList.add('active');FILTER=b.dataset.f;render();});
-$('q').addEventListener('input',e=>{QSTR=e.target.value.trim();render();});
-[$('composeMask'),$('cmtMask')].forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('on');}));
-render();
-</script>
 <script>
 const $=id=>document.getElementById(id);
 const SESS=JSON.parse(localStorage.getItem('skygo_session')||'{}');
 const TOKEN=SESS.token||localStorage.getItem('apex_token')||'';
+/* علامة التوثيق: زرقاء (حساب موثّق) أو ذهبية (حساب رسمي/شريك) مثل بينانس */
+function VBADGE(k){
+  var g=(k==='gold');
+  return '<svg class="vchk" viewBox="0 0 24 24" aria-label="موثّق"><circle cx="12" cy="12" r="10" fill="'+(g?'#e0a615':'#1d9bf0')+'"/><path d="M7.1 12.4l3.1 3.2 6.6-6.8" fill="none" stroke="'+(g?'#231a02':'#fff')+'" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+}
 function api(path,opts){opts=opts||{};opts.headers=Object.assign({'Authorization':'Bearer '+TOKEN},opts.headers||{});if(opts.body&&!opts.headers['Content-Type'])opts.headers['Content-Type']='application/json';return fetch(path,opts).then(function(r){return r.json().catch(function(){return{};}).then(function(j){if(!r.ok)throw (j&&j.error)||('http_'+r.status);return j;});});}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 const AVC=['#e0a615','#2f83fb','#e256c9','#0ecb81','#f6465d','#7c3aed','#ff7a45','#11b5c9'];
