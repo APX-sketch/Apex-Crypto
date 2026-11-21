@@ -41,6 +41,8 @@ html[data-theme=light] .post{border-bottom:8px solid #e9edf3}
 .who b .vf{width:14px;height:14px;fill:var(--gold2)}
 .vchk{width:15px;height:15px;flex:0 0 auto;vertical-align:-2px}
 .av.ofc{background:linear-gradient(135deg,var(--gold1),var(--gold2))!important;color:#231a02!important;box-shadow:0 0 0 2px rgba(224,166,21,.28)}
+.av.vfy-b{box-shadow:0 0 0 2px rgba(29,155,240,.45)}
+.av.vfy-g{box-shadow:0 0 0 2px rgba(224,166,21,.55)}
 @keyframes sqIn{from{opacity:.15;transform:translateY(26px)}to{opacity:1;transform:none}}
 body{animation:sqIn .26s ease-out}
 @media (prefers-reduced-motion: reduce){body{animation:none}}
@@ -267,6 +269,9 @@ function timeAgo(t){const s=Math.floor((Date.now()-t)/1000);if(s<60)return 'ال
 const VBADGE='<svg class="vf" viewBox="0 0 24 24"><path d="M12 2l2.4 2.1 3.1-.5 1 3 2.9 1.3-1 3 1 3-2.9 1.3-1 3-3.1-.5L12 22l-2.4-2.1-3.1.5-1-3L2.6 15.5l1-3-1-3 2.9-1.3 1-3 3.1.5z"/></svg>';
 /* علامة التوثيق الزرقاء للحساب الرسمي للمنصة */
 const VCHK='<svg class="vchk" viewBox="0 0 24 24" aria-label="موثّق"><circle cx="12" cy="12" r="10" fill="#1d9bf0"/><path d="M7.1 12.4l3.1 3.2 6.6-6.8" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+/* علامة التوثيق: زرقاء (حساب موثّق) أو ذهبية (حساب رسمي/شريك) مثل بينانس */
+function VBADGE(k){var g=(k==='gold');
+ return '<svg class="vchk" viewBox="0 0 24 24" aria-label="موثّق"><circle cx="12" cy="12" r="10" fill="'+(g?'#e0a615':'#1d9bf0')+'"/><path d="M7.1 12.4l3.1 3.2 6.6-6.8" fill="none" stroke="'+(g?'#231a02':'#fff')+'" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';}
 /* ===== التخزين ===== */
 const FEEDKEY='apex_squarefeed_v1';
 const LIKEKEY='apex_sqlike_'+ME;
@@ -376,7 +381,18 @@ var VIEWED={};
 var _io=('IntersectionObserver' in window)?new IntersectionObserver(function(entries){entries.forEach(function(en){if(!en.isIntersecting)return;var id=en.target.getAttribute('data-pid');_io.unobserve(en.target);if(!id||VIEWED[id])return;VIEWED[id]=1;api('/api/square/posts/'+id+'/view',{method:'POST'}).then(function(d){var p=POSTS.find(function(x){return +x.id===+id;});if(p&&d&&d.views!=null){p.views=d.views;var el=document.querySelector('.post[data-pid="'+id+'"] .pact.stat span');if(el)el.textContent=fmtNum(d.views);}}).catch(function(){});});},{threshold:0.5}):null;
 function observeViews(){if(!_io)return;document.querySelectorAll('.post').forEach(function(el){_io.observe(el);});}
 let FILTER='discover',QSTR='',CUR=null,PENDING_IMG=null,POSTS=[],TAG='',PENDING_VIDEO=null;
-function load(){var url='/api/square/posts?filter='+encodeURIComponent(FILTER)+'&q='+encodeURIComponent(QSTR)+(TAG?('&tag='+encodeURIComponent(TAG)):'');api(url).then(function(d){POSTS=d.posts||[];render();}).catch(function(){$('feed').innerHTML='<div style="padding:54px 24px;text-align:center;color:var(--muted)"><div style="font-size:40px">⚠️</div><b style="color:var(--txt)">تعذّر التحميل</b></div>';});}
+function load(_retry){
+  var url='/api/square/posts?filter='+encodeURIComponent(FILTER)+'&q='+encodeURIComponent(QSTR)+(TAG?('&tag='+encodeURIComponent(TAG)):'');
+  api(url).then(function(d){POSTS=(d&&d.posts)||[];render();}).catch(function(){
+    /* السيرفر أحياناً لسا صاحي بعد النشر (cold start) — نعيد المحاولة مرة قبل رسالة الخطأ */
+    if(!_retry){setTimeout(function(){load(1);},1200);return;}
+    $('feed').innerHTML='<div style="padding:54px 24px;text-align:center;color:var(--muted)">'+
+      '<div style="font-size:40px">⚠️</div><b style="color:var(--txt)">تعذّر التحميل</b>'+
+      '<div style="margin-top:12px"><button class="chip" id="retryBtn">إعادة المحاولة</button></div></div>';
+    var rb=document.getElementById('retryBtn');if(rb)rb.addEventListener('click',function(){load();});
+    return;
+  });
+}
 function filterTag(tag){tag=String(tag||'').toLowerCase();if(!tag)return;TAG=tag;var tb=$('tagbar');if(tb){tb.style.display='flex';tb.innerHTML='<b>#'+esc(tag)+'</b><button class="clr" onclick="clearTag()">✕ إزالة الوسم</button>';}try{window.scrollTo(0,0);}catch(e){}load();}
 function clearTag(){TAG='';var tb=$('tagbar');if(tb){tb.style.display='none';tb.innerHTML='';}load();}
 function loadTrending(){api('/api/square/hashtags/trending?limit=14').then(function(d){var tags=(d&&d.tags)||[];var box=$('trends');if(!box)return;if(!tags.length){box.style.display='none';return;}box.style.display='flex';box.innerHTML='<span class="tlabel">الوسوم الرائجة</span>'+tags.map(function(t){return '<button class="trend" onclick="filterTag(\''+esc(String(t.tag).replace(/[^0-9a-z_\u0600-\u06FF]/g,''))+'\')">#'+esc(t.tag)+'<b>'+fmtNum(t.n)+'</b></button>';}).join('');}).catch(function(){});}
@@ -466,9 +482,11 @@ function render(){var feed=$('feed');
     // إعادة النشر تظهر كمنشور عادي باسم مَن أعاد النشر (بلا شريط إضافي)
     var dname=p.display_author||p.author||'مستخدم';
     var off=Number(p.user_id)===0;  // المنشورات الرسمية باسم المنصة
+    var _pv=Number(p.is_repost)>0?Number(p.display_verified):Number(p.verified);var _pk=Number(p.is_repost)>0?p.display_vkind:p.verified_kind;
+    var vk=off?'blue':(_pk==='gold'?'gold':(_pv===1?'blue':''));
     return '<div class="post" data-pid="'+p.id+'">'+
-      '<div class="phead">'+avatar(dname,off?'ofc':'')+
-      '<div class="who"><b>'+esc(dname)+(off?VCHK:'')+'</b><span>'+kindBadge(p.kind)+' '+timeAgo(p.created_at)+(p.tag?(' • $'+esc(p.tag)):'')+'</span>'+vb+'</div>'+
+      '<div class="phead">'+avatar(dname,off?'ofc':(vk==='gold'?'vfy-g':(vk==='blue'?'vfy-b':'')))+
+      '<div class="who"><b>'+esc(dname)+(vk?VBADGE(vk):'')+'</b><span>'+kindBadge(p.kind)+' '+timeAgo(p.created_at)+(p.tag?(' • $'+esc(p.tag)):'')+'</span>'+vb+'</div>'+
       '<button class="morebtn" title="خيارات المنشور" onclick="toggleMenu('+p.id+',event)">'+moreIco()+'</button>'+
       '</div>'+
       '<div class="ptext">'+fmtText(p.content)+'</div>'+
@@ -488,7 +506,7 @@ function statRow(ic,label,n){return '<div class="statrow"><span class="si">'+ic+
 function openStats(id){$('statBody').innerHTML='<div style="color:var(--muted);text-align:center;padding:20px 0;font-size:13px">...جارٍ التحميل</div>';$('statMask').classList.add('on');api('/api/square/posts/'+id+'/stats').then(function(d){var s=d.stats||{};$('statBody').innerHTML=statRow('👁️','المشاهدات',s.views)+statRow('❤️','الإعجابات',s.likes)+statRow('💬','التعليقات',s.comments)+statRow('🔁','إعادة النشر',s.reposts);}).catch(function(){$('statBody').innerHTML='<div style="color:var(--muted);text-align:center;padding:16px">تعذّر جلب الإحصائيات</div>';});}
 function closeStats(){$('statMask').classList.remove('on');}
 function sharePost(id){var p=POSTS.find(function(x){return +x.id===+id;});var url=location.origin+location.pathname+'#post-'+id;var txt=(p&&p.content)?p.content:'Apex Square';if(navigator.share){navigator.share({title:'Apex Square',text:txt,url:url}).catch(function(){});}else if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(url).then(function(){toast('تم نسخ رابط المنشور ✓');}).catch(function(){toast(url);});}else{toast(url);}}
-function openCmt(id){CUR=id;$('cmtList').innerHTML='<div style="color:var(--muted);text-align:center;padding:20px 0;font-size:13px">...جارٍ التحميل</div>';$('cmtMask').classList.add('on');api('/api/square/posts/'+id+'/comments').then(function(d){var cs=d.comments||[];$('cmtList').innerHTML=cs.length?cs.map(function(c){return '<div class="cmt">'+avatar(c.author,'av')+'<div class="cb"><b>'+esc(c.author)+'</b><p>'+fmtText(c.content)+'</p><span>'+timeAgo(c.created_at)+'</span></div></div>';}).join(''):'<div style="color:var(--muted);text-align:center;padding:20px 0;font-size:13px">لا تعليقات بعد — كن الأول</div>';}).catch(function(){});}
+function openCmt(id){CUR=id;$('cmtList').innerHTML='<div style="color:var(--muted);text-align:center;padding:20px 0;font-size:13px">...جارٍ التحميل</div>';$('cmtMask').classList.add('on');api('/api/square/posts/'+id+'/comments').then(function(d){var cs=d.comments||[];$('cmtList').innerHTML=cs.length?cs.map(function(c){var cvk=(c.verified_kind==='gold'?'gold':(Number(c.verified)===1?'blue':''));return '<div class="cmt">'+avatar(c.author,'av'+(cvk==='gold'?' vfy-g':(cvk==='blue'?' vfy-b':'')))+'<div class="cb"><b>'+esc(c.author)+(cvk?VBADGE(cvk):'')+'</b><p>'+fmtText(c.content)+'</p><span>'+timeAgo(c.created_at)+'</span></div></div>';}).join(''):'<div style="color:var(--muted);text-align:center;padding:20px 0;font-size:13px">لا تعليقات بعد — كن الأول</div>';}).catch(function(){});}
 function closeCmt(){$('cmtMask').classList.remove('on');}
 function addCmt(){var v=($('cmtInput').value||'').trim();if(!v||!CUR)return;api('/api/square/posts/'+CUR+'/comments',{method:'POST',body:JSON.stringify({content:v})}).then(function(){$('cmtInput').value='';var cur=CUR;openCmt(cur);load();}).catch(function(){});}
 function openCompose(){$('ta').value='';PENDING_IMG=null;PENDING_VIDEO=null;$('imgPreview').innerHTML='';$('vidPreview').innerHTML='';$('composeMask').classList.add('on');setTimeout(function(){try{$('ta').focus();}catch(e){}},120);}

@@ -520,6 +520,28 @@ tr:last-child td{border-bottom:0}
             <div id="ofPrev" class="u-mail">المعاينة: يظهر الاسم مع علامة التوثيق الزرقاء بجانبه.</div>
           </div>
         </div>
+        <!-- ===== علامة التوثيق: اختيار الحساب ومنح العلامة ===== -->
+        <div class="card" id="verifyCard">
+          <div class="card-h"><b>علامة التوثيق</b>
+            <span class="pill approved" style="display:inline-flex;align-items:center;gap:5px">موثّق
+              <svg viewBox="0 0 24 24" width="13" height="13"><circle cx="12" cy="12" r="10" fill="#1d9bf0"/><path d="M7.1 12.4l3.1 3.2 6.6-6.8" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+            <div class="sp"></div>
+            <span class="u-mail">تظهر بجانب الاسم في الساحة والمنشورات والتعليقات</span>
+          </div>
+          <div style="padding:14px">
+            <div style="background:var(--panel2);border:1px solid var(--border);border-radius:12px;padding:11px 12px;font-size:12.5px;line-height:1.9;color:var(--muted)">
+              <b style="color:var(--txt)">شروط العلامة الزرقاء:</b> هوية موثّقة (KYC مقبول) + عمر الحساب ٣٠ يوم + ١٠ منشورات + ٢٠ متابع + ٥٠ إعجاب + بلا بلاغات مؤكّدة آخر ٩٠ يوم + غير محظور.<br>
+              <b style="color:var(--txt)">شروط العلامة الذهبية:</b> نفس الشروط مع ٩٠ يوم + ٣٠ منشور + ٢٠٠ متابع + ٥٠٠ إعجاب (للحسابات الرسمية والشركاء).<br>
+              <span style="color:var(--gold2)">تقدر تمنح استثناءً يدوياً لحساب ما استوفى الشروط — بيروح للـ«استثناء» بضغطة تأكيد.</span>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
+              <input id="vfyQ" placeholder="ابحث بالبريد أو الاسم أو اسم المستخدم…" style="flex:1;min-width:200px;background:var(--panel2);border:1px solid var(--border);color:var(--txt);border-radius:10px;padding:10px;font-family:inherit;font-size:13px">
+              <button class="btn ghost sm" onclick="loadVerifyUsers()">بحث</button>
+            </div>
+            <div id="vfyList" style="margin-top:12px"><div class="empty">…جارٍ التحميل</div></div>
+          </div>
+        </div>
         <div class="card">
           <div class="card-h">
             <b>المنشورات</b>
@@ -1171,7 +1193,7 @@ function nav(pg){
   if(pg==='commission')loadCommission();
   if(pg==='finance')loadFinance();
   if(pg==='moneyflow')loadMoneyFlow();
-  if(pg==='square'){try{bindOfficialUI();}catch(e){}loadSquarePosts();}
+  if(pg==='square'){try{bindOfficialUI();}catch(e){}loadSquarePosts();try{loadVerifyUsers();}catch(e){}}
   if(pg==='reports')loadReports();
   if(pg==='logs')loadLogs();
   if(pg==='backup')loadBackups();
@@ -1771,6 +1793,52 @@ function renderMoneyFlow(){
 }
 /* ---- admin activity log ---- */
 function logLabel(a){return ({credit:'شحن رصيد',balance_adjust:'تعديل رصيد',notify:'إرسال إشعار',ban:'حظر حساب',unban:'رفع الحظر',ban_temp:'حظر مؤقّت',freeze:'تجميد رصيد',unfreeze:'فك تجميد'})[a]||a;}
+/* ===== علامة التوثيق: قائمة الحسابات + منح/سحب ===== */
+function vfyChip(t,good){return '<span style="display:inline-block;padding:2px 8px;border-radius:8px;font-size:11.5px;font-weight:800;border:1px solid '+(good?'rgba(14,203,129,.45)':'rgba(246,70,93,.45)')+';color:'+(good?'var(--green)':'var(--red)')+';background:'+(good?'rgba(14,203,129,.08)':'rgba(246,70,93,.08)')+'">'+t+'</span>';}
+async function loadVerifyUsers(){
+  var box=$('vfyList');if(!box)return;
+  var q=($('vfyQ')&&$('vfyQ').value||'').trim();
+  box.innerHTML='<div class="empty">…جارٍ التحميل</div>';
+  try{
+    var d=await api('/api/admin/verify/users?limit=60'+(q?('&q='+encodeURIComponent(q)):''));
+    var us=d.users||[];
+    if(!us.length){box.innerHTML='<div class="empty">لا نتائج</div>';return;}
+    box.innerHTML='<table><thead><tr><th>الحساب</th><th>النشاط</th><th>الشروط</th><th>العلامة</th><th></th></tr></thead><tbody>'+
+      us.map(function(u){
+        var name=esc(u.name||u.username||(u.email||'').split('@')[0]);
+        var isG=u.verified_kind==='gold', isB=u.verified_kind==='blue'&&Number(u.verified)===1;
+        var badge=isG?'<span style="color:var(--gold2);font-weight:900">ذهبي ●</span>':(isB?'<span style="color:#1d9bf0;font-weight:900">أزرق ●</span>':'<span class="u-mail">بلا علامة</span>');
+        var met=(u.status==='approved'?'KYC ✓':'KYC ✗');
+        var cl=(u.checks&&u.checks.blue)||[];
+        var fails=cl.filter(function(c){return !c.ok;}).map(function(c){return c.label+': '+c.val+'/'+c.need;});
+        return '<tr><td class="u-name">'+name+'<div class="u-mail">'+esc(u.email||'')+' · UID '+u.id+'</div></td>'+
+          '<td style="font-size:12px;color:var(--muted);line-height:1.9">'+met+' · '+Number(u.age_days||0)+' يوم<br>📝 '+Number(u.posts||0)+' · 👥 '+Number(u.followers||0)+' · ❤ '+Number(u.likes||0)+' · ⚠ '+Number(u.bad_reports||0)+'</td>'+
+          '<td style="max-width:260px">'+(u.eligible_gold?vfyChip('مؤهّل للذهبي',1):(u.eligible_blue?vfyChip('مؤهّل للأزرق',1):vfyChip('ناقص',0)+'<div class="u-mail" style="margin-top:4px">'+esc(fails.slice(0,3).join(' · '))+'</div>'))+'</td>'+
+          '<td>'+badge+'</td>'+
+          '<td style="text-align:end;white-space:nowrap">'+
+            '<button class="btn ghost sm" data-uid="'+u.id+'" data-kind="blue" data-ok="'+(u.eligible_blue?1:0)+'">أزرق</button> '+
+            '<button class="btn ghost sm" data-uid="'+u.id+'" data-kind="gold" data-ok="'+(u.eligible_gold?1:0)+'">ذهبي</button> '+
+            (Number(u.verified)===1?'<button class="btn ghost sm" style="color:var(--red);border-color:rgba(246,70,93,.4)" data-uid="'+u.id+'" data-kind="none" data-ok="1">سحب</button>':'')+
+          '</td></tr>';
+      }).join('')+'</tbody></table>';
+  }catch(e){box.innerHTML='<div class="empty">تعذّر تحميل الحسابات — تحقّق من الصلاحية</div>';}
+}
+async function setVerify(uid,kind,btn,ok){
+  var force=false;
+  if(kind!=='none'&&!ok){
+    if(!confirm('هذا الحساب ما استوفى كل الشروط.\nهل تريد منح العلامة كاستثناء يدوي؟')) { if(btn){btn.disabled=false;} return; }
+    force=true;
+  }
+  if(kind==='none'&&!confirm('سحب علامة التوثيق عن هذا الحساب؟'))return;
+  if(btn){btn.disabled=true;btn.textContent='…';}
+  try{await api('/api/admin/verify/set',{method:'POST',body:JSON.stringify({user_id:uid,kind:kind,force:force})});toast(kind==='none'?'تم سحب العلامة':'تم منح العلامة ✓');loadVerifyUsers();}
+  catch(e){toast('تعذّر تنفيذ الطلب');if(btn){btn.disabled=false;btn.textContent=kind==='none'?'سحب':(kind==='gold'?'ذهبي':'أزرق');}}
+}
+window.loadVerifyUsers=loadVerifyUsers;window.setVerify=setVerify;
+document.addEventListener('click',function(e){
+  var b=e.target&&e.target.closest?e.target.closest('#vfyList button[data-kind]'):null;if(!b)return;
+  setVerify(Number(b.getAttribute('data-uid')),b.getAttribute('data-kind'),b,Number(b.getAttribute('data-ok'))===1);
+});
 /* ===== إشراف منشورات السكوير ===== */
 /* ===== نشر باسم المنصة (Apex Official) ===== */
 var OF_IMG='';

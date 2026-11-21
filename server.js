@@ -1093,6 +1093,13 @@ async function ensureSchema() {
   await ensureColumn('users', 'force_2fa', '`force_2fa` TINYINT NOT NULL DEFAULT 0');
   // حظر نهائي (دائم) — يُميّز الحظر الدائم عن المؤقّت حتى لا يرفعه أي مؤقّت تلقائياً
   await ensureColumn('users', 'ban_permanent', '`ban_permanent` TINYINT NOT NULL DEFAULT 0');
+  // ===== علامة التوثيق (الزرقة/الصفرة) — يمنحها الأدمن فقط بعد استيفاء الشروط =====
+  // verified = 1 يعني في علامة، verified_kind = blue | gold (فارغ = بلا علامة)
+  await ensureColumn('users', 'verified', '`verified` TINYINT NOT NULL DEFAULT 0');
+  await ensureColumn('users', 'verified_kind', '`verified_kind` VARCHAR(10) NULL');
+  await ensureColumn('users', 'verified_at', '`verified_at` BIGINT NOT NULL DEFAULT 0');
+  await ensureColumn('users', 'verified_note', '`verified_note` VARCHAR(200) NULL');
+  await pool.query('ALTER TABLE users ADD INDEX idx_verified (verified)').catch(function () {});
   // identity documents (KYC): one row per user, holds the base64 image.
   await pool.query(
     'CREATE TABLE IF NOT EXISTS id_documents (' +
@@ -1358,6 +1365,17 @@ async function ensureSchema() {
   // حذف ناعم: المنشور لا يُمحى من قاعدة البيانات أبداً — يُخفى فقط (deleted_at)
   await ensureColumn('square_posts', 'deleted_at', '`deleted_at` BIGINT NULL');
   await pool.query('ALTER TABLE square_posts ADD INDEX idx_deleted (deleted_at)').catch(function () {});
+  // ===== حالة العقود الآجلة (الصفقات/الأوامر المعلّقة/السجل) =====
+  // كانت محفوظة في متصفح الجهاز فقط، فالصفقة تظهر على الجوال ولا تظهر على
+  // اللابتوب. صار كل حساب يحفظ حالته على السيرفر ويقرأها من أي جهاز.
+  await pool.query(
+    'CREATE TABLE IF NOT EXISTS futures_state (' +
+    ' user_id INT NOT NULL PRIMARY KEY,' +
+    ' positions LONGTEXT NULL,' +
+    ' pending LONGTEXT NULL,' +
+    ' history LONGTEXT NULL,' +
+    ' updated_at BIGINT NOT NULL DEFAULT 0' +
+    ')');
   // ===== لقطات قيمة المحفظة اليومية — أساس حساب «أرباح وخسائر اليوم» =====
   // كل لقطة تخزّن قيمة المحفظة الكاملة (فوري + عقود) بالدولار. عند فتح
   // المحفظة نحفظ لقطة (كل دقيقتين كحد أقصى)، ثم نحسب فرق القيمة من بداية
@@ -2043,7 +2061,7 @@ app.use(helmet({ contentSecurityPolicy: false }));
 const bigJson = express.json({ limit: '3mb' });
 const smallJson = express.json({ limit: '10kb' });
 app.use((req, res, next) => {
-  if (req.path === '/api/auth/register' || req.path === '/api/auth/reverify' || req.path.startsWith('/api/square/') || req.path.startsWith('/api/admin/square/')) return bigJson(req, res, next);
+  if (req.path === '/api/auth/register' || req.path === '/api/auth/reverify' || req.path.startsWith('/api/square/') || req.path.startsWith('/api/admin/square/') || req.path.startsWith('/api/futures/')) return bigJson(req, res, next);
   return smallJson(req, res, next);
 });
 app.use(cors({
@@ -6342,7 +6360,7 @@ app.get('/api/square/posts', softUser, async (req, res) => {
     // «حفظ المنشور» — فلتر يعرض المحفوظات فقط
     if (filter === 'saved') {
       if (!me) { where = '1=0'; }
-      else where += ' AND p.id IN (SELECT post_id FROM square_saves WHERE user_id = ?)';
+      else { where += ' AND p.id IN (SELECT post_id FROM square_saves WHERE user_id = ?)'; params.push(me); }
     }
     // «غير مهتم» — يُخفى المنشور عن هذا المستخدم في التغذية (يبقى ظاهراً في «منشوراتي»)
     if (filter !== 'mine' && filter !== 'saved') {
@@ -6365,8 +6383,9 @@ app.get('/api/square/posts', softUser, async (req, res) => {
     if (filter === 'report') {
       order = '(SELECT COUNT(*) FROM square_reports rp WHERE rp.post_id = p.id) DESC, p.created_at DESC';
     }
-    const [rows] = await pool.query(
+    const feedSelect =
       'SELECT p.id, p.user_id, p.author, p.content, p.image, p.tag, p.symbol, p.kind, p.created_at, ' +
+      ' u.verified, u.verified_kind, ' +
       ' (p.video IS NOT NULL AND p.video <> \'\') AS has_video, ' +
       ' (SELECT COUNT(*) FROM square_likes l WHERE l.post_id = p.id) AS likes, ' +
       ' (SELECT COUNT(*) FROM square_comments c WHERE c.post_id = p.id) AS comments, ' +
@@ -6379,8 +6398,22 @@ app.get('/api/square/posts', softUser, async (req, res) => {
       ' (SELECT COUNT(*) FROM square_saves s WHERE s.post_id = p.id AND s.user_id = ?) AS saved, ' +
       ' (SELECT vote FROM square_votes vo WHERE vo.post_id = p.id AND vo.user_id = ? LIMIT 1) AS my_vote, ' +
       ' (SELECT COUNT(*) FROM square_reports rp WHERE rp.post_id = p.id) AS reports ' +
-      'FROM square_posts p WHERE ' + where + ' ORDER BY ' + order + ' LIMIT 200',
-      params);
+      'FROM square_posts p LEFT JOIN users u ON u.id = p.user_id WHERE ' + where;
+    // حماية: قاعدة قديمة بلا عمود الإخفاء/التصنيف، أو ترتيب «الرائج» الثقيل على
+    // قاعدة صغيرة — بدل ما تطلع الصفحة «تعذّر التحميل» نصلّح ونعيد المحاولة.
+    let rows;
+    try {
+      [rows] = await pool.query(feedSelect + ' ORDER BY ' + order + ' LIMIT 200', params);
+    } catch (e1) {
+      console.warn('[square/feed]', e1.code || '', e1.message);
+      if (e1 && (e1.code === 'ER_BAD_FIELD_ERROR' || /Unknown column/i.test(String(e1.message || '')))) {
+        await ensureColumn('square_posts', 'deleted_at', '`deleted_at` BIGINT NULL');
+        await ensureColumn('square_posts', 'kind', "`kind` VARCHAR(12) NOT NULL DEFAULT 'post'");
+        [rows] = await pool.query(feedSelect + ' ORDER BY ' + order + ' LIMIT 200', params);
+      } else {
+        [rows] = await pool.query(feedSelect + ' ORDER BY p.created_at DESC LIMIT 200', params);
+      }
+    }
 
     // ---- إعادات النشر: «أعاد النشر بواسطة فلان» ----
     // نجلبها دفعة واحدة (استعلام واحد لكل التغذية) بدل استعلام لكل منشور — باندويث أقل.
@@ -6389,7 +6422,8 @@ app.get('/api/square/posts', softUser, async (req, res) => {
     if (ids.length) {
       try {
         const [rps] = await pool.query(
-          'SELECT r.post_id, r.user_id, COALESCE(u.name, u.username, r.author, u.email, \'مستخدم\') AS reposter, ' +
+          'SELECT r.post_id, r.user_id, u.verified AS r_verified, u.verified_kind AS r_vkind, ' +
+          ' COALESCE(u.name, u.username, r.author, u.email, \'مستخدم\') AS reposter, ' +
           ' COALESCE(r.orig_author, p.author, \'مستخدم\') AS orig_author ' +
           'FROM square_reposts r LEFT JOIN users u ON u.id = r.user_id ' +
           'LEFT JOIN square_posts p ON p.id = r.post_id ' +
@@ -6397,7 +6431,7 @@ app.get('/api/square/posts', softUser, async (req, res) => {
           ids);
         for (const r of rps) {
           const p = String(r.post_id);
-          (rpByPost[p] = rpByPost[p] || []).push({ uid: r.user_id, name: r.reposter, orig: r.orig_author });
+          (rpByPost[p] = rpByPost[p] || []).push({ uid: r.user_id, name: r.reposter, orig: r.orig_author, verified: r.r_verified, vkind: r.r_vkind });
         }
       } catch (e) { console.warn('[square/reposters]', e.message); }
     }
@@ -6412,6 +6446,8 @@ app.get('/api/square/posts', softUser, async (req, res) => {
       if (shown) {
         r.display_author = shown.name || r.author || 'مستخدم';
         r.display_uid = shown.uid || null;
+        r.display_verified = shown.verified || 0;
+        r.display_vkind = shown.vkind || null;
         r.is_repost = 1;
       } else {
         r.display_author = r.author || 'مستخدم';
@@ -6700,7 +6736,8 @@ app.post('/api/square/posts/:id/report', requireUser, async (req, res) => {
 app.get('/api/square/posts/:id/comments', requireUser, async (req, res) => {
   try {
     const pid = Number(req.params.id);
-    const [rows] = await pool.query('SELECT id, user_id, author, content, created_at FROM square_comments WHERE post_id = ? ORDER BY created_at ASC LIMIT 500', [pid]);
+    const [rows] = await pool.query('SELECT c.id, c.user_id, c.author, c.content, c.created_at, u.verified, u.verified_kind ' +
+    'FROM square_comments c LEFT JOIN users u ON u.id = c.user_id WHERE c.post_id = ? ORDER BY c.created_at ASC LIMIT 500', [pid]);
     res.json({ ok: true, comments: rows });
   } catch (e) { console.error('[square/comments]', e.message); res.status(500).json({ error: 'server_error' }); }
 });
@@ -6854,6 +6891,127 @@ app.post('/api/admin/square/posts/:id/restore', requireAdmin, async (req, res) =
     await pool.query('UPDATE square_posts SET deleted_at = NULL WHERE id = ?', [pid]);
     res.json({ ok: true });
   } catch (e) { console.error('[admin/square/restore]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+// ===== حالة العقود الآجلة على السيرفر (بدل متصفح الجهاز) =====
+// GET  /api/futures/state  → آخر حالة محفوظة للحساب
+// PUT  /api/futures/state  → رفع الحالة (نأخذ الأحدث فقط بحسب updated_at)
+function _sqArr(v, max) { return Array.isArray(v) ? v.slice(0, max) : []; }
+app.get('/api/futures/state', requireUser, async (req, res) => {
+  try {
+    const [[row]] = await pool.query('SELECT positions, pending, history, updated_at FROM futures_state WHERE user_id = ?', [req.user.uid]);
+    const parse = (t) => { try { return t ? JSON.parse(t) : []; } catch (e) { return []; } };
+    res.json({
+      ok: true,
+      positions: row ? parse(row.positions) : [],
+      pending: row ? parse(row.pending) : [],
+      history: row ? parse(row.history) : [],
+      updated_at: row ? Number(row.updated_at) || 0 : 0,
+    });
+  } catch (e) { console.error('[futures/state-get]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+app.put('/api/futures/state', requireUser, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const positions = _sqArr(b.positions, 100);
+    const pending = _sqArr(b.pending, 100);
+    const history = _sqArr(b.history, 60);
+    const stamp = Math.min(Number(b.updated_at) || 0, Date.now() + 60000);
+    const jp = JSON.stringify(positions), jo = JSON.stringify(pending), jh = JSON.stringify(history);
+    if ((jp.length + jo.length + jh.length) > 900000) return res.status(413).json({ error: 'too_large' });
+    const [[cur]] = await pool.query('SELECT updated_at FROM futures_state WHERE user_id = ?', [req.user.uid]);
+    const curT = cur ? Number(cur.updated_at) || 0 : 0;
+    if (stamp <= curT) return res.json({ ok: true, applied: false, updated_at: curT });
+    await pool.query(
+      'INSERT INTO futures_state (user_id, positions, pending, history, updated_at) VALUES (?, ?, ?, ?, ?) ' +
+      'ON DUPLICATE KEY UPDATE positions = VALUES(positions), pending = VALUES(pending), history = VALUES(history), updated_at = VALUES(updated_at)',
+      [req.user.uid, jp, jo, jh, stamp]);
+    res.json({ ok: true, applied: true, updated_at: stamp });
+  } catch (e) { console.error('[futures/state-put]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+// ===== علامة التوثيق: شروط + منح/سحب من لوحة الإدارة =====
+// الشرط الأساسي: حساب حقيقي (KYC مقبول)، قديم كفاية، عنده نشاط ومتابعين،
+// وسجلّه نظيف من البلاغات المؤكّدة. الأدمن يقدر يمنح استثناء (force) بنصّ سبب.
+const VERIFY_RULES = {
+  blue: { minDays: 30, minPosts: 10, minFollowers: 20, minLikes: 50 },
+  gold: { minDays: 90, minPosts: 30, minFollowers: 200, minLikes: 500 },
+};
+async function verifyMetrics(uid) {
+  const [[u]] = await pool.query(
+    'SELECT u.id, u.name, u.username, u.email, u.status, u.created_at, u.verified, u.verified_kind, u.verified_at, u.verified_note, ' +
+    ' TIMESTAMPDIFF(DAY, u.created_at, NOW()) AS age_days, ' +
+    ' (SELECT COUNT(*) FROM square_posts p WHERE p.user_id = u.id AND p.deleted_at IS NULL) AS posts, ' +
+    ' (SELECT COUNT(*) FROM square_follows f WHERE f.target_id = u.id) AS followers, ' +
+    ' (SELECT COUNT(*) FROM square_likes l JOIN square_posts p2 ON p2.id = l.post_id WHERE p2.user_id = u.id) AS likes, ' +
+    ' (SELECT COUNT(*) FROM square_comments c JOIN square_posts p3 ON p3.id = c.post_id WHERE p3.user_id = u.id) AS comments, ' +
+    ' (SELECT COUNT(*) FROM square_reports r JOIN square_posts p4 ON p4.id = r.post_id WHERE p4.user_id = u.id AND r.handled = 1 AND r.created_at >= ?) AS bad_reports ' +
+    'FROM users u WHERE u.id = ?', [Date.now() - 90 * 86400000, uid]);
+  return u || null;
+}
+function verifyChecks(u, kind) {
+  const r = VERIFY_RULES[kind] || VERIFY_RULES.blue;
+  const n = (v) => Number(v) || 0;
+  const checks = [
+    { k: 'kyc', label: 'الهوية موثّقة (KYC مقبول)', ok: String(u.status) === 'approved', val: String(u.status || '-'), need: 'approved' },
+    { k: 'ban', label: 'الحساب غير محظور', ok: String(u.status) !== 'banned', val: String(u.status === 'banned' ? 'محظور' : 'سليم'), need: 'غير محظور' },
+    { k: 'age', label: 'عمر الحساب (يوم)', ok: n(u.age_days) >= r.minDays, val: n(u.age_days), need: r.minDays },
+    { k: 'posts', label: 'عدد المنشورات', ok: n(u.posts) >= r.minPosts, val: n(u.posts), need: r.minPosts },
+    { k: 'followers', label: 'عدد المتابعين', ok: n(u.followers) >= r.minFollowers, val: n(u.followers), need: r.minFollowers },
+    { k: 'likes', label: 'إعجابات مستلمة', ok: n(u.likes) >= r.minLikes, val: n(u.likes), need: r.minLikes },
+    { k: 'clean', label: 'بلاغات مؤكّدة (90 يوم)', ok: n(u.bad_reports) === 0, val: n(u.bad_reports), need: 0 },
+  ];
+  return { checks, ok: checks.every((c) => c.ok) };
+}
+app.get('/api/admin/verify/users', requireAdmin, async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    const only = String(req.query.only || '');
+    const like = '%' + q + '%';
+    let where = '1=1';
+    const params = [Date.now() - 90 * 86400000];
+    if (q) { where += ' AND (u.email LIKE ? OR u.name LIKE ? OR u.username LIKE ?)'; params.push(like, like, like); }
+    if (only === 'verified') where += ' AND u.verified = 1';
+    const [rows] = await pool.query(
+      'SELECT u.id, u.name, u.username, u.email, u.status, u.created_at, u.verified, u.verified_kind, u.verified_at, u.verified_note, ' +
+      ' TIMESTAMPDIFF(DAY, u.created_at, NOW()) AS age_days, ' +
+      ' (SELECT COUNT(*) FROM square_posts p WHERE p.user_id = u.id AND p.deleted_at IS NULL) AS posts, ' +
+      ' (SELECT COUNT(*) FROM square_follows f WHERE f.target_id = u.id) AS followers, ' +
+      ' (SELECT COUNT(*) FROM square_likes l JOIN square_posts p2 ON p2.id = l.post_id WHERE p2.user_id = u.id) AS likes, ' +
+      ' (SELECT COUNT(*) FROM square_comments c JOIN square_posts p3 ON p3.id = c.post_id WHERE p3.user_id = u.id) AS comments, ' +
+      ' (SELECT COUNT(*) FROM square_reports r JOIN square_posts p4 ON p4.id = r.post_id WHERE p4.user_id = u.id AND r.handled = 1 AND r.created_at >= ?) AS bad_reports ' +
+      'FROM users u WHERE ' + where + ' ORDER BY u.verified DESC, posts DESC, u.created_at DESC LIMIT 60', params);
+    const out = rows.map((u) => {
+      const blue = verifyChecks(u, 'blue'), gold = verifyChecks(u, 'gold');
+      return Object.assign({}, u, {
+        eligible_blue: blue.ok, eligible_gold: gold.ok,
+        checks: { blue: blue.checks, gold: gold.checks },
+      });
+    });
+    res.json({ ok: true, users: out, rules: VERIFY_RULES });
+  } catch (e) { console.error('[admin/verify/users]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+app.post('/api/admin/verify/set', requireAdmin, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const uid = Number(b.user_id) || 0;
+    let kind = String(b.kind || 'none').trim().toLowerCase();
+    if (!['blue', 'gold', 'none'].includes(kind)) kind = 'none';
+    if (!uid) return res.status(400).json({ error: 'bad_user' });
+    const u = await verifyMetrics(uid);
+    if (!u) return res.status(404).json({ error: 'not_found' });
+    if (kind === 'none') {
+      await pool.query('UPDATE users SET verified = 0, verified_kind = NULL, verified_at = ?, verified_note = NULL WHERE id = ?', [Date.now(), uid]);
+      logOps(req, { category: 'social', kind: 'verify_revoked', status: 'ok', detail: 'سحب علامة التوثيق عن ' + (u.email || uid) });
+      return res.json({ ok: true, verified: 0, kind: 'none' });
+    }
+    const v = verifyChecks(u, kind);
+    if (!v.ok && !b.force) return res.status(400).json({ error: 'not_eligible', checks: v.checks, rules: VERIFY_RULES[kind] });
+    const note = String(b.note || '').slice(0, 200) || null;
+    await pool.query('UPDATE users SET verified = 1, verified_kind = ?, verified_at = ?, verified_note = ? WHERE id = ?', [kind, Date.now(), note, uid]);
+    logOps(req, { category: 'social', kind: kind === 'gold' ? 'verify_gold' : 'verify_blue', status: 'ok', detail: 'منح علامة ' + kind + ' لـ ' + (u.email || uid) + (b.force ? ' (استثناء)' : '') });
+    res.json({ ok: true, verified: 1, kind, forced: !!b.force });
+  } catch (e) { console.error('[admin/verify/set]', e.message); res.status(500).json({ error: 'server_error' }); }
 });
 
 // ===== لوحة الإشراف: جدول المنشورات الأكثر إبلاغاً =====

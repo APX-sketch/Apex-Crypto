@@ -499,10 +499,55 @@ let lockedMargin=0,uPnL=0;
 let history=JSON.parse(localStorage.getItem('skygo_futures_hist')||'[]');
 let pending=JSON.parse(localStorage.getItem('skygo_futures_ord')||'[]');
 let reservedMargin=0;var orderType='market';
-function saveOrd(){localStorage.setItem('skygo_futures_ord',JSON.stringify(pending));}
+function saveOrd(){localStorage.setItem('skygo_futures_ord',JSON.stringify(pending));try{pushStateDebounced();}catch(e){}}
 let feeTotal=parseFloat(localStorage.getItem('apex_fees_collected')||'0');
-function savePos(){localStorage.setItem('skygo_futures_pos',JSON.stringify(positions));}
-function saveHist(){localStorage.setItem('skygo_futures_hist',JSON.stringify(history.slice(0,40)));}
+function savePos(){localStorage.setItem('skygo_futures_pos',JSON.stringify(positions));try{pushStateDebounced();}catch(e){}}
+function saveHist(){localStorage.setItem('skygo_futures_hist',JSON.stringify(history.slice(0,40)));try{pushStateDebounced();}catch(e){}}
+/* ===== مزامنة الصفقات والأوامر والسجل مع السيرفر =====
+   قبل هيك كانت محفوظة بمتصفح الجهاز، فالصفقة المفتوحة على الجوال ما كانت
+   تظهر على اللابتوب. صارت الحالة تُرفع للحساب وتُقرأ من أي جهاز. */
+var FS_STAMP=+(localStorage.getItem('skygo_futures_stamp')||0);
+var _pushT=null,_stSync=false;
+function _sqStamp(){FS_STAMP=Date.now();try{localStorage.setItem('skygo_futures_stamp',String(FS_STAMP));}catch(e){}}
+function pushStateNow(){
+  if(!FTOK||!window.fetch)return;
+  _sqStamp();
+  try{
+    fetch('/api/futures/state',{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+FTOK},
+      body:JSON.stringify({positions:positions,pending:pending,history:history,updated_at:FS_STAMP})})
+      .then(function(r){return r.json();})
+      .then(function(d){if(d&&d.applied===false){try{pullState();}catch(e){}}})
+      .catch(function(){});
+  }catch(e){}
+}
+function pushStateDebounced(){clearTimeout(_pushT);_pushT=setTimeout(pushStateNow,450);}
+async function pullState(){
+  if(!FTOK||_stSync)return;_stSync=true;
+  try{
+    var r=await fetch('/api/futures/state',{headers:{'Authorization':'Bearer '+FTOK}});
+    if(!r.ok){_stSync=false;return;}
+    var d=await r.json();
+    var srvT=Number(d.updated_at||0);
+    var localHas=(positions.length||pending.length||history.length)?1:0;
+    if(srvT>FS_STAMP&&!(FS_STAMP>srvT&&localHas)){
+      positions=Array.isArray(d.positions)?d.positions:[];
+      pending=Array.isArray(d.pending)?d.pending:[];
+      history=Array.isArray(d.history)?d.history:[];
+      try{
+        localStorage.setItem('skygo_futures_pos',JSON.stringify(positions));
+        localStorage.setItem('skygo_futures_ord',JSON.stringify(pending));
+        localStorage.setItem('skygo_futures_hist',JSON.stringify(history.slice(0,40)));
+        localStorage.setItem('skygo_futures_stamp',String(srvT));
+      }catch(e){}
+      FS_STAMP=srvT;
+      try{renderPositions();renderOrders();renderHistory();updateSummary();}catch(e){}
+    }else if(localHas&&FS_STAMP>=srvT){
+      pushStateNow();   /* جهاز جديد عنده صفقات محلية → نرفعها للحساب */
+    }
+  }catch(e){}
+  _stSync=false;
+}
+window.pullState=pullState;
 function addFee(f){feeTotal+=f;localStorage.setItem('apex_fees_collected',feeTotal.toFixed(8));const ft=$('feeTotal');if(ft)ft.textContent=fmt(feeTotal,2)+' USDT';reportFee(f,'futures');}
 /* يُبلّغ السيرفر بقيمة العمولة ليُحوّلها إلى حساب عمولات المنصة (منفصل عن أرصدة المستخدمين) */
 function reportFee(f,src){if(!FTOK||!(f>0))return;try{fetch('/api/wallet/fee',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+FTOK},body:JSON.stringify({amount:f,currency:'USDT',source:src||'futures'})}).catch(function(){});}catch(e){}}
@@ -1023,6 +1068,10 @@ if(window.APX&&APX.onChange){APX.onChange(function(){try{if(APX.is(cur.s))refres
 /* تزامن رصيد العقود + سجل التحويلات مع السيرفر */
 (function(){
   if(!FTOK)return;
+  pullState();
+  setInterval(pullState,15000);
+  document.addEventListener('visibilitychange',function(){if(!document.hidden)pullState();});
+  window.addEventListener('focus',function(){pullState();});
   pullWallet();
   setInterval(pullWallet,8000);
   pullXfers();
