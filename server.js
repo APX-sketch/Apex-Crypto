@@ -6317,12 +6317,76 @@ async function notifyPostOwner(pid, actorUid, actorName, action, snippet) {
     });
   } catch (e) { console.warn('[square/notify-interact]', e.message); }
 }
+// ===== حارس جداول الساحة =====
+// إذا فشل الإنشاء وقت الإقلاع (أو كانت القاعدة قديمة/ناقصة) ننشئها هنا عند أول
+// طلب فتشتغل التغذية بدل ما ترجع خطأ. يعمل مرة واحدة فقط لكل تشغيل.
+let SQ_SCHEMA_OK = 0;
+async function ensureSquareSchema() {
+  if (SQ_SCHEMA_OK) return true;
+  const t = [
+    'CREATE TABLE IF NOT EXISTS square_posts (id INT AUTO_INCREMENT PRIMARY KEY, user_id INT NOT NULL, author VARCHAR(120) NOT NULL, content TEXT NOT NULL, image LONGTEXT NULL, tag VARCHAR(20) NULL, created_at BIGINT NOT NULL DEFAULT 0, INDEX idx_created (created_at))',
+    'CREATE TABLE IF NOT EXISTS square_likes (post_id INT NOT NULL, user_id INT NOT NULL, PRIMARY KEY (post_id, user_id))',
+    'CREATE TABLE IF NOT EXISTS square_comments (id INT AUTO_INCREMENT PRIMARY KEY, post_id INT NOT NULL, user_id INT NOT NULL, author VARCHAR(120) NOT NULL, content TEXT NOT NULL, created_at BIGINT NOT NULL DEFAULT 0, INDEX idx_post (post_id))',
+    'CREATE TABLE IF NOT EXISTS square_follows (follower_id INT NOT NULL, target_id INT NOT NULL, created_at BIGINT NOT NULL DEFAULT 0, PRIMARY KEY (follower_id, target_id), INDEX idx_sf_target (target_id))',
+    'CREATE TABLE IF NOT EXISTS square_reposts (post_id INT NOT NULL, user_id INT NOT NULL, created_at BIGINT NOT NULL DEFAULT 0, PRIMARY KEY (post_id, user_id), INDEX idx_rp_post (post_id))',
+    'CREATE TABLE IF NOT EXISTS square_views (post_id INT NOT NULL, user_id INT NOT NULL, PRIMARY KEY (post_id, user_id), INDEX idx_vw_post (post_id))',
+    'CREATE TABLE IF NOT EXISTS square_tags (post_id INT NOT NULL, tag VARCHAR(80) NOT NULL, created_at BIGINT NOT NULL DEFAULT 0, PRIMARY KEY (post_id, tag), INDEX idx_tag (tag))',
+    'CREATE TABLE IF NOT EXISTS square_votes (post_id INT NOT NULL, user_id INT NOT NULL, vote VARCHAR(4) NOT NULL, created_at BIGINT NOT NULL DEFAULT 0, PRIMARY KEY (post_id, user_id), INDEX idx_vote_post (post_id))',
+    'CREATE TABLE IF NOT EXISTS square_saves (post_id INT NOT NULL, user_id INT NOT NULL, created_at BIGINT NOT NULL DEFAULT 0, PRIMARY KEY (post_id, user_id), INDEX idx_save_user (user_id))',
+    'CREATE TABLE IF NOT EXISTS square_reports (id INT AUTO_INCREMENT PRIMARY KEY, post_id INT NOT NULL, user_id INT NOT NULL, reporter VARCHAR(120) NULL, reason VARCHAR(40) NOT NULL, note VARCHAR(400) NULL, created_at BIGINT NOT NULL DEFAULT 0, handled TINYINT NOT NULL DEFAULT 0, handled_at BIGINT NOT NULL DEFAULT 0, UNIQUE KEY uq_report (post_id, user_id), INDEX idx_rep_post (post_id))',
+  ];
+  try {
+    for (const q of t) await pool.query(q);
+    await ensureColumn('square_posts', 'deleted_at', '`deleted_at` BIGINT NULL');
+    await ensureColumn('square_posts', 'kind', "`kind` VARCHAR(12) NOT NULL DEFAULT 'post'");
+    await ensureColumn('square_posts', 'symbol', '`symbol` VARCHAR(20) NULL');
+    await ensureColumn('square_posts', 'video', '`video` LONGTEXT NULL');
+    await ensureColumn('square_reposts', 'author', '`author` VARCHAR(120) NULL');
+    await ensureColumn('square_reposts', 'orig_author', '`orig_author` VARCHAR(120) NULL');
+    SQ_SCHEMA_OK = 1;
+    return true;
+  } catch (e) {
+    console.warn('[square/schema] ensure failed:', e.message);
+    return false;
+  }
+}
 // ---- عوامل ترتيب التغذية ----
 // 'hot'  : الأكثر تفاعلاً (إعجابات + تعليقات×2 + إعادة نشر×3)
 // 'new'  : الأحدث أولاً
 // 'mine' : منشوراتي
 // 'saved': المنشورات التي حفظتها
 // 'report': الأكثر إبلاغاً (عادةً للأدمن — لكنه متاح لمن يريد مراجعة المحتوى)
+// فحص صحة الساحة (عام، بلا بيانات حسّاسة) — للتشخيص السريع بعد النشر
+app.get('/api/square/health', async (req, res) => {
+  const out = { ok: true, build: 'sq-2026-11-21-c', db: null, tables: {}, posts: null, feed: null, env: {} };
+  try {
+    out.env.dbname = String(process.env.DB_NAME || '');
+    out.env.host_set = !!process.env.DB_HOST;
+    out.env.port_set = !!process.env.DB_PORT;
+    const [[ping]] = await pool.query('SELECT 1 AS ok');
+    out.db = { ok: !!(ping && ping.ok === 1) };
+  } catch (e) {
+    out.ok = false; out.db = { ok: false, code: e.code || '', error: String(e.message || '').slice(0, 200) };
+    return res.json(out);
+  }
+  try {
+    const [tabs] = await pool.query("SHOW TABLES LIKE 'square%'");
+    out.tables = tabs.map((r) => Object.values(r)[0]);
+  } catch (e) { out.tables = { error: String(e.message || '').slice(0, 150) }; }
+  try {
+    const [[c]] = await pool.query('SELECT COUNT(*) AS n FROM square_posts');
+    const [cols] = await pool.query("SHOW COLUMNS FROM square_posts");
+    out.posts = { count: Number(c && c.n) || 0, columns: cols.map((x) => x.Field) };
+  } catch (e) { out.posts = { error: String(e.message || '').slice(0, 200) }; }
+  try {
+    const [r2] = await pool.query(
+      'SELECT p.id, p.user_id, p.author, p.kind, p.created_at, u.verified, u.verified_kind ' +
+      'FROM square_posts p LEFT JOIN users u ON u.id = p.user_id ' +
+      'WHERE p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 3');
+    out.feed = { ok: true, sample: r2.length };
+  } catch (e) { out.feed = { ok: false, code: e.code || '', error: String(e.message || '').slice(0, 250) }; }
+  res.json(out);
+});
 app.get('/api/square/posts', softUser, async (req, res) => {
   try {
     const me = req.user ? Number(req.user.uid) : 0;
@@ -6406,12 +6470,19 @@ app.get('/api/square/posts', softUser, async (req, res) => {
       [rows] = await pool.query(feedSelect + ' ORDER BY ' + order + ' LIMIT 200', params);
     } catch (e1) {
       console.warn('[square/feed]', e1.code || '', e1.message);
-      if (e1 && (e1.code === 'ER_BAD_FIELD_ERROR' || /Unknown column/i.test(String(e1.message || '')))) {
-        await ensureColumn('square_posts', 'deleted_at', '`deleted_at` BIGINT NULL');
-        await ensureColumn('square_posts', 'kind', "`kind` VARCHAR(12) NOT NULL DEFAULT 'post'");
-        [rows] = await pool.query(feedSelect + ' ORDER BY ' + order + ' LIMIT 200', params);
-      } else {
+      try {
+        await ensureSquareSchema();
         [rows] = await pool.query(feedSelect + ' ORDER BY p.created_at DESC LIMIT 200', params);
+      } catch (e2) {
+        console.error('[square/feed/fatal]', e2.code || '', e2.message);
+        // نرجّع 200 مع رسالة تشخيصية بدل شاشة «تعذّر التحميل» العمياء،
+        // فتظهر الرسالة على الصفحة ونعرف سبب المشكلة بالضبط.
+        return res.json({
+          ok: false, posts: [],
+          warn: 'square_feed_failed',
+          detail: String(e2.message || e1.message || '').slice(0, 300),
+          hint: 'قاعدة البيانات أو جدول الساحة — راجع /api/square/health'
+        });
       }
     }
 

@@ -383,15 +383,28 @@ function observeViews(){if(!_io)return;document.querySelectorAll('.post').forEac
 let FILTER='discover',QSTR='',CUR=null,PENDING_IMG=null,POSTS=[],TAG='',PENDING_VIDEO=null;
 function load(_retry){
   var url='/api/square/posts?filter='+encodeURIComponent(FILTER)+'&q='+encodeURIComponent(QSTR)+(TAG?('&tag='+encodeURIComponent(TAG)):'');
-  api(url).then(function(d){POSTS=(d&&d.posts)||[];render();}).catch(function(){
+  api(url).then(function(d){
+    if(d&&d.ok===false&&!((d.posts||[]).length)){
+      /* السيرفر ردّ بشكوى واضحة (قاعدة/جدول) — نعرضها بدل رسالة مبهمة */
+      return showFeedError(d.detail||d.error||d.warn,d.hint);
+    }
+    POSTS=(d&&d.posts)||[];render();
+    if(d&&d.warn)toast('تنبيه: '+String(d.detail||d.warn).slice(0,90));
+  }).catch(function(err){
     /* السيرفر أحياناً لسا صاحي بعد النشر (cold start) — نعيد المحاولة مرة قبل رسالة الخطأ */
     if(!_retry){setTimeout(function(){load(1);},1200);return;}
-    $('feed').innerHTML='<div style="padding:54px 24px;text-align:center;color:var(--muted)">'+
-      '<div style="font-size:40px">⚠️</div><b style="color:var(--txt)">تعذّر التحميل</b>'+
-      '<div style="margin-top:12px"><button class="chip" id="retryBtn">إعادة المحاولة</button></div></div>';
-    var rb=document.getElementById('retryBtn');if(rb)rb.addEventListener('click',function(){load();});
-    return;
+    var extra='';
+    fetch(url).then(function(r){return r.json();}).then(function(j){showFeedError((j&&(j.detail||j.error))||String(err),j&&j.hint);})
+      .catch(function(){showFeedError(String(err));});
   });
+}
+function showFeedError(msg,hint){
+  $('feed').innerHTML='<div style="padding:44px 22px;text-align:center;color:var(--muted)">'+
+    '<div style="font-size:38px">⚠️</div><b style="color:var(--txt);display:block;margin:6px 0 4px">تعذّر التحميل</b>'+
+    (msg?('<div style="font-size:11.5px;color:var(--muted);direction:ltr;word-break:break-word;background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:8px;margin:8px auto;max-width:330px">'+esc(msg)+'</div>'):'')+
+    (hint?('<div style="font-size:11px;color:var(--muted)">'+esc(hint)+'</div>'):'')+
+    '<div style="margin-top:12px"><button class="chip" id="retryBtn">إعادة المحاولة</button></div></div>';
+  var rb=document.getElementById('retryBtn');if(rb)rb.addEventListener('click',function(){load();});
 }
 function filterTag(tag){tag=String(tag||'').toLowerCase();if(!tag)return;TAG=tag;var tb=$('tagbar');if(tb){tb.style.display='flex';tb.innerHTML='<b>#'+esc(tag)+'</b><button class="clr" onclick="clearTag()">✕ إزالة الوسم</button>';}try{window.scrollTo(0,0);}catch(e){}load();}
 function clearTag(){TAG='';var tb=$('tagbar');if(tb){tb.style.display='none';tb.innerHTML='';}load();}
