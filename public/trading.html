@@ -79,7 +79,7 @@ html,body{margin:0;background:#05070a;color:var(--txt);font-family:'Segoe UI',Ta
 .price.fl-eq{color:var(--txt)}
 /* الشريط السفلي (نفس شريط index) */
 .bnav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;
-  display:grid;grid-template-columns:repeat(6,1fr);background:#0f1216;border-top:1px solid var(--line);
+  display:grid;grid-template-columns:repeat(5,1fr);background:#0f1216;border-top:1px solid var(--line);
   padding:8px 0 calc(8px + env(safe-area-inset-bottom));z-index:30}
 .bnav a{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--mut);text-decoration:none;font-size:10px;font-weight:700}
 .bnav a svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8}
@@ -722,7 +722,6 @@ html,body{margin:0;background:#05070a;color:var(--txt);font-family:'Segoe UI',Ta
   <a href="markets.html"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M21 7v5h-5"/></svg><span data-i18n="navMarkets">الأسواق</span></a>
   <a href="trading.html" class="active"><svg viewBox="0 0 24 24"><path d="M7 8h13l-3-3M17 16H4l3 3"/></svg><span data-i18n="navTrading">التداول</span></a>
   <a href="futures.html"><svg viewBox="0 0 24 24"><path d="M3 3v18h18M8 14l3-3 3 3 4-5"/></svg><span data-i18n="navFutures">عقود آجلة</span></a>
-  <a href="square.html"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg><span>Square</span></a>
   <a href="wallet.html"><svg viewBox="0 0 24 24"><path d="M3 7h16a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2zM16 13h.01"/></svg><span data-i18n="navWallet">المحفظة</span></a>
 </nav>
 <div class="aichat-mask" id="aiMask" onclick="closeAiChat()"></div>
@@ -2493,6 +2492,31 @@ function loadDataView(){var body=$('dataBody');if(!body)return;var q=quoteCcy();
   window.dcaAdd=function(){var wrap=document.getElementById('dcaRows');if(!wrap)return;var row=document.createElement('div');row.className='tx-dca-row';row.innerHTML='<input type="number" step="any" inputmode="decimal" placeholder="السعر" data-k="p"><input type="number" step="any" inputmode="decimal" placeholder="الكمية" data-k="q"><button type="button" onclick="dcaDel(this)">×</button>';wrap.appendChild(row);};
   window.dcaDel=function(btn){var r=btn.parentNode;if(r&&r.parentNode)r.parentNode.removeChild(r);};
   window.txDca=function(){var rows=[].slice.call(document.querySelectorAll('#dcaRows .tx-dca-row'));var box=document.getElementById('dcaRes');if(!box)return;var totQ=0,totC=0,n=0;rows.forEach(function(r){var p=parseFloat(r.querySelector('[data-k="p"]').value);var q=parseFloat(r.querySelector('[data-k="q"]').value);if(isFinite(p)&&isFinite(q)&&p>0&&q>0){totQ+=q;totC+=p*q;n++;}});if(!n){box.className='tx-res on';box.innerHTML='<div style="color:var(--mut);font-size:12px">أدخل صفقة واحدة على الأقل بسعر وكمية صحيحين.</div>';return;}var avg=totQ>0?totC/totQ:0,d=pdc(avg);var px=curPx();var upnl=px>0?(px-avg)*totQ:NaN;var cls=upnl>=0?'up':'down';box.className='tx-res on';box.innerHTML='<div class="tx-main">'+nf(avg,d)+' USDT</div><div class="tx-grid">'+cell('إجمالي الكمية',nf(totQ,6)+' '+esc(sym()))+cell('إجمالي التكلفة',nf(totC,2)+' USDT')+cell('عدد الصفقات',n)+cell('ربح/خسارة حالي',isFinite(upnl)?('<span class="'+cls+'">'+(upnl>=0?'+':'')+nf(upnl,2)+'</span>'):'--')+'</div>';};
+})();
+</script>
+
+<style>html.sq-leaving body{opacity:.35;transform:translateY(-12px);transition:opacity .16s ease,transform .2s ease;pointer-events:none}</style>
+<script>
+/* السحب للأعلى من حافة الأسفل يفتح «الساحة» كصفحة كاملة (مثل بينانس) */
+(function(){
+  var armed=false,sy=0;
+  function open(){
+    try{sessionStorage.setItem('sq_from','app');}catch(e){}
+    document.documentElement.classList.add('sq-leaving');
+    setTimeout(function(){location.href='square.html';},140);
+  }
+  document.addEventListener('touchstart',function(e){
+    armed=false;
+    if(e.touches.length!==1)return;
+    if(e.touches[0].clientY<window.innerHeight-110)return;
+    if(e.target.closest('input,textarea,select,canvas,[contenteditable="true"],[data-noswipe]'))return;
+    armed=true;sy=e.touches[0].clientY;
+  },{passive:true});
+  document.addEventListener('touchmove',function(e){
+    if(!armed||e.touches.length!==1)return;
+    if(sy-e.touches[0].clientY>64){armed=false;open();}
+  },{passive:true});
+  document.addEventListener('touchend',function(){armed=false;},{passive:true});
 })();
 </script>
 </body>

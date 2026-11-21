@@ -484,10 +484,41 @@ tr:last-child td{border-bottom:0}
       <!-- ADMIN ACTIVITY LOG -->
       <div class="page" id="pg-square">
         <h2 class="tt">مراقبة منشورات السكوير</h2>
-        <div class="psub">راجع آخر المنشورات واحذف أي منشور مخالف. الحذف يزيل المنشور وكل تفاعلاته (إعجابات/تعليقات) نهائياً ويُبلِّغ صاحبه.</div>
+        <div class="psub">راجع آخر المنشورات وأخفِ أي منشور مخالف. الإخفاء لا يمحو شيئاً: المنشور وكل تفاعلاته (إعجابات/تعليقات/إعادة نشر) تبقى محفوظة في قاعدة البيانات، ويختفي من التغذية فقط، وتقدر تستعيده في أي وقت.</div>
         <div class="stats">
           <div class="stat"><div class="k">إجمالي المنشورات</div><div class="v" id="sqTotal">0</div></div>
           <div class="stat y"><div class="k">آخر 24 ساعة</div><div class="v" id="sqToday">0</div></div>
+        </div>
+
+        <!-- نشر باسم المنصة مع علامة التوثيق الزرقاء -->
+        <div class="card" id="officialCard">
+          <div class="card-h"><b>نشر باسم المنصة</b>
+            <span class="pill approved" style="display:inline-flex;align-items:center;gap:5px">Apex Official
+              <svg viewBox="0 0 24 24" width="13" height="13" aria-label="موثّق"><circle cx="12" cy="12" r="10" fill="#1d9bf0"/><path d="M7.1 12.4l3.1 3.2 6.6-6.8" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+            <div class="sp"></div>
+            <span class="u-mail">يظهر بشارة زرقاء وشعار المنصة في كل الصفحات</span>
+          </div>
+          <div style="padding:14px;display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <select id="ofKind" style="flex:1;min-width:130px;background:var(--panel2);border:1px solid var(--border);color:var(--txt);border-radius:10px;padding:10px;font-family:inherit;font-size:13px">
+                <option value="news">خبر</option>
+                <option value="analysis">تحليل</option>
+                <option value="ads">إعلان</option>
+              </select>
+              <input id="ofSym" placeholder="الرمز (اختياري) مثل BTC" maxlength="20" style="flex:1;min-width:130px;background:var(--panel2);border:1px solid var(--border);color:var(--txt);border-radius:10px;padding:10px;font-family:inherit;font-size:13px">
+            </div>
+            <textarea id="ofText" maxlength="2000" placeholder="نص الخبر المنشور باسم المنصة…" style="min-height:110px;background:var(--panel2);border:1px solid var(--border);color:var(--txt);border-radius:10px;padding:11px;font-family:inherit;font-size:13.5px;line-height:1.7;resize:vertical"></textarea>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <label class="btn ghost sm" style="cursor:pointer;margin:0">إرفاق صورة
+                <input id="ofImg" type="file" accept="image/png,image/jpeg,image/webp" style="display:none">
+              </label>
+              <span id="ofImgName" class="u-mail">لا صورة</span>
+              <div class="sp" style="flex:1"></div>
+              <button class="btn green sm" id="ofPub" onclick="publishOfficial()">نشر الآن</button>
+            </div>
+            <div id="ofPrev" class="u-mail">المعاينة: يظهر الاسم مع علامة التوثيق الزرقاء بجانبه.</div>
+          </div>
         </div>
         <div class="card">
           <div class="card-h">
@@ -1140,7 +1171,7 @@ function nav(pg){
   if(pg==='commission')loadCommission();
   if(pg==='finance')loadFinance();
   if(pg==='moneyflow')loadMoneyFlow();
-  if(pg==='square')loadSquarePosts();
+  if(pg==='square'){try{bindOfficialUI();}catch(e){}loadSquarePosts();}
   if(pg==='reports')loadReports();
   if(pg==='logs')loadLogs();
   if(pg==='backup')loadBackups();
@@ -1741,6 +1772,58 @@ function renderMoneyFlow(){
 /* ---- admin activity log ---- */
 function logLabel(a){return ({credit:'شحن رصيد',balance_adjust:'تعديل رصيد',notify:'إرسال إشعار',ban:'حظر حساب',unban:'رفع الحظر',ban_temp:'حظر مؤقّت',freeze:'تجميد رصيد',unfreeze:'فك تجميد'})[a]||a;}
 /* ===== إشراف منشورات السكوير ===== */
+/* ===== نشر باسم المنصة (Apex Official) ===== */
+var OF_IMG='';
+function officialPreview(){
+  var t=($('ofText')&&$('ofText').value||'').trim();
+  var k=$('ofKind')?$('ofKind').value:'news';
+  var lbl={news:'خبر',analysis:'تحليل',ads:'إعلان'}[k]||'خبر';
+  var box=$('ofPrev');if(!box)return;
+  box.innerHTML='<div style="margin-top:4px;padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--panel2)">'+
+    '<div style="display:flex;align-items:center;gap:8px"><span style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#231a02;display:flex;align-items:center;justify-content:center;font-weight:900">A</span>'+
+    '<b style="display:flex;align-items:center;gap:5px">Apex Official <svg viewBox="0 0 24 24" width="14" height="14"><circle cx="12" cy="12" r="10" fill="#1d9bf0"/><path d="M7.1 12.4l3.1 3.2 6.6-6.8" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></b></div>'+
+    '<div style="margin-top:8px;font-size:13px;line-height:1.75;white-space:pre-wrap">'+(t?esc(t):'<span style="color:var(--muted)">اكتب النص لتراه هنا…</span>')+'</div></div>';
+}
+function bindOfficialUI(){
+  var f=$('ofImg');
+  if(f)f.addEventListener('change',function(){
+    OF_IMG='';
+    var n=$('ofImgName');
+    var file=this.files&&this.files[0];
+    if(!file){if(n)n.textContent='لا صورة';return;}
+    if(file.size>1500000){toast('الصورة كبيرة — اختر صورة أصغر من 1.5MB');this.value='';if(n)n.textContent='لا صورة';return;}
+    var rd=new FileReader();
+    rd.onload=function(){OF_IMG=String(rd.result||'');if(n)n.textContent=file.name;};
+    rd.readAsDataURL(file);
+  });
+  var t=$('ofText'),k=$('ofKind');
+  if(t)t.addEventListener('input',officialPreview);
+  if(k)k.addEventListener('change',officialPreview);
+  officialPreview();
+}
+async function publishOfficial(){
+  var t=($('ofText')&&$('ofText').value||'').trim();
+  if(!t){toast('اكتب نص الخبر أولاً');return;}
+  var btn=$('ofPub');if(btn){btn.disabled=true;btn.textContent='…';}
+  try{
+    var body={content:t,kind:($('ofKind')?$('ofKind').value:'news'),symbol:($('ofSym')?$('ofSym').value.trim():''),image:OF_IMG};
+    await api('/api/admin/square/official',{method:'POST',body:JSON.stringify(body)});
+    toast('نُشر الخبر باسم المنصة ✓ بعلامة التوثيق الزرقاء');
+    if($('ofText'))$('ofText').value='';
+    if($('ofSym'))$('ofSym').value='';
+    OF_IMG='';if($('ofImg'))$('ofImg').value='';
+    if($('ofImgName'))$('ofImgName').textContent='لا صورة';
+    officialPreview();loadSquarePosts();
+  }catch(e){toast('تعذّر النشر — تحقّق من الصلاحية');}
+  if(btn){btn.disabled=false;btn.textContent='نشر الآن';}
+}
+async function adminRestorePost(id,btn){
+  if(btn){btn.disabled=true;btn.textContent='…';}
+  try{await api('/api/admin/square/posts/'+id+'/restore',{method:'POST'});toast('استُعيد المنشور ✓');loadSquarePosts();}
+  catch(e){toast('تعذّر الاستعادة');if(btn){btn.disabled=false;btn.textContent='استعادة';}}
+}
+window.publishOfficial=publishOfficial;window.adminRestorePost=adminRestorePost;window.bindOfficialUI=bindOfficialUI;
+/* ===== إشراف منشورات السكوير ===== */
 async function loadSquarePosts(){
   var box=$('squareTable'); if(!box)return;
   var q=($('sqQ')&&$('sqQ').value||'').trim();
@@ -1756,23 +1839,25 @@ async function loadSquarePosts(){
         var txt=String(p.content||'').slice(0,110);
         if(String(p.content||'').length>110)txt+='…';
         var media=(p.has_video?' 🎬':(p.has_image?' 🖼️':''));
-        return '<tr><td class="u-name">'+esc(p.author||'-')+'<div class="u-mail">UID '+esc(p.user_id)+'</div></td>'+
+        var isOff=Number(p.user_id)===0;
+        var del=Number(p.deleted_at||0)>0;
+        return '<tr'+(del?' style="opacity:.55"':'')+'><td class="u-name">'+esc(p.author||'-')+(isOff?' <span style="display:inline-flex;align-items:center;gap:3px;color:#1d9bf0"><svg viewBox="0 0 24 24" width="12" height="12"><circle cx="12" cy="12" r="10" fill="#1d9bf0"/><path d="M7.1 12.4l3.1 3.2 6.6-6.8" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>رسمي</span>':'')+'<div class="u-mail">UID '+esc(p.user_id)+(del?' · محذوف (محفوظ)':'')+'</div></td>'+
           '<td style="max-width:420px"><div style="line-height:1.6">'+esc(txt)+media+'</div>'+
             (p.tag?'<span class="pill approved" style="margin-top:5px">$'+esc(p.tag)+'</span>':'')+'</td>'+
           '<td style="direction:ltr;text-align:right;color:var(--muted)">❤ '+fmtNum(p.likes||0)+' · 💬 '+fmtNum(p.comments||0)+' · 👁 '+fmtNum(p.views||0)+'</td>'+
           '<td style="color:var(--muted);white-space:nowrap">'+fmtTime(p.created_at)+'</td>'+
-          '<td style="text-align:end"><button class="btn ghost sm" style="color:var(--red);border-color:rgba(246,70,93,.4)" onclick="adminDelPost('+p.id+',this)">حذف</button></td></tr>';
+          '<td style="text-align:end">'+(del?'<button class="btn ghost sm" onclick="adminRestorePost('+p.id+',this)">استعادة</button>':'<button class="btn ghost sm" style="color:var(--red);border-color:rgba(246,70,93,.4)" onclick="adminDelPost('+p.id+',this)">إخفاء</button>')+'</td></tr>';
       }).join('')+'</tbody></table>';
   }catch(e){
     box.innerHTML='<div class="empty">تعذّر تحميل المنشورات — تحقّق من الصلاحية أو أعد المحاولة</div>';
   }
 }
 async function adminDelPost(id,btn){
-  if(!confirm('حذف المنشور #'+id+' نهائياً؟\nسيُزال مع كل إعجاباته وتعليقاته، ويُبلَّغ صاحبه بأن الإدارة حذفته.'))return;
+  if(!confirm('إخفاء المنشور #'+id+' من التغذية؟\nلن يُحذف من قاعدة البيانات — التفاعلات محفوظة وتقدر تستعيده.'))return;
   if(btn){btn.disabled=true;btn.textContent='…';}
   try{
     await api('/api/square/posts/'+id,{method:'DELETE'});
-    toast('تم حذف المنشور');
+    toast('تم إخفاء المنشور — محفوظ في القاعدة');
     loadSquarePosts();
   }catch(e){
     toast('تعذّر الحذف'+(e&&e.message==='not_found'?' — المنشور محذوف مسبقاً':''));

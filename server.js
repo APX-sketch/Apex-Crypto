@@ -1355,6 +1355,9 @@ async function ensureSchema() {
   // تصنيف المنشور: post | news | ads | analysis — يغذّي تبويبات «الأخبار/الإعلانات/الاكتشاف»
   await ensureColumn('square_posts', 'kind', "`kind` VARCHAR(12) NOT NULL DEFAULT 'post'");
   await pool.query('ALTER TABLE square_posts ADD INDEX idx_kind_created (kind, created_at)').catch(function () {});
+  // حذف ناعم: المنشور لا يُمحى من قاعدة البيانات أبداً — يُخفى فقط (deleted_at)
+  await ensureColumn('square_posts', 'deleted_at', '`deleted_at` BIGINT NULL');
+  await pool.query('ALTER TABLE square_posts ADD INDEX idx_deleted (deleted_at)').catch(function () {});
   // ===== لقطات قيمة المحفظة اليومية — أساس حساب «أرباح وخسائر اليوم» =====
   // كل لقطة تخزّن قيمة المحفظة الكاملة (فوري + عقود) بالدولار. عند فتح
   // المحفظة نحفظ لقطة (كل دقيقتين كحد أقصى)، ثم نحسب فرق القيمة من بداية
@@ -2040,7 +2043,7 @@ app.use(helmet({ contentSecurityPolicy: false }));
 const bigJson = express.json({ limit: '3mb' });
 const smallJson = express.json({ limit: '10kb' });
 app.use((req, res, next) => {
-  if (req.path === '/api/auth/register' || req.path === '/api/auth/reverify' || req.path.startsWith('/api/square/')) return bigJson(req, res, next);
+  if (req.path === '/api/auth/register' || req.path === '/api/auth/reverify' || req.path.startsWith('/api/square/') || req.path.startsWith('/api/admin/square/')) return bigJson(req, res, next);
   return smallJson(req, res, next);
 });
 app.use(cors({
@@ -6307,14 +6310,14 @@ app.get('/api/square/posts', softUser, async (req, res) => {
     const me = req.user ? Number(req.user.uid) : 0;
     const filter = String(req.query.filter || 'discover');
     const q = String(req.query.q || '').trim();
-    let where = '1=1';
+    let where = 'p.deleted_at IS NULL';
     // ترتيب البارامترات: (liked, reposted, following, saved, voted, reported) قبل شروط WHERE
     const params = [me, me, me, me, me, me];
     if (filter === 'mine') {
       if (!me) { where = '1=0'; }
       else {
         // «منشوراتي» = منشوراتي + ما أعدت نشره (تظهر باسمي كما لو نشرتها)
-        where = '(p.user_id = ? OR p.id IN (SELECT post_id FROM square_reposts WHERE user_id = ?))';
+        where = 'p.deleted_at IS NULL AND (p.user_id = ? OR p.id IN (SELECT post_id FROM square_reposts WHERE user_id = ?))';
         params.push(me, me);
       }
     }
@@ -6322,7 +6325,7 @@ app.get('/api/square/posts', softUser, async (req, res) => {
     if (filter === 'following') {
       if (!me) { where = '1=0'; }
       else {
-        where = 'p.user_id IN (SELECT target_id FROM square_follows WHERE follower_id = ?) AND p.user_id <> ?';
+        where = 'p.deleted_at IS NULL AND p.user_id IN (SELECT target_id FROM square_follows WHERE follower_id = ?) AND p.user_id <> ?';
         params.push(me, me);
       }
     }
@@ -6584,7 +6587,7 @@ app.get('/api/square/hashtags/trending', requireUser, async (req, res) => {
 // ---- لوحة إحصائيات المنشورات العامة (نظرة شاملة) ----
 app.get('/api/square/stats/overview', requireUser, async (req, res) => {
   try {
-    const [[t]]  = await pool.query('SELECT COUNT(*) AS n FROM square_posts');
+    const [[t]]  = await pool.query('SELECT COUNT(*) AS n FROM square_posts WHERE deleted_at IS NULL');
     const [[lk]] = await pool.query('SELECT COUNT(*) AS n FROM square_likes');
     const [[cm]] = await pool.query('SELECT COUNT(*) AS n FROM square_comments');
     const [[rp]] = await pool.query('SELECT COUNT(*) AS n FROM square_reposts');
@@ -6595,12 +6598,12 @@ app.get('/api/square/stats/overview', requireUser, async (req, res) => {
       ' (SELECT COUNT(*) FROM square_comments c WHERE c.post_id = p.id) AS comments, ' +
       ' (SELECT COUNT(*) FROM square_reposts r WHERE r.post_id = p.id) AS reposts, ' +
       ' (SELECT COUNT(*) FROM square_views v WHERE v.post_id = p.id) AS views ' +
-      'FROM square_posts p ORDER BY (' +
+      'FROM square_posts p WHERE p.deleted_at IS NULL ORDER BY (' +
       ' (SELECT COUNT(*) FROM square_likes l WHERE l.post_id = p.id) + ' +
       ' (SELECT COUNT(*) FROM square_comments c WHERE c.post_id = p.id) * 2 + ' +
       ' (SELECT COUNT(*) FROM square_reposts r WHERE r.post_id = p.id) * 3' +
       ') DESC, p.created_at DESC LIMIT 6');
-    const [authors] = await pool.query('SELECT author, COUNT(*) AS posts FROM square_posts GROUP BY author ORDER BY posts DESC LIMIT 6');
+    const [authors] = await pool.query('SELECT author, COUNT(*) AS posts FROM square_posts WHERE deleted_at IS NULL GROUP BY author ORDER BY posts DESC LIMIT 6');
     const [tags] = await pool.query('SELECT tag, COUNT(*) AS n FROM square_tags GROUP BY tag ORDER BY n DESC LIMIT 10');
     const days = 14; const now = Date.now(); const dayMs = 86400000;
     const [recent] = await pool.query('SELECT created_at FROM square_posts WHERE created_at >= ?', [now - days * dayMs]);
@@ -6668,7 +6671,7 @@ app.get('/api/square/saved', requireUser, async (req, res) => {
     const [rows] = await pool.query(
       'SELECT p.id, p.user_id, p.author, p.content, p.tag, p.created_at, s.created_at AS saved_at ' +
       'FROM square_saves s JOIN square_posts p ON p.id = s.post_id ' +
-      'WHERE s.user_id = ? ORDER BY s.created_at DESC LIMIT 200', [req.user.uid]);
+      'WHERE s.user_id = ? AND p.deleted_at IS NULL ORDER BY s.created_at DESC LIMIT 200', [req.user.uid]);
     res.json({ ok: true, posts: rows });
   } catch (e) { console.error('[square/saved]', e.message); res.status(500).json({ error: 'server_error' }); }
 });
@@ -6714,16 +6717,15 @@ app.post('/api/square/posts/:id/comments', requireUser, async (req, res) => {
   } catch (e) { console.error('[square/comment]', e.message); res.status(500).json({ error: 'server_error' }); }
 });
 
-// حذف منشور: صاحب المنشور يحذفه، والأدمن يحذفه من لوحة الإدارة (ويُسجّل سبب الإشراف).
-// الحذف يشمل كل ما يتعلّق بالمنشور (إعجابات/تعليقات/إعادة نشر/مشاهدات/وسوم)
-// حتى لا تتراكم صفوف يتيمة في القاعدة (مهم على الخطة المجانية المحدودة المساحة).
+// إخفاء منشور: صاحب المنشور يخفيه، والأدمن يخفيه من لوحة الإدارة (ويُبلَّغ صاحبه).
+// سياسة المستخدم: لا حذف صلب ولا مسح للتفاعلات — أبداً.
+// الحذف ناعم فقط: نضع deleted_at فيختفي المنشور من التغذية، وتبقى صفوفه
+// وصفوف الإعجابات/التعليقات/إعادة النشر/المشاهدات/الوسوم كما هي،
+// ويقدر الأدمن يستعيده بضغطة.
+// السبب: المنشورات والتفاعلات (إعجابات/تعليقات/إعادة نشر) تبقى محفوظة في
+// قاعدة البيانات للأبد، ويختفي المنشور من التغذية فقط. الأدمن يقدر يستعيده.
 async function purgeSquarePost(pid) {
-  await pool.query('DELETE FROM square_likes WHERE post_id = ?', [pid]);
-  await pool.query('DELETE FROM square_comments WHERE post_id = ?', [pid]);
-  await pool.query('DELETE FROM square_reposts WHERE post_id = ?', [pid]);
-  await pool.query('DELETE FROM square_views WHERE post_id = ?', [pid]);
-  await pool.query('DELETE FROM square_tags WHERE post_id = ?', [pid]);
-  await pool.query('DELETE FROM square_posts WHERE id = ?', [pid]);
+  await pool.query('UPDATE square_posts SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL', [Date.now(), pid]);
 }
 function isAdminRequest(req) {
   try { return !!(req.headers.authorization && store.isAdminToken(bearer(req))); } catch (e) { return false; }
@@ -6768,7 +6770,7 @@ app.get('/api/admin/square/posts', requireAdmin, async (req, res) => {
     if (q) { where += ' AND (p.content LIKE ? OR p.author LIKE ?)'; params.push('%' + q + '%', '%' + q + '%'); }
     if (authorId) { where += ' AND p.user_id = ?'; params.push(authorId); }
     const [rows] = await pool.query(
-      'SELECT p.id, p.user_id, p.author, p.content, p.tag, p.symbol, p.created_at, ' +
+      'SELECT p.id, p.user_id, p.author, p.content, p.tag, p.symbol, p.created_at, p.kind, p.deleted_at, ' +
       ' (p.image IS NOT NULL AND p.image <> \'\') AS has_image, ' +
       ' (p.video IS NOT NULL AND p.video <> \'\') AS has_video, ' +
       ' (SELECT COUNT(*) FROM square_likes l WHERE l.post_id = p.id) AS likes, ' +
@@ -6776,12 +6778,83 @@ app.get('/api/admin/square/posts', requireAdmin, async (req, res) => {
       ' (SELECT COUNT(*) FROM square_views v WHERE v.post_id = p.id) AS views ' +
       'FROM square_posts p WHERE ' + where + ' ORDER BY p.created_at DESC LIMIT ' + limit,
       params);
-    const [[tot]] = await pool.query('SELECT COUNT(*) AS n FROM square_posts');
-    const [[today]] = await pool.query('SELECT COUNT(*) AS n FROM square_posts WHERE created_at >= ?', [Date.now() - 86400000]);
+    const [[tot]] = await pool.query('SELECT COUNT(*) AS n FROM square_posts WHERE deleted_at IS NULL');
+    const [[today]] = await pool.query('SELECT COUNT(*) AS n FROM square_posts WHERE deleted_at IS NULL AND created_at >= ?', [Date.now() - 86400000]);
     res.json({ ok: true, posts: rows, total: Number(tot && tot.n) || 0, today: Number(today && today.n) || 0 });
   } catch (e) { console.error('[admin/square/posts]', e.message); res.status(500).json({ error: 'server_error' }); }
 });
 
+
+// ===== نشر باسم المنصة (Apex Official) من لوحة الإدارة =====
+// المنشور الرسمي يُحفظ في نفس جدول square_posts مع user_id = 0، فيظهر
+// بشارة التوثيق الزرقاء واسم «Apex Official» وشعار المنصة في كل الصفحات.
+app.post('/api/admin/square/official', requireAdmin, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const content = String(b.content || '').trim().slice(0, 2000);
+    let image = String(b.image || '').trim();
+    const okData = /^data:image\/(jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(image);
+    const okUrl = /^https:\/\/[^\s"'<>]{6,500}$/.test(image);
+    if (image && !(okData || okUrl)) image = '';
+    if (image.length > 2800000) image = '';
+    if (!content && !image) return res.status(400).json({ error: 'empty' });
+    let kind = String(b.kind || 'news').trim().toLowerCase();
+    if (kind !== 'news' && kind !== 'analysis' && kind !== 'ads') kind = 'news';
+    const symbol = String(b.symbol || '').trim().toUpperCase().slice(0, 20) || null;
+    const tag = String(b.tag || '').trim().slice(0, 20) || null;
+    const [r] = await pool.query(
+      'INSERT INTO square_posts (user_id, author, content, image, video, tag, symbol, kind, created_at) ' +
+      'VALUES (0, ?, ?, ?, NULL, ?, ?, ?, ?)',
+      ['Apex Official', content, image || null, tag, symbol, kind, Date.now()]);
+    try {
+      const hts = extractHashtags(content);
+      if (hts.length) {
+        const now = Date.now();
+        await pool.query(
+          'INSERT IGNORE INTO square_tags (post_id, tag, created_at) VALUES ' + hts.map(() => '(?, ?, ?)').join(', '),
+          hts.reduce((acc, t) => acc.concat([r.insertId, t, now]), []));
+      }
+    } catch (e) { console.warn('[admin/square/tags]', e.message); }
+    res.json({ ok: true, id: r.insertId, official: true });
+  } catch (e) { console.error('[admin/square/official]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+// تعديل منشور رسمي (النص/النوع/الرمز) — بلا حذف
+app.post('/api/admin/square/posts/:id/edit', requireAdmin, async (req, res) => {
+  try {
+    const pid = Number(req.params.id);
+    if (!pid) return res.status(400).json({ error: 'bad_id' });
+    const b = req.body || {};
+    const sets = [], params = [];
+    if (typeof b.content === 'string') {
+      const c = b.content.trim().slice(0, 2000);
+      if (!c) return res.status(400).json({ error: 'empty' });
+      sets.push('content = ?'); params.push(c);
+    }
+    if (typeof b.kind === 'string') {
+      let k = b.kind.trim().toLowerCase();
+      if (k !== 'news' && k !== 'analysis' && k !== 'ads' && k !== 'post') k = 'news';
+      sets.push('kind = ?'); params.push(k);
+    }
+    if (typeof b.symbol === 'string') {
+      sets.push('symbol = ?'); params.push(b.symbol.trim().toUpperCase().slice(0, 20) || null);
+    }
+    if (!sets.length) return res.status(400).json({ error: 'nothing' });
+    params.push(pid);
+    await pool.query('UPDATE square_posts SET ' + sets.join(', ') + ' WHERE id = ?', params);
+    res.json({ ok: true });
+  } catch (e) { console.error('[admin/square/edit]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
+
+// استعادة منشور محذوف (حذف ناعم) — التفاعلات كلها موجودة لأننا لا نحذفها
+app.post('/api/admin/square/posts/:id/restore', requireAdmin, async (req, res) => {
+  try {
+    const pid = Number(req.params.id);
+    if (!pid) return res.status(400).json({ error: 'bad_id' });
+    await pool.query('UPDATE square_posts SET deleted_at = NULL WHERE id = ?', [pid]);
+    res.json({ ok: true });
+  } catch (e) { console.error('[admin/square/restore]', e.message); res.status(500).json({ error: 'server_error' }); }
+});
 
 // ===== لوحة الإشراف: جدول المنشورات الأكثر إبلاغاً =====
 // يعرض المنشور + الكاتب + عدّاد البلاغات + الأسباب الأكثر تكراراً،

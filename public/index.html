@@ -187,7 +187,7 @@ table.cmp-tbl td .px.eq{color:var(--txt)}
 
 /* bottom nav */
 .bnav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;
-  display:grid;grid-template-columns:repeat(6,1fr);background:#0f1216;border-top:1px solid var(--border);
+  display:grid;grid-template-columns:repeat(5,1fr);background:#0f1216;border-top:1px solid var(--border);
   padding:8px 0 calc(8px + env(safe-area-inset-bottom));z-index:30}
 .bnav a{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--muted);text-decoration:none;font-size:10px;font-weight:700}
 .bnav a svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8}
@@ -521,7 +521,6 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
   <a href="markets.html"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M21 7v5h-5"/></svg><span data-i18n="navMarkets">الأسواق</span></a>
   <a href="trading.html"><svg viewBox="0 0 24 24"><path d="M7 8h13l-3-3M17 16H4l3 3"/></svg><span data-i18n="navTrading">التداول</span></a>
   <a href="futures.html"><svg viewBox="0 0 24 24"><path d="M3 3v18h18M8 14l3-3 3 3 4-5"/></svg><span data-i18n="navFutures">عقود آجلة</span></a>
-  <a href="square.html"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg><span>Square</span></a>
   <a href="wallet.html"><svg viewBox="0 0 24 24"><path d="M3 7h16a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2zM16 13h.01"/></svg><span data-i18n="navWallet">المحفظة</span></a>
 </nav>
 
@@ -551,7 +550,7 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
 </div>
 
 <style>
-/* ===== لوحة «الساحة» المنزلقة من الأسفل (أخبار/تحليلات/إعلانات) ===== */
+/* ===== زر «الساحة» — يفتح صفحة كاملة (سحب للأعلى) ===== */
 .feedfab{position:fixed;left:12px;bottom:calc(68px + env(safe-area-inset-bottom));z-index:31;
   display:flex;align-items:center;gap:9px;padding:7px 13px 7px 9px;border-radius:999px;border:1px solid rgba(224,166,21,.32);
   background:linear-gradient(135deg,rgba(34,29,16,.96),rgba(17,20,25,.97));color:var(--txt);font-family:inherit;cursor:pointer;
@@ -564,91 +563,17 @@ table.cmp-tbl td .pc{font-size:12px;font-weight:800;direction:ltr;padding:2px 7p
 .feedfab .ft small{font-size:9.5px;color:var(--muted);font-weight:700;white-space:nowrap}
 .feedfab .fu{width:15px;height:15px;stroke:var(--gold2);fill:none;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
 .feedfab:active{transform:scale(.96)}
-.feedfab.hidden{opacity:0;pointer-events:none}
-.feedscrim{position:fixed;inset:0;background:rgba(3,6,11,.62);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);z-index:61;
-  opacity:0;pointer-events:none;transition:opacity .25s}
-.feedscrim.show{opacity:1;pointer-events:auto}
-.feedpane{position:fixed;left:50%;bottom:0;width:100%;max-width:480px;height:min(88dvh,780px);transform:translateX(-50%) translateY(100%);
-  background:var(--bg);border:1px solid var(--border);border-bottom:0;border-radius:22px 22px 0 0;z-index:62;
-  display:flex;flex-direction:column;box-shadow:0 -22px 60px rgba(0,0,0,.6);overscroll-behavior:contain;visibility:hidden;
-  transition:transform .34s cubic-bezier(.2,.75,.2,1)}
-.feedpane.show{transform:translateX(-50%) translateY(0);visibility:visible}
-.fhandle{padding:9px 0 2px;display:flex;justify-content:center;cursor:grab;touch-action:none;flex:0 0 auto}
-.fhandle span{width:42px;height:4px;border-radius:99px;background:#39424f}
-.fhead{display:flex;align-items:center;gap:9px;padding:2px 16px 9px;flex:0 0 auto}
-.fhead b{flex:1;font-size:16.5px;font-weight:900;letter-spacing:.2px}
-.fhead b em{font-style:normal;color:var(--gold2)}
-.fhead .lk{font-size:11px;font-weight:900;color:var(--gold2);text-decoration:none;padding:6px 9px;border-radius:9px;
-  background:rgba(224,166,21,.1);border:1px solid rgba(224,166,21,.25);white-space:nowrap}
-.fhead .x{width:31px;height:31px;border-radius:50%;border:1px solid var(--border);background:var(--panel2);color:var(--txt);
-  font-size:18px;line-height:1;cursor:pointer;flex:0 0 auto}
-.ftabs{display:flex;gap:6px;padding:0 12px 10px;overflow-x:auto;scrollbar-width:none;flex:0 0 auto;border-bottom:1px solid rgba(255,255,255,.05)}
-.ftabs::-webkit-scrollbar{display:none}
-.ftabs button{flex:0 0 auto;padding:7px 13px;border-radius:999px;background:transparent;border:1px solid transparent;color:var(--muted);
-  font-family:inherit;font-size:12.5px;font-weight:900;cursor:pointer;white-space:nowrap}
-.ftabs button.on{color:var(--gold1);background:rgba(224,166,21,.12);border-color:rgba(224,166,21,.3)}
-.fbody{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding-bottom:calc(10px + env(safe-area-inset-bottom))}
-.fguest{margin:12px 14px;padding:12px 14px;border-radius:14px;background:linear-gradient(135deg,rgba(224,166,21,.13),rgba(224,166,21,.05));
-  border:1px solid rgba(224,166,21,.26);display:flex;align-items:center;gap:10px;font-size:11.5px;font-weight:800;color:#f2dc9b;line-height:1.6}
-.fguest a{margin-inline-start:auto;flex:0 0 auto;text-decoration:none;font-size:11px;font-weight:900;color:#231a02;background:linear-gradient(135deg,var(--gold1),var(--gold2));padding:7px 12px;border-radius:9px}
-.fpost{padding:13px 16px 11px;border-bottom:1px solid rgba(255,255,255,.055)}
-.fph{display:flex;align-items:center;gap:9px;margin-bottom:8px}
-.fav{width:34px;height:34px;flex:0 0 auto;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px;color:#1c1503}
-.fwho{flex:1;min-width:0}
-.fwho b{display:flex;align-items:center;gap:4px;font-size:12.5px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.fwho b .vf{color:var(--gold2);font-size:10px}
-.fwho small{display:block;font-size:10px;color:var(--muted);font-weight:700;margin-top:2px}
-.fkind{flex:0 0 auto;font-size:9.5px;font-weight:900;padding:3px 7px;border-radius:6px;border:1px solid}
-.fkind.news{color:#63b3ff;background:rgba(47,131,251,.12);border-color:rgba(47,131,251,.3)}
-.fkind.ads{color:var(--gold1);background:rgba(224,166,21,.12);border-color:rgba(224,166,21,.3)}
-.fkind.analysis{color:var(--green);background:rgba(14,203,129,.1);border-color:rgba(14,203,129,.28)}
-.ffollow{flex:0 0 auto;padding:5px 11px;border-radius:999px;border:1px solid rgba(224,166,21,.6);background:transparent;color:var(--gold1);
-  font-family:inherit;font-size:10.5px;font-weight:900;cursor:pointer}
-.ffollow.on{background:rgba(255,255,255,.05);border-color:var(--border);color:var(--muted)}
-.ftext{font-size:13px;line-height:1.8;color:#dbe4f2;word-break:break-word;white-space:pre-wrap}
-.ftext .tg{color:#2f83fb;font-weight:800}
-.ftext .sym{color:var(--gold1);font-weight:900}
-.fmore{display:inline-block;margin-top:2px;font-size:11.5px;font-weight:900;color:var(--gold2);cursor:pointer}
-.fimg{margin-top:9px;width:100%;max-height:300px;object-fit:cover;border-radius:12px;border:1px solid var(--border);display:block;background:var(--panel2)}
-.ffoot{display:flex;align-items:center;gap:16px;margin-top:9px;color:var(--muted)}
-.ffoot button{display:inline-flex;align-items:center;gap:5px;background:none;border:0;padding:2px 0;color:inherit;font-family:inherit;font-size:11px;font-weight:800;cursor:pointer}
-.ffoot svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
-.ffoot .liked{color:var(--red)}
-.ffoot .liked svg{fill:rgba(246,70,93,.18)}
-.ffoot a{margin-inline-start:auto;text-decoration:none;color:var(--gold2);font-size:11px;font-weight:900}
-.fskel{height:96px;margin:10px 14px;border-radius:14px;background:linear-gradient(90deg,#131820 25%,#1b222c 37%,#131820 63%);background-size:400% 100%;animation:fsh 1.4s ease infinite}
-@keyframes fsh{0%{background-position:100% 0}100%{background-position:0 0}}
-.fempty{padding:52px 22px;text-align:center;color:var(--muted);font-size:12.5px;line-height:1.9}
-.fempty b{display:block;color:var(--txt);font-size:14px;margin-bottom:6px}
-.fempty a{display:inline-block;margin-top:14px;text-decoration:none;color:#231a02;background:linear-gradient(135deg,var(--gold1),var(--gold2));padding:9px 15px;border-radius:10px;font-size:12px;font-weight:900}
-.fmorebtn{display:block;width:calc(100% - 28px);margin:12px 14px 6px;padding:11px;border-radius:12px;background:rgba(255,255,255,.04);
-  border:1px solid var(--border);color:var(--gold2);font-family:inherit;font-size:12px;font-weight:900;cursor:pointer}
-@media (prefers-reduced-motion: reduce){.feedpane,.feedscrim{transition:none}.fskel{animation:none}}
+a.feedfab{text-decoration:none;color:var(--txt)}
+html.sq-leaving body{opacity:.35;transform:translateY(-12px);transition:opacity .16s ease,transform .2s ease;pointer-events:none}
 </style>
 
-<button class="feedfab" id="feedFab" type="button" aria-label="فتح الساحة">
+<a class="feedfab" id="feedFab" href="square.html" aria-label="فتح الساحة">
   <span class="fi"><svg viewBox="0 0 24 24"><path d="M4 19V9M9 19V5M14 19v-7M19 19v-4"/></svg></span>
-  <span class="ft"><b>الساحة</b><small>أخبار · تحليلات · إعلانات</small></span>
+  <span class="ft"><b>الساحة</b><small>اسحب للأعلى أو اضغط</small></span>
   <svg class="fu" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg>
-</button>
+</a>
 
-<div class="feedscrim" id="feedScrim"></div>
-<section class="feedpane" id="feedPane" aria-hidden="true">
-  <div class="fhandle" id="feedHandle"><span></span></div>
-  <div class="fhead">
-    <b>Apex<em>Square</em></b>
-    <a class="lk" id="feedFull" href="square.html">فتح كامل ›</a>
-    <button class="x" type="button" id="feedClose" aria-label="إغلاق">×</button>
-  </div>
-  <div class="ftabs" id="feedTabs">
-    <button type="button" data-t="discover" class="on">اكتشف</button>
-    <button type="button" data-t="following">المتابعات</button>
-    <button type="button" data-t="hot">🔥 رائج</button>
-    <button type="button" data-t="ads">الإعلانات</button>
-    <button type="button" data-t="news">الأخبار</button>
-  </div>
-  <div class="fbody" id="feedBody"></div>
-</section>
+
 
 <!-- ===== PROFILE DRAWER ===== -->
 <div class="scrim" id="scrim" onclick="closeDrawer()"></div>
@@ -2097,165 +2022,26 @@ initAll();
 })();
 </script>
 <script>
-/* =====================================================================
-   لوحة الساحة المنزلقة — تقرأ نفس تغذية /api/square/posts التي تقرأها
-   صفحة square.html (نفس البيانات، نفس الإعجابات والمتابعة)، لكن داخل
-   لوح ينزلق من أسفل الرئيسية مثل Binance Square.
-   ===================================================================== */
+/* السحب للأعلى من حافة الأسفل يفتح «الساحة» كصفحة كاملة (مثل بينانس) */
 (function(){
-  var $id=function(i){return document.getElementById(i);};
-  var pane=$id('feedPane'),scrim=$id('feedScrim'),body=$id('feedBody'),tabs=$id('feedTabs'),fab=$id('feedFab');
-  fab.addEventListener('click',openFeed);scrim.addEventListener('click',closeFeed);
-  var _fc=$id('feedClose');if(_fc)_fc.addEventListener('click',closeFeed);
-  if(!pane||!body)return;
-  var TAB='discover',POSTS=[],SHOWN=30,LOADING=false,LOADED=false,EXPANDED={};
-  var ME=(function(){try{return JSON.parse(localStorage.getItem('skygo_session')||'{}')||{};}catch(e){return{};}})();
-  var TK=ME.token||localStorage.getItem('apex_token')||'';
-  var GUEST=!TK;
-  var KIND_LBL={news:'خبر',ads:'إعلان',analysis:'تحليل'};
-
-  function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];});}
-  function fmtN(n){n=+n||0;if(n>=1000000)return (n/1000000).toFixed(1)+'M';if(n>=1000)return (n/1000).toFixed(1)+'K';return String(n);}
-  function ago(ts){var d=Math.max(0,Date.now()-(+ts||0));var m=Math.floor(d/60000);if(m<1)return 'الآن';if(m<60)return 'منذ '+m+' د';var h=Math.floor(m/60);if(h<24)return 'منذ '+h+' س';var dd=Math.floor(h/24);if(dd<7)return 'منذ '+dd+' يوم';return new Date(+ts).toLocaleDateString('ar-EG',{day:'numeric',month:'short'});}
-  function avatarColor(name){var h=0,s=String(name||'A');for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))%360;return 'linear-gradient(135deg,hsl('+h+',62%,64%),hsl('+((h+38)%360)+',58%,46%))';}
-  function rich(txt){
-    var t=esc(txt);
-    t=t.replace(/\$([A-Za-z]{2,12})/g,'<span class="sym">$$$1</span>');
-    t=t.replace(/(^|\s)#([\u0600-\u06FF0-9A-Za-z_]{2,30})/g,'$1<span class="tg">#$2</span>');
-    return t;
+  var armed=false,sy=0;
+  function open(){
+    try{sessionStorage.setItem('sq_from','app');}catch(e){}
+    document.documentElement.classList.add('sq-leaving');
+    setTimeout(function(){location.href='square.html';},140);
   }
-  function postHtml(p,i){
-    var name=p.display_author||p.author||'مستخدم';
-    var kind=String(p.kind||'post');
-    var official=Number(p.user_id)===0;
-    var myUid=Number(ME.uid||ME.id||0);
-    var duid=Number(p.display_uid||p.user_id||0);
-    var showFollow=!!duid&&duid!==myUid&&!official;
-    var txt=String(p.content||'');
-    var long=txt.length>240&&!EXPANDED[p.id];
-    var shown=long?txt.slice(0,240).replace(/\s+\S*$/,'')+'…':txt;
-    var badge=KIND_LBL[kind]?'<span class="fkind '+kind+'">'+KIND_LBL[kind]+'</span>':'';
-    return '<article class="fpost" data-pid="'+esc(p.id)+'">'+
-      '<div class="fph">'+
-        '<span class="fav" style="background:'+avatarColor(name)+'">'+esc(String(name).trim().charAt(0)||'A')+'</span>'+
-        '<div class="fwho"><b>'+esc(name)+(official?' <span class="vf">✔ رسمي</span>':'')+'</b><small>'+ago(p.created_at)+(p.symbol?' · $'+esc(p.symbol):'')+'</small></div>'+
-        badge+
-        (showFollow?'<button type="button" class="ffollow'+(Number(p.following)?' on':'')+'" data-follow="'+duid+'">'+(Number(p.following)?'متابَع':'متابعة')+'</button>':'')+
-      '</div>'+
-      '<div class="ftext">'+rich(shown)+(long?'<div><span class="fmore" data-expand="'+esc(p.id)+'">عرض المزيد</span></div>':'')+'</div>'+
-      (p.image?'<img class="fimg" loading="lazy" alt="" src="'+esc(p.image)+'">':'')+
-      '<div class="ffoot">'+
-        '<button type="button" class="'+(Number(p.liked)?'liked':'')+'" data-like="'+esc(p.id)+'"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.3-7-9a4 4 0 017-2.6A4 4 0 0119 11c0 4.7-7 9-7 9z"/></svg>'+fmtN(p.likes||0)+'</button>'+
-        '<button type="button" data-open="'+esc(p.id)+'"><svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 01-8 8H8l-4 3V12a8 8 0 018-8h1a8 8 0 018 8z"/></svg>'+fmtN(p.comments||0)+'</button>'+
-        '<a href="square.html">فتح ›</a>'+
-      '</div>'+
-    '</article>';
-  }
-  function render(){
-    if(LOADING&&!POSTS.length){body.innerHTML='<div class="fskel"></div><div class="fskel"></div><div class="fskel"></div>';return;}
-    if(!POSTS.length){
-      body.innerHTML=(GUEST?'<div class="fguest">سجّل دخولك لتتابع الحسابات وتحب المنشورات.<a href="login.html?next=square.html">دخول</a></div>':'')+
-        '<div class="fempty"><b>'+(TAB==='following'?'لا تتابع أحداً بعد':'لا توجد منشورات هنا بعد')+'</b>'+
-        (TAB==='following'?'افتح الساحة وتابع محلّلين وتجّاراً ليظهر جديدهم هنا.':'كن أول من ينشر خبراً أو تحليلاً في الساحة.')+
-        '<div><a href="square.html">'+(TAB==='following'?'اكتشف حسابات':'انشر الآن')+'</a></div></div>';
-      return;
-    }
-    var list=POSTS.slice(0,SHOWN).map(postHtml).join('');
-    if(GUEST)list='<div class="fguest">أنت تتصفّح كزائر — سجّل دخولك للمتابعة والإعجاب.<a href="login.html?next=square.html">دخول</a></div>'+list;
-    if(POSTS.length>SHOWN)list+='<button type="button" class="fmorebtn" data-more="1">عرض المزيد ('+(POSTS.length-SHOWN)+')</button>';
-    body.innerHTML=list;
-  }
-  function load(force){
-    if(LOADING)return;
-    if(LOADED&&!force)return;
-    LOADING=true;
-    if(!POSTS.length)render();
-    var url='/api/square/posts?filter='+encodeURIComponent(TAB);
-    var opt={headers:{'Accept':'application/json'}};
-    if(TK)opt.headers.Authorization='Bearer '+TK;
-    fetch(url,opt).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j};});}).then(function(x){
-      LOADING=false;
-      if(!x.ok){throw new Error((x.j&&x.j.error)||'fail');}
-      POSTS=(x.j&&x.j.posts)||[];SHOWN=30;LOADED=true;render();
-    }).catch(function(){
-      LOADING=false;
-      body.innerHTML='<div class="fempty"><b>تعذّر تحميل الساحة</b>تحقّق من الاتصال ثم أعد المحاولة.<div><a href="javascript:void(0)" data-retry="1">إعادة المحاولة</a></div></div>';
-    });
-  }
-  window.openFeed=function(){
-    pane.classList.add('show');pane.setAttribute('aria-hidden','false');
-    scrim.classList.add('show');document.body.classList.add('ov-open');
-    try{if(fab)fab.classList.add('hidden');}catch(e){}
-    load(false);
-  };
-  window.closeFeed=function(){
-    pane.classList.remove('show');pane.setAttribute('aria-hidden','true');
-    scrim.classList.remove('show');
-    // لا نرفع قفل التمرير إذا كانت هناك طبقة أخرى مفتوحة
-    setTimeout(function(){try{if(typeof _syncOvLock==='function')_syncOvLock();}catch(e){}},260);
-    try{if(fab)fab.classList.remove('hidden');}catch(e){}
-  };
-  tabs.addEventListener('click',function(e){
-    var b=e.target.closest('button[data-t]');if(!b)return;
-    Array.prototype.forEach.call(tabs.querySelectorAll('button'),function(x){x.classList.toggle('on',x===b);});
-    TAB=b.getAttribute('data-t');POSTS=[];LOADED=false;LOADING=false;SHOWN=30;
-    if(TAB==='following'&&GUEST){body.innerHTML='<div class="fempty"><b>المتابعات تحتاج حساباً</b>سجّل دخولك لتتابع الحسابات وتشوف منشوراتهم هنا.<div><a href="login.html?next=square.html">تسجيل الدخول</a></div></div>';return;}
-    body.innerHTML='<div class="fskel"></div><div class="fskel"></div><div class="fskel"></div>';
-    load(true);
-  });
-  body.addEventListener('click',function(e){
-    var ex=e.target.closest('[data-expand]');
-    if(ex){EXPANDED[ex.getAttribute('data-expand')]=1;render();return;}
-    var mo=e.target.closest('[data-more]');
-    if(mo){SHOWN+=30;render();return;}
-    var rt=e.target.closest('[data-retry]');
-    if(rt){POSTS=[];LOADED=false;load(true);return;}
-    var lk=e.target.closest('[data-like]');
-    if(lk){
-      if(GUEST){needLogin('square.html');return;}
-      var pid=lk.getAttribute('data-like');
-      lk.disabled=true;
-      fetch('/api/square/posts/'+encodeURIComponent(pid)+'/like',{method:'POST',headers:{'Authorization':'Bearer '+TK,'Accept':'application/json'}})
-        .then(function(r){return r.json();}).then(function(d){
-          lk.disabled=false;if(!d||!d.ok)return;
-          lk.classList.toggle('liked',!!d.liked);
-          lk.lastChild.nodeValue=fmtN(d.likes);
-          for(var i=0;i<POSTS.length;i++){if(String(POSTS[i].id)===String(pid)){POSTS[i].liked=d.liked?1:0;POSTS[i].likes=d.likes;break;}}
-        }).catch(function(){lk.disabled=false;});
-      return;
-    }
-    var fl=e.target.closest('[data-follow]');
-    if(fl){
-      if(GUEST){needLogin('square.html');return;}
-      var uid=fl.getAttribute('data-follow');fl.disabled=true;
-      fetch('/api/square/follow/'+encodeURIComponent(uid),{method:'POST',headers:{'Authorization':'Bearer '+TK,'Accept':'application/json'}})
-        .then(function(r){return r.json();}).then(function(d){
-          fl.disabled=false;if(!d||!d.ok)return;
-          fl.classList.toggle('on',!!d.following);
-          fl.textContent=d.following?'متابَع':'متابعة';
-          lkSync(uid,d.following);
-          if(d.following)toast('صارت تتابع هذا الحساب');
-        }).catch(function(){fl.disabled=false;});
-      return;
-    }
-    var op=e.target.closest('[data-open]');
-    if(op){location.href='square.html';return;}
-  });
-  function lkSync(uid,on){for(var i=0;i<POSTS.length;i++){if(String(POSTS[i].display_uid||POSTS[i].user_id)===String(uid))POSTS[i].following=on?1:0;}}
-  // سحب اللوح للأسفل للإغلاق
-  var startY=0,dy=0,drag=false;
-  function down(e){if(!pane.classList.contains('show'))return;startY=(e.touches?e.touches[0]:e).clientY;dy=0;drag=true;pane.style.transition='none';}
-  function move(e){if(!drag)return;var y=(e.touches?e.touches[0]:e).clientY;dy=Math.max(0,y-startY);if(dy>0)pane.style.transform='translateX(-50%) translateY('+dy+'px)';}
-  function up(){if(!drag)return;drag=false;pane.style.transition='';pane.style.transform='';if(dy>110)closeFeed();}
-  var hd=$id('feedHandle');
-  if(hd){hd.addEventListener('touchstart',down,{passive:true});hd.addEventListener('touchmove',move,{passive:true});hd.addEventListener('touchend',up);hd.addEventListener('touchcancel',up);}
-  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&pane.classList.contains('show'))closeFeed();});
-  // سحب للأعلى منزر الساحة يفتحه فوراً (إحساس «اللوح ينزلق من تحت»)
-  if(fab){
-    var fy=0;
-    fab.addEventListener('touchstart',function(e){fy=e.touches[0].clientY;},{passive:true});
-    fab.addEventListener('touchmove',function(e){if(fy&&e.touches[0].clientY<fy-24){fy=0;openFeed();}},{passive:true});
-  }
+  document.addEventListener('touchstart',function(e){
+    armed=false;
+    if(e.touches.length!==1)return;
+    if(e.touches[0].clientY<window.innerHeight-110)return;
+    if(e.target.closest('input,textarea,select,canvas,[contenteditable="true"],[data-noswipe]'))return;
+    armed=true;sy=e.touches[0].clientY;
+  },{passive:true});
+  document.addEventListener('touchmove',function(e){
+    if(!armed||e.touches.length!==1)return;
+    if(sy-e.touches[0].clientY>64){armed=false;open();}
+  },{passive:true});
+  document.addEventListener('touchend',function(){armed=false;},{passive:true});
 })();
 </script>
 </body>
